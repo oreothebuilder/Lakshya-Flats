@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import 'user_home_screen.dart';
+import 'User/user_home_screen.dart';
 import 'manager_home_screen.dart';
 
 enum LoginRole { user, manager }
