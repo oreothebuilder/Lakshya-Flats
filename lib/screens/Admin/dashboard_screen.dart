@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/admin_drawer.dart';
 import '../login_screen.dart';
 import '../student_onboarding_screen.dart';
 import '../mess_menu_management_screen.dart';
+import 'students_directory_screen.dart';
+import 'broadcast_notification_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -87,13 +90,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF9),
+      drawer: const AdminDrawer(activeItem: "Dashboard"),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A), size: 24),
-          onPressed: () => _showSnackbar("Navigation Menu"),
+        leading: Builder(
+          builder: (context) {
+            return IconButton(
+              icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A), size: 24),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            );
+          },
         ),
         title: Text(
           "Dashboard",
@@ -202,7 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const StudentOnboardingScreen()),
+                          MaterialPageRoute(builder: (context) => const StudentsDirectoryScreen()),
                         );
                       },
                     ),
@@ -238,7 +246,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: _buildOutlinedActionButton(
                       icon: Icons.campaign_rounded,
                       label: "Broadcast Alert",
-                      onTap: () => _showSnackbar("Broadcast Alert"),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const BroadcastNotificationScreen()),
+                        );
+                      },
                     ),
                   ),
                 ],
