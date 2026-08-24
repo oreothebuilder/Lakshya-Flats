@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_colors.dart';
-import '../login_screen.dart';
+import '../../widgets/user_drawer.dart';
+import 'mess_menu_screen.dart';
+import 'payments_bills_screen.dart';
+import 'tickets_screen.dart';
+import 'profile_screen.dart';
+import 'notifications_screen.dart';
 
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
@@ -11,62 +16,6 @@ class UserHomeScreen extends StatefulWidget {
 }
 
 class _UserHomeScreenState extends State<UserHomeScreen> {
-  void _handleLogout() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          "Log Out",
-          style: GoogleFonts.plusJakartaSans(
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
-        content: Text(
-          "Are you sure you want to log out of Lakshya Residency?",
-          style: GoogleFonts.plusJakartaSans(fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              "Cancel",
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context); // close dialog
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LoginScreen(initialRole: LoginRole.user),
-                ),
-                (route) => false,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: Text(
-              "Log Out",
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showFeatureSnackbar(String featureName) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -81,17 +30,24 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     );
   }
 
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
+      drawer: const UserDrawer(activeItem: "Home"),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A)),
-          onPressed: () => _showFeatureSnackbar("Menu"),
+        leading: Builder(
+          builder: (context) {
+            return IconButton(
+              icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A)),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            );
+          },
         ),
         title: Row(
           children: [
@@ -137,7 +93,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-                onPressed: () => _showFeatureSnackbar("Notifications"),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                  );
+                },
               ),
               Positioned(
                 top: 10,
@@ -161,7 +122,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             ],
           ),
           GestureDetector(
-            onTap: _handleLogout,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProfileScreen(),
+                ),
+              );
+            },
             child: Container(
               margin: const EdgeInsets.only(right: 12, left: 4),
               child: CircleAvatar(
@@ -606,7 +574,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           ),
                         ),
                         OutlinedButton.icon(
-                          onPressed: () => _showFeatureSnackbar("Weekly Menu"),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const MessMenuScreen(),
+                              ),
+                            );
+                          },
                           icon: const Icon(Icons.calendar_month_rounded, size: 14, color: Color(0xFF541FE4)),
                           label: Text(
                             "Weekly Menu",
@@ -789,7 +764,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () => _showFeatureSnackbar("Bill Details"),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const PaymentsBillsScreen(),
+                              ),
+                            );
+                          },
                           style: TextButton.styleFrom(
                             padding: EdgeInsets.zero,
                             minimumSize: Size.zero,
@@ -812,7 +794,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                       title: "electricity",
                       dueDate: "Due: 27 Aug 2026",
                       amount: "₹245",
-                      onPay: () => _showFeatureSnackbar("Pay Electricity Bill"),
+                      onPay: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const PaymentsBillsScreen(),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 10),
                     _buildBillItem(
@@ -820,12 +809,26 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                       title: "Month 2 Rent",
                       dueDate: "Due: 18 Sep 2026",
                       amount: "₹12,500",
-                      onPay: () => _showFeatureSnackbar("Pay Month 2 Rent"),
+                      onPay: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const PaymentsBillsScreen(),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 14),
                     Center(
                       child: TextButton(
-                        onPressed: () => _showFeatureSnackbar("View all payments"),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PaymentsBillsScreen(),
+                            ),
+                          );
+                        },
                         child: Text(
                           "→ View +6 more payments in Details",
                           style: GoogleFonts.plusJakartaSans(
@@ -888,7 +891,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                       width: double.infinity,
                       height: 46,
                       child: OutlinedButton.icon(
-                        onPressed: () => _showFeatureSnackbar("Raise Ticket"),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const TicketsScreen(),
+                            ),
+                          );
+                        },
                         icon: const Icon(Icons.confirmation_number_outlined, size: 18, color: Color(0xFF3B82F6)),
                         label: Text(
                           "Raise Ticket",
@@ -918,7 +928,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () => _showFeatureSnackbar("View All Tickets"),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const TicketsScreen(),
+                              ),
+                            );
+                          },
                           style: TextButton.styleFrom(
                             padding: EdgeInsets.zero,
                             minimumSize: Size.zero,
