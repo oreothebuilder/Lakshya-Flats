@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_colors.dart';
 import '../login_screen.dart';
+import '../mess_menu_management_screen.dart';
 
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
@@ -606,7 +607,17 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           ),
                         ),
                         OutlinedButton.icon(
-                          onPressed: () => _showFeatureSnackbar("Weekly Menu"),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const MessMenuManagementScreen(
+                                  initialMess: "Univ Homes",
+                                  isAdmin: false,
+                                ),
+                              ),
+                            );
+                          },
                           icon: const Icon(Icons.calendar_month_rounded, size: 14, color: Color(0xFF541FE4)),
                           label: Text(
                             "Weekly Menu",
@@ -995,14 +1006,18 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1E293B),
+                    Expanded(
+                      child: Text(
+                        title,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1E293B),
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 6),
                     Text(
                       time,
                       style: GoogleFonts.plusJakartaSans(

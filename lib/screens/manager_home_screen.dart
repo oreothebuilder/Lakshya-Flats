@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dashboard_screen.dart';
+import 'Admin/dashboard_screen.dart';
 
 class ManagerHomeScreen extends StatelessWidget {
   const ManagerHomeScreen({super.key});

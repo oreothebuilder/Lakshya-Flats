@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../theme/app_colors.dart';
-import 'login_screen.dart';
+import '../../theme/app_colors.dart';
+import '../login_screen.dart';
+import '../student_onboarding_screen.dart';
+import '../mess_menu_management_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -197,7 +199,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       icon: Icons.people_alt_rounded,
                       label: "Students\nDirectory",
                       color: const Color(0xFF003896),
-                      onTap: () => _showSnackbar("Students Directory"),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const StudentOnboardingScreen()),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -218,7 +225,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: _buildOutlinedActionButton(
                       icon: Icons.person_add_alt_1_rounded,
                       label: "Add Student",
-                      onTap: () => _showSnackbar("Add Student"),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const StudentOnboardingScreen()),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -276,7 +288,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 GestureDetector(
-                                  onTap: () => _showSnackbar("Mess Details"),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const MessMenuManagementScreen(
+                                          initialMess: "Univ Homes",
+                                          isAdmin: true,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                   child: Row(
                                     children: [
                                       Text(
@@ -681,7 +703,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               GestureDetector(
-                onTap: () => _showSnackbar("Edit Menu for $buildingName"),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => MessMenuManagementScreen(
+                        initialMess: buildingName,
+                        isAdmin: true,
+                      ),
+                    ),
+                  );
+                },
                 child: Row(
                   children: [
                     Text(
