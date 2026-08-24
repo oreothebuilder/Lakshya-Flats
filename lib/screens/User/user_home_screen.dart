@@ -16,6 +16,43 @@ class UserHomeScreen extends StatefulWidget {
 }
 
 class _UserHomeScreenState extends State<UserHomeScreen> {
+  final ScrollController _mealScrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToActiveMeal();
+    });
+  }
+
+  @override
+  void dispose() {
+    _mealScrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToActiveMeal() {
+    final activeMeal = _getActiveMeal();
+    if (activeMeal == null) return;
+
+    int index = -1;
+    if (activeMeal == "Breakfast") {
+      index = 0;
+    } else if (activeMeal == "Lunch") {
+      index = 1;
+    } else if (activeMeal == "Evening Snacks") {
+      index = 2;
+    } else if (activeMeal == "Dinner") {
+      index = 3;
+    }
+
+    if (index >= 0 && _mealScrollController.hasClients) {
+      final offset = index * 272.0; // 260 width + 12 margin
+      _mealScrollController.jumpTo(offset);
+    }
+  }
+
   void _showFeatureSnackbar(String featureName) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -602,104 +639,47 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 14),
-                    // Active status banner
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFECFDF5),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFA7F3D0).withValues(alpha: 0.5)),
+                    const SizedBox(height: 16),
+                    // Horizontal scrollable meal tiles
+                    SizedBox(
+                      height: 180,
+                      child: SingleChildScrollView(
+                        controller: _mealScrollController,
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          children: [
+                            _buildMealTile(
+                              title: "Breakfast",
+                              time: "07:30 AM - 09:30 AM",
+                              menu: "Indori Poha, Sev, Jalebi, Masala Tea",
+                              imagePath: "assets/images/breakfast.jpg",
+                              isActive: _getActiveMeal() == "Breakfast",
+                            ),
+                            _buildMealTile(
+                              title: "Lunch",
+                              time: "12:30 PM - 02:30 PM",
+                              menu: "Paneer Butter Masala, Dal Fry, Phulka, Rice, Salad",
+                              imagePath: "assets/images/lunch.jpg",
+                              isActive: _getActiveMeal() == "Lunch",
+                            ),
+                            _buildMealTile(
+                              title: "Evening Snacks",
+                              time: "05:00 PM - 06:00 PM",
+                              menu: "Veg Sandwich, Tea",
+                              imagePath: "assets/images/snacks.jpg",
+                              isActive: _getActiveMeal() == "Evening Snacks",
+                            ),
+                            _buildMealTile(
+                              title: "Dinner",
+                              time: "07:30 PM - 09:30 PM",
+                              menu: "Aloo Matar, Yellow Dal, Chapati, Rice, Kheer",
+                              imagePath: "assets/images/dinner.jpg",
+                              isActive: _getActiveMeal() == "Dinner",
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              color: const Color(0xFFD1FAE5),
-                              child: const Icon(Icons.breakfast_dining_rounded, color: Color(0xFF059669), size: 18),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "NOW SERVING: BREAKFAST",
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF065F46),
-                                  ),
-                                ),
-                                Text(
-                                  "07:30 AM - 09:30 AM",
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11,
-                                    color: const Color(0xFF047857),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              "ACTIVE",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Menu items list
-                    _buildMealRow(
-                      icon: Icons.breakfast_dining_outlined,
-                      iconBg: const Color(0xFFEEF2FF),
-                      iconColor: const Color(0xFF4F46E5),
-                      title: "Breakfast",
-                      time: "07:30 AM - 09:30 AM",
-                      menu: "Indori Poha, Sev, Jalebi, Masala Tea",
-                    ),
-                    const SizedBox(height: 8),
-                    _buildMealRow(
-                      icon: Icons.wb_sunny_outlined,
-                      iconBg: const Color(0xFFFEF3C7),
-                      iconColor: const Color(0xFFD97706),
-                      title: "Lunch",
-                      time: "12:30 PM - 02:30 PM",
-                      menu: "Paneer Butter Masala, Dal Fry, Phulka, Rice, Salad",
-                    ),
-                    const SizedBox(height: 8),
-                    _buildMealRow(
-                      icon: Icons.coffee_outlined,
-                      iconBg: const Color(0xFFFDE8E8),
-                      iconColor: const Color(0xFFE11D48),
-                      title: "Evening Snacks",
-                      time: "05:00 PM - 06:00 PM",
-                      menu: "Veg Sandwich, Tea",
-                    ),
-                    const SizedBox(height: 8),
-                    _buildMealRow(
-                      icon: Icons.nights_stay_outlined,
-                      iconBg: const Color(0xFFE0F2FE),
-                      iconColor: const Color(0xFF0284C7),
-                      title: "Dinner",
-                      time: "07:30 PM - 09:30 PM",
-                      menu: "Aloo Matar, Yellow Dal, Chapati, Rice, Kheer",
                     ),
                   ],
                 ),
@@ -978,73 +958,151 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     );
   }
 
-  Widget _buildMealRow({
-    required IconData icon,
-    required Color iconBg,
-    required Color iconColor,
+  Widget _buildMealTile({
     required String title,
     required String time,
     required String menu,
+    required String imagePath,
+    required bool isActive,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      width: 260,
+      height: 180,
+      margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
+        borderRadius: BorderRadius.circular(28),
+        border: isActive
+            ? Border.all(color: const Color(0xFF34D399), width: 2.0)
+            : Border.all(color: Colors.transparent, width: 2.0),
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF34D399).withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 4),
+                )
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                )
+              ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(26),
+        child: Stack(
+          children: [
+            // Background Image
+            Positioned.fill(
+              child: Image.asset(
+                imagePath,
+                fit: BoxFit.cover,
+              ),
             ),
-            child: Icon(icon, color: iconColor, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1E293B),
-                      ),
-                    ),
-                    Text(
-                      time,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  menu,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12.5,
-                    color: const Color(0xFF64748B),
-                    fontWeight: FontWeight.w500,
+            // Gradient Overlay
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.05),
+                      Colors.black.withValues(alpha: 0.25),
+                      Colors.black.withValues(alpha: 0.70),
+                      Colors.black.withValues(alpha: 0.85),
+                    ],
+                    stops: const [0.0, 0.4, 0.8, 1.0],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+            // Text Content
+            Padding(
+              padding: const EdgeInsets.all(18.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      if (isActive) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981), // Emerald green
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.6),
+                                blurRadius: 6,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    time,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    menu,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.95),
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  String? _getActiveMeal() {
+    final now = DateTime.now();
+    final hour = now.hour;
+    final minute = now.minute;
+    final time = hour + (minute / 60.0);
+
+    if (time >= 7.5 && time < 9.5) {
+      return "Breakfast";
+    } else if (time >= 12.5 && time < 14.5) {
+      return "Lunch";
+    } else if (time >= 17.0 && time < 18.0) {
+      return "Evening Snacks";
+    } else if (time >= 19.5 && time < 21.5) {
+      return "Dinner";
+    }
+    return null;
   }
 
   Widget _buildBillItem({
