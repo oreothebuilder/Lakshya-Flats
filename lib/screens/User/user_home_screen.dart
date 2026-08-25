@@ -1002,47 +1002,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 fit: BoxFit.cover,
               ),
             ),
-<<<<<<< HEAD
-            child: Icon(icon, color: iconColor, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF1E293B),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      time,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  menu,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12.5,
-                    color: const Color(0xFF64748B),
-                    fontWeight: FontWeight.w500,
-=======
             // Gradient Overlay
             Positioned.fill(
               child: Container(
@@ -1057,7 +1016,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                       Colors.black.withValues(alpha: 0.85),
                     ],
                     stops: const [0.0, 0.4, 0.8, 1.0],
->>>>>>> 86a7e3f5b9c93beb26ea0465f95dc91cb9b43318
                   ),
                 ),
               ),
