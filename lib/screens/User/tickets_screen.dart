@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/user_drawer.dart';
+import '../../services/auth_service.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
 
@@ -288,6 +290,8 @@ class _TicketsScreenState extends State<TicketsScreen> {
       if (_selectedFilter == "All") return true;
       return t["status"] == _selectedFilter;
     }).toList();
+    final student = AuthService().currentUser;
+    final initials = student?.initials.isNotEmpty == true ? student!.initials : "SU";
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -331,7 +335,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
                   ),
                 ),
                 Text(
-                  "Lakshya • Rm 304",
+                  student != null ? "${student.building} • Rm ${student.room}" : "Lakshya • Rm 304",
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -387,18 +391,41 @@ class _TicketsScreenState extends State<TicketsScreen> {
             },
             child: Padding(
               padding: const EdgeInsets.only(right: 16, left: 4),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: const Color(0xFF2563EB),
-                child: Text(
-                  "SU",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              child: student != null && student.profilePhotoUrl.isNotEmpty
+                  ? (student.profilePhotoUrl.startsWith('http')
+                      ? CircleAvatar(
+                          radius: 18,
+                          backgroundImage: NetworkImage(student.profilePhotoUrl),
+                        )
+                      : (student.profilePhotoUrl == 'uploaded'
+                          ? CircleAvatar(
+                              radius: 18,
+                              backgroundColor: const Color(0xFF2563EB),
+                              child: Text(
+                                initials,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : CircleAvatar(
+                              radius: 18,
+                              backgroundImage: FileImage(File(student.profilePhotoUrl)),
+                            )))
+                  : CircleAvatar(
+                      radius: 18,
+                      backgroundColor: const Color(0xFF2563EB),
+                      child: Text(
+                        initials,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
             ),
           ),
         ],

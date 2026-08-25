@@ -1,12 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/user_drawer.dart';
+import '../../services/auth_service.dart';
 import 'mess_menu_screen.dart';
 import 'payments_bills_screen.dart';
 import 'tickets_screen.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
+import '../../models/mess_menu_model.dart';
+import '../../services/mess_menu_service.dart';
 
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
@@ -17,10 +21,12 @@ class UserHomeScreen extends StatefulWidget {
 
 class _UserHomeScreenState extends State<UserHomeScreen> {
   final ScrollController _mealScrollController = ScrollController();
+  final MessMenuService _menuService = MessMenuService();
 
   @override
   void initState() {
     super.initState();
+    _menuService.addListener(_onServiceUpdate);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToActiveMeal();
     });
@@ -28,8 +34,65 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
   @override
   void dispose() {
+    _menuService.removeListener(_onServiceUpdate);
     _mealScrollController.dispose();
     super.dispose();
+  }
+
+  void _onServiceUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  String _getCurrentDayShort() {
+    final now = DateTime.now();
+    switch (now.weekday) {
+      case DateTime.monday: return "Mon";
+      case DateTime.tuesday: return "Tue";
+      case DateTime.wednesday: return "Wed";
+      case DateTime.thursday: return "Thu";
+      case DateTime.friday: return "Fri";
+      case DateTime.saturday: return "Sat";
+      case DateTime.sunday: return "Sun";
+      default: return "Mon";
+    }
+  }
+
+  String _getCurrentDayFull() {
+    final now = DateTime.now();
+    switch (now.weekday) {
+      case DateTime.monday: return "Monday";
+      case DateTime.tuesday: return "Tuesday";
+      case DateTime.wednesday: return "Wednesday";
+      case DateTime.thursday: return "Thursday";
+      case DateTime.friday: return "Friday";
+      case DateTime.saturday: return "Saturday";
+      case DateTime.sunday: return "Sunday";
+      default: return "Monday";
+    }
+  }
+
+  String _getMealItems(DayMenu? menu, String title, String defaultItems) {
+    if (menu == null) return defaultItems;
+    try {
+      final meal = menu.meals.firstWhere(
+        (m) => m.title.toLowerCase().trim() == title.toLowerCase().trim(),
+      );
+      return meal.items.isEmpty ? "No items" : meal.items.join(", ");
+    } catch (_) {
+      return defaultItems;
+    }
+  }
+
+  String _getMealTimeSlot(DayMenu? menu, String title, String defaultTimeSlot) {
+    if (menu == null) return defaultTimeSlot;
+    try {
+      final meal = menu.meals.firstWhere(
+        (m) => m.title.toLowerCase().trim() == title.toLowerCase().trim(),
+      );
+      return meal.timeSlot.isEmpty ? defaultTimeSlot : meal.timeSlot;
+    } catch (_) {
+      return defaultTimeSlot;
+    }
   }
 
   void _scrollToActiveMeal() {
@@ -71,6 +134,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final todayShort = _getCurrentDayShort();
+    final dayMenu = _menuService.getDayMenu("Univ Homes", todayShort);
+    final student = AuthService().currentUser;
+    final initials = student?.initials.isNotEmpty == true ? student!.initials : "SU";
+    final name = student?.name.isNotEmpty == true ? student!.name : "Student";
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       drawer: const UserDrawer(activeItem: "Home"),
@@ -113,7 +182,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   ),
                 ),
                 Text(
-                  "Lakshya • Rm 304",
+                  student != null ? "${student.building} • Rm ${student.room}" : "Lakshya • Rm 304",
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -169,18 +238,41 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             },
             child: Container(
               margin: const EdgeInsets.only(right: 12, left: 4),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: const Color(0xFF541FE4),
-                child: Text(
-                  "SU",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              child: student != null && student.profilePhotoUrl.isNotEmpty
+                  ? (student.profilePhotoUrl.startsWith('http')
+                      ? CircleAvatar(
+                          radius: 16,
+                          backgroundImage: NetworkImage(student.profilePhotoUrl),
+                        )
+                      : (student.profilePhotoUrl == 'uploaded'
+                          ? CircleAvatar(
+                              radius: 16,
+                              backgroundColor: const Color(0xFF541FE4),
+                              child: Text(
+                                initials,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : CircleAvatar(
+                              radius: 16,
+                              backgroundImage: FileImage(File(student.profilePhotoUrl)),
+                            )))
+                  : CircleAvatar(
+                      radius: 16,
+                      backgroundColor: const Color(0xFF541FE4),
+                      child: Text(
+                        initials,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
             ),
           ),
         ],
@@ -232,24 +324,69 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           children: [
                             Row(
                               children: [
-                                Container(
-                                  width: 56,
-                                  height: 56,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      "SU",
-                                      style: GoogleFonts.plusJakartaSans(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800,
+                                student != null && student.profilePhotoUrl.isNotEmpty
+                                    ? (student.profilePhotoUrl.startsWith('http')
+                                        ? Container(
+                                            width: 56,
+                                            height: 56,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+                                              image: DecorationImage(
+                                                image: NetworkImage(student.profilePhotoUrl),
+                                                fit: BoxFit.cover,
+                                              ),
+                                            ),
+                                          )
+                                        : (student.profilePhotoUrl == 'uploaded'
+                                            ? Container(
+                                                width: 56,
+                                                height: 56,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+                                                ),
+                                                child: Center(
+                                                  child: Text(
+                                                    initials,
+                                                    style: GoogleFonts.plusJakartaSans(
+                                                      color: Colors.white,
+                                                      fontSize: 18,
+                                                      fontWeight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ),
+                                              )
+                                            : Container(
+                                                width: 56,
+                                                height: 56,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+                                                  image: DecorationImage(
+                                                    image: FileImage(File(student.profilePhotoUrl)),
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                ),
+                                              )))
+                                    : Container(
+                                        width: 56,
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            initials,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: Colors.white,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
@@ -264,7 +401,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                         ),
                                       ),
                                       Text(
-                                        "Sudhanshu",
+                                        name,
                                         style: GoogleFonts.plusJakartaSans(
                                           fontSize: 20,
                                           color: Colors.white,
@@ -277,7 +414,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                           const Icon(Icons.phone_android_rounded, color: Colors.white70, size: 13),
                                           const SizedBox(width: 4),
                                           Text(
-                                            "+91 8208285947",
+                                            student?.phone ?? "+91 8208285947",
                                             style: GoogleFonts.plusJakartaSans(
                                               fontSize: 13,
                                               color: Colors.white.withValues(alpha: 0.85),
@@ -319,7 +456,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                                 ),
                                               ),
                                               Text(
-                                                "Lakshya",
+                                                student?.building ?? "Lakshya",
                                                 style: GoogleFonts.plusJakartaSans(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w700,
@@ -359,7 +496,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                                 ),
                                               ),
                                               Text(
-                                                "Room 304 (Bed A)",
+                                                student != null ? "Room ${student.room} (Bed A)" : "Room 304 (Bed A)",
                                                 style: GoogleFonts.plusJakartaSans(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w700,
@@ -600,7 +737,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                "Monday • Lakshya",
+                                "${_getCurrentDayFull()} • Lakshya",
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11,
                                   color: const Color(0xFF64748B),
@@ -651,29 +788,29 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           children: [
                             _buildMealTile(
                               title: "Breakfast",
-                              time: "07:30 AM - 09:30 AM",
-                              menu: "Indori Poha, Sev, Jalebi, Masala Tea",
+                              time: _getMealTimeSlot(dayMenu, "Breakfast", "07:30 AM - 09:30 AM"),
+                              menu: _getMealItems(dayMenu, "Breakfast", "Indori Poha, Sev, Jalebi, Masala Tea"),
                               imagePath: "assets/images/breakfast.jpg",
                               isActive: _getActiveMeal() == "Breakfast",
                             ),
                             _buildMealTile(
                               title: "Lunch",
-                              time: "12:30 PM - 02:30 PM",
-                              menu: "Paneer Butter Masala, Dal Fry, Phulka, Rice, Salad",
+                              time: _getMealTimeSlot(dayMenu, "Lunch", "12:30 PM - 02:30 PM"),
+                              menu: _getMealItems(dayMenu, "Lunch", "Paneer Butter Masala, Dal Fry, Phulka, Rice, Salad"),
                               imagePath: "assets/images/lunch.jpg",
                               isActive: _getActiveMeal() == "Lunch",
                             ),
                             _buildMealTile(
                               title: "Evening Snacks",
-                              time: "05:00 PM - 06:00 PM",
-                              menu: "Veg Sandwich, Tea",
+                              time: _getMealTimeSlot(dayMenu, "Evening Snacks", "05:00 PM - 06:00 PM"),
+                              menu: _getMealItems(dayMenu, "Evening Snacks", "Veg Sandwich, Tea"),
                               imagePath: "assets/images/snacks.jpg",
                               isActive: _getActiveMeal() == "Evening Snacks",
                             ),
                             _buildMealTile(
                               title: "Dinner",
-                              time: "07:30 PM - 09:30 PM",
-                              menu: "Aloo Matar, Yellow Dal, Chapati, Rice, Kheer",
+                              time: _getMealTimeSlot(dayMenu, "Dinner", "07:30 PM - 09:30 PM"),
+                              menu: _getMealItems(dayMenu, "Dinner", "Aloo Matar, Yellow Dal, Chapati, Rice, Kheer"),
                               imagePath: "assets/images/dinner.jpg",
                               isActive: _getActiveMeal() == "Dinner",
                             ),
@@ -733,7 +870,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                "Total Outstanding: ₹1,12,745",
+                                "Total Outstanding: ₹${student != null ? student.pendingAmount.toStringAsFixed(0) : "1,12,745"}",
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11.5,
                                   color: const Color(0xFFEF4444),
@@ -1087,7 +1224,57 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     );
   }
 
+  bool _isTimeInSlot(String slot) {
+    try {
+      final parts = slot.split("-");
+      if (parts.length != 2) return false;
+      final start = _parseTimeOfDay(parts[0].trim());
+      final end = _parseTimeOfDay(parts[1].trim());
+      if (start == null || end == null) return false;
+      final now = TimeOfDay.now();
+      final nowMins = now.hour * 60 + now.minute;
+      final startMins = start.hour * 60 + start.minute;
+      final endMins = end.hour * 60 + end.minute;
+      if (endMins >= startMins) {
+        return nowMins >= startMins && nowMins < endMins;
+      } else {
+        return nowMins >= startMins || nowMins < endMins;
+      }
+    } catch (_) {
+      return false;
+    }
+  }
+
+  TimeOfDay? _parseTimeOfDay(String timeStr) {
+    try {
+      final parts = timeStr.split(" ");
+      if (parts.length != 2) return null;
+      final amPm = parts[1].toUpperCase();
+      final timeParts = parts[0].split(":");
+      int hour = int.parse(timeParts[0]);
+      final minute = int.parse(timeParts[1]);
+      if (amPm == "PM" && hour != 12) {
+        hour += 12;
+      } else if (amPm == "AM" && hour == 12) {
+        hour = 0;
+      }
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (_) {
+      return null;
+    }
+  }
+
   String? _getActiveMeal() {
+    final todayShort = _getCurrentDayShort();
+    final dayMenu = _menuService.getDayMenu("Univ Homes", todayShort);
+    if (dayMenu != null) {
+      for (final meal in dayMenu.meals) {
+        if (_isTimeInSlot(meal.timeSlot)) {
+          return meal.title;
+        }
+      }
+    }
+
     final now = DateTime.now();
     final hour = now.hour;
     final minute = now.minute;

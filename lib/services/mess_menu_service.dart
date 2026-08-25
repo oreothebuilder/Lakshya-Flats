@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/mess_menu_model.dart';
 
 class MessMenuService extends ChangeNotifier {
   static final MessMenuService _instance = MessMenuService._internal();
   factory MessMenuService() => _instance;
 
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   late Map<String, MessSchedule> _schedules;
 
   MessMenuService._internal() {
     _initDefaultSchedules();
+    _listenToFirestore();
   }
 
   Map<String, MessSchedule> get schedules => _schedules;
@@ -28,12 +31,69 @@ class MessMenuService extends ChangeNotifier {
     );
   }
 
+  void _listenToFirestore() {
+    _firestore.collection('mess_menus').snapshots().listen((snapshot) {
+      if (snapshot.docs.isEmpty) {
+        _seedDefaultSchedules();
+      } else {
+        final newSchedules = <String, MessSchedule>{};
+        for (var doc in snapshot.docs) {
+          try {
+            final data = doc.data();
+            final schedule = MessSchedule.fromJson(data);
+            newSchedules[schedule.messName] = schedule;
+          } catch (e) {
+            debugPrint("Error parsing schedule for ${doc.id}: $e");
+          }
+        }
+        
+        for (var messName in availableMesses) {
+          if (newSchedules.containsKey(messName)) {
+            _schedules[messName] = newSchedules[messName]!;
+          }
+        }
+        notifyListeners();
+      }
+    }, onError: (error) {
+      debugPrint("Error listening to mess_menus stream: $error");
+    });
+  }
+
+  Future<void> _seedDefaultSchedules() async {
+    final batch = _firestore.batch();
+    for (var messName in availableMesses) {
+      final schedule = _schedules[messName];
+      if (schedule != null) {
+        final docRef = _firestore.collection('mess_menus').doc(messName);
+        batch.set(docRef, schedule.toJson());
+      }
+    }
+    try {
+      await batch.commit();
+      debugPrint("Successfully seeded default mess schedules to Firestore.");
+    } catch (e) {
+      debugPrint("Failed to seed default mess schedules: $e");
+    }
+  }
+
+  Future<void> _saveToFirestore(String messName) async {
+    final schedule = _schedules[messName];
+    if (schedule != null) {
+      try {
+        await _firestore.collection('mess_menus').doc(messName).set(schedule.toJson());
+      } catch (e) {
+        debugPrint("Error saving schedule to Firestore for $messName: $e");
+      }
+    }
+  }
+
   void updateMealItems(String messName, String shortDay, MealType type, List<String> newItems) {
     final dayMenu = getDayMenu(messName, shortDay);
     if (dayMenu != null) {
       final meal = dayMenu.meals.firstWhere((m) => m.type == type);
       meal.items = List<String>.from(newItems);
       notifyListeners();
+      _saveToFirestore(messName);
     }
   }
 
@@ -43,6 +103,7 @@ class MessMenuService extends ChangeNotifier {
       final meal = dayMenu.meals.firstWhere((m) => m.type == type);
       meal.timeSlot = newTimeSlot;
       notifyListeners();
+      _saveToFirestore(messName);
     }
   }
 
@@ -53,6 +114,7 @@ class MessMenuService extends ChangeNotifier {
       if (!meal.items.contains(item)) {
         meal.items.add(item);
         notifyListeners();
+        _saveToFirestore(messName);
       }
     }
   }
@@ -61,8 +123,10 @@ class MessMenuService extends ChangeNotifier {
     final dayMenu = getDayMenu(messName, shortDay);
     if (dayMenu != null) {
       final meal = dayMenu.meals.firstWhere((m) => m.type == type);
-      meal.items.remove(item);
-      notifyListeners();
+      if (meal.items.remove(item)) {
+        notifyListeners();
+        _saveToFirestore(messName);
+      }
     }
   }
 

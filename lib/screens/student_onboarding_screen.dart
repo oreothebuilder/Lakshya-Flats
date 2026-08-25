@@ -1,5 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import '../models/student_model.dart';
+import '../services/student_service.dart';
 
 class StudentOnboardingScreen extends StatefulWidget {
   const StudentOnboardingScreen({super.key});
@@ -11,6 +16,7 @@ class StudentOnboardingScreen extends StatefulWidget {
 class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   // Step State: 0 = Landing/Drafts, 1 = Step 1, 2 = Step 2, 3 = Step 3, 4 = Step 4, 5 = Step 5
   int _currentStep = 0;
+  String? _currentDraftId;
 
   // Step 1 Controllers & State
   final TextEditingController _fullNameController = TextEditingController();
@@ -65,10 +71,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   final TextEditingController _customInventoryController = TextEditingController();
   final TextEditingController _finalNotesController = TextEditingController();
 
-  bool _profilePhotoUploaded = false;
-  bool _collegeIdUploaded = false;
-  bool _govtIdUploaded = false;
-  bool _hasSavedDraft = false;
+  String _profilePhotoUrl = '';
+  String _collegeIdUrl = '';
+  String _govtIdUrl = '';
+
 
   final List<String> _relationships = ["Father", "Mother", "Guardian", "Sibling", "Other"];
 
@@ -162,14 +168,431 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         backgroundColor: isError ? Colors.redAccent : const Color(0xFF0056D2),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(String type) async {
+    final ImagePicker picker = ImagePicker();
+    
+    // Show premium option picker sheet
+    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "Select Image Source",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded, color: Color(0xFF0056D2)),
+                ),
+                title: Text(
+                  "Take Photo with Camera",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF334155),
+                  ),
+                ),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              const Divider(height: 8),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.photo_library_rounded, color: Color(0xFF16A34A)),
+                ),
+                title: Text(
+                  "Choose from Gallery",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF334155),
+                  ),
+                ),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (source != null) {
+      try {
+        final XFile? pickedFile = await picker.pickImage(
+          source: source,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 85,
+        );
+        if (pickedFile != null) {
+          setState(() {
+            if (type == 'profile') {
+              _profilePhotoUrl = pickedFile.path;
+            } else if (type == 'college_id') {
+              _collegeIdUrl = pickedFile.path;
+            } else if (type == 'govt_id') {
+              _govtIdUrl = pickedFile.path;
+            }
+          });
+          _showSnackbar("Document selected successfully!");
+        }
+      } catch (e) {
+        _showSnackbar("Failed to pick image: $e");
+      }
+    }
+  }
+
+  Future<void> _saveDraftToFirestore() async {
+    _currentDraftId ??= 'DRAFT-${DateTime.now().millisecondsSinceEpoch}';
+    
+    final draftData = {
+      'fullName': _fullNameController.text,
+      'mobile': _mobileController.text,
+      'email': _emailController.text,
+      'regNo': _regNoController.text,
+      'course': _courseController.text,
+      'branch': _branchController.text,
+      'roomNumber': _roomNumberController.text,
+      'selectedBuilding': _selectedBuilding,
+      'selectedPlan': _selectedPlan,
+      'paymentFrequency': _paymentFrequency,
+      'packageInstallmentType': _packageInstallmentType,
+      'monthlyRent': _monthlyRentController.text,
+      'securityDeposit': _securityDepositController.text,
+      'yearInstallments': _yearInstallmentsController.text,
+      'totalAcademicFees': _totalAcademicFeesController.text,
+      'customInstallments': _customInstallmentsController.text,
+      'premiumDeposit': _premiumDepositController.text,
+      'guardianName': _guardianNameController.text,
+      'guardianRelationship': _guardianRelationship,
+      'guardianPhone': _guardianPhoneController.text,
+      'dietaryPreference': _dietaryPreference,
+      'finalNotes': _finalNotesController.text,
+      'profilePhotoUrl': _profilePhotoUrl,
+      'collegeIdUrl': _collegeIdUrl,
+      'govtIdUrl': _govtIdUrl,
+      'profilePhotoUploaded': _profilePhotoUrl.isNotEmpty,
+      'collegeIdUploaded': _collegeIdUrl.isNotEmpty,
+      'govtIdUploaded': _govtIdUrl.isNotEmpty,
+      'currentStep': _currentStep == 0 ? 1 : _currentStep,
+      'inventoryItems': _inventoryItems,
+      'installments': _installments,
+    };
+
+    await StudentService().saveDraft(_currentDraftId!, draftData);
+  }
+
+  void _loadDraft(Map<String, dynamic> draft) {
+    setState(() {
+      _currentDraftId = draft['draftId'];
+      _fullNameController.text = draft['fullName'] ?? '';
+      _mobileController.text = draft['mobile'] ?? '';
+      _emailController.text = draft['email'] ?? '';
+      _regNoController.text = draft['regNo'] ?? '';
+      _courseController.text = draft['course'] ?? '';
+      _branchController.text = draft['branch'] ?? '';
+      _roomNumberController.text = draft['roomNumber'] ?? '';
+      _selectedBuilding = draft['selectedBuilding'];
+      _selectedPlan = draft['selectedPlan'] ?? 'Rent Only';
+      _paymentFrequency = draft['paymentFrequency'] ?? 'Pay Monthly';
+      _packageInstallmentType = draft['packageInstallmentType'] ?? 'Single';
+      _monthlyRentController.text = draft['monthlyRent'] ?? '12,500';
+      _securityDepositController.text = draft['securityDeposit'] ?? '25,000';
+      _yearInstallmentsController.text = draft['yearInstallments'] ?? '4';
+      _totalAcademicFeesController.text = draft['totalAcademicFees'] ?? '1,50,000';
+      _customInstallmentsController.text = draft['customInstallments'] ?? '6';
+      _premiumDepositController.text = draft['premiumDeposit'] ?? '30,000';
+      _guardianNameController.text = draft['guardianName'] ?? '';
+      _guardianRelationship = draft['guardianRelationship'] ?? 'Father';
+      _guardianPhoneController.text = draft['guardianPhone'] ?? '';
+      _dietaryPreference = draft['dietaryPreference'] ?? 'Vegetarian';
+      _finalNotesController.text = draft['finalNotes'] ?? '';
+      _profilePhotoUrl = draft['profilePhotoUrl'] is String
+          ? draft['profilePhotoUrl']
+          : (draft['profilePhotoUploaded'] == true ? 'uploaded' : '');
+      _collegeIdUrl = draft['collegeIdUrl'] is String
+          ? draft['collegeIdUrl']
+          : (draft['collegeIdUploaded'] == true ? 'uploaded' : '');
+      _govtIdUrl = draft['govtIdUrl'] is String
+          ? draft['govtIdUrl']
+          : (draft['govtIdUploaded'] == true ? 'uploaded' : '');
+      _currentStep = draft['currentStep'] ?? 1;
+
+      if (draft['inventoryItems'] != null) {
+        _inventoryItems.clear();
+        _inventoryItems.addAll(List<String>.from(draft['inventoryItems']));
+      } else {
+        _inventoryItems.clear();
+        _inventoryItems.addAll([
+          "AC", "Bed", "Cupboard", "Study Table", "Study Chair", "Geyser",
+          "Bedside Table", "Curtains", "Pillow", "Bucket", "Mug"
+        ]);
+      }
+
+      if (draft['installments'] != null) {
+        _installments.clear();
+        _installments.addAll((draft['installments'] as List)
+            .map((e) => Map<String, String>.from(e))
+            .toList());
+      } else {
+        _generateInstallmentsFromStep3();
+      }
+    });
+    _showSnackbar("Draft loaded successfully!");
+  }
+
+  void _resetForm() {
+    setState(() {
+      _currentDraftId = null;
+      _fullNameController.clear();
+      _mobileController.clear();
+      _otpController.clear();
+      _emailController.clear();
+      _regNoController.clear();
+      _courseController.clear();
+      _branchController.clear();
+      _roomNumberController.clear();
+      _selectedBuilding = null;
+      _selectedPlan = 'Rent Only';
+      _paymentFrequency = 'Pay Monthly';
+      _packageInstallmentType = 'Single';
+      _monthlyRentController.text = '12,500';
+      _securityDepositController.text = '25,000';
+      _yearInstallmentsController.text = '4';
+      _totalAcademicFeesController.text = '1,50,000';
+      _customInstallmentsController.text = '6';
+      _premiumDepositController.text = '30,000';
+      _guardianNameController.clear();
+      _guardianRelationship = 'Father';
+      _guardianPhoneController.clear();
+      _dietaryPreference = 'Vegetarian';
+      _finalNotesController.clear();
+      _profilePhotoUrl = '';
+      _collegeIdUrl = '';
+      _govtIdUrl = '';
+      _inventoryItems.clear();
+      _inventoryItems.addAll([
+        "AC", "Bed", "Cupboard", "Study Table", "Study Chair", "Geyser",
+        "Bedside Table", "Curtains", "Pillow", "Bucket", "Mug"
+      ]);
+      _generateInstallmentsFromStep3();
+    });
+  }
+
+  Future<void> _completeOnboarding() async {
+    // Generate unique student ID
+    final studentId = 'STU-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
+    // Show premium uploading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            content: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0056D2)),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Uploading resident documents...",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Please wait while we persist files to Firebase Storage.",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    String finalProfilePhotoUrl = _profilePhotoUrl;
+    String finalCollegeIdUrl = _collegeIdUrl;
+    String finalGovtIdUrl = _govtIdUrl;
+
+    try {
+      if (_profilePhotoUrl.isNotEmpty && !_profilePhotoUrl.startsWith('http')) {
+        finalProfilePhotoUrl = await StudentService().uploadImage(studentId, _profilePhotoUrl, 'profile_photo');
+      }
+      if (_collegeIdUrl.isNotEmpty && !_collegeIdUrl.startsWith('http')) {
+        finalCollegeIdUrl = await StudentService().uploadImage(studentId, _collegeIdUrl, 'college_id');
+      }
+      if (_govtIdUrl.isNotEmpty && !_govtIdUrl.startsWith('http')) {
+        finalGovtIdUrl = await StudentService().uploadImage(studentId, _govtIdUrl, 'govt_id');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print("Upload failed, falling back to local paths: $e");
+      }
+    }
+
+    // Dismiss loading dialog
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+    
+    // Initials
+    final name = _fullNameController.text.trim();
+    final nameParts = name.split(' ');
+    final initials = nameParts.map((part) => part.isNotEmpty ? part[0] : '').take(2).join().toUpperCase();
+    
+    // Sum installments for pendingAmount
+    double pendingAmount = 0.0;
+    for (var inst in _installments) {
+      final amtStr = inst['amount'] ?? '0';
+      final amt = double.tryParse(amtStr.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0.0;
+      pendingAmount += amt;
+    }
+    final secDepStr = _selectedPlan == "Rent Only" 
+        ? _securityDepositController.text 
+        : _premiumDepositController.text;
+    final secDep = double.tryParse(secDepStr.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0.0;
+    pendingAmount += secDep;
+
+    final status = pendingAmount > 0 ? "Upcoming" : "Paid";
+
+    final student = StudentDirectoryItem(
+      id: studentId,
+      name: name.isNotEmpty ? name : "New Resident",
+      initials: initials.isNotEmpty ? initials : "NR",
+      status: status,
+      building: _selectedBuilding ?? "Lakshya Residency",
+      room: _roomNumberController.text.isNotEmpty ? "Room ${_roomNumberController.text}" : "TBD",
+      phone: _mobileController.text.isNotEmpty ? "+91 ${_mobileController.text}" : "N/A",
+      email: _emailController.text.isNotEmpty ? _emailController.text : "N/A",
+      notes: _finalNotesController.text.isNotEmpty ? [_finalNotesController.text] : [],
+      pendingAmount: pendingAmount,
+      regNo: _regNoController.text,
+      course: _courseController.text,
+      branch: _branchController.text,
+      profilePhotoUrl: finalProfilePhotoUrl,
+      collegeIdUrl: finalCollegeIdUrl,
+      govtIdUrl: finalGovtIdUrl,
+      selectedPlan: _selectedPlan,
+      paymentFrequency: _paymentFrequency,
+      packageInstallmentType: _packageInstallmentType,
+      monthlyRent: _monthlyRentController.text,
+      securityDeposit: _securityDepositController.text,
+      yearInstallments: _yearInstallmentsController.text,
+      totalAcademicFees: _totalAcademicFeesController.text,
+      customInstallments: _customInstallmentsController.text,
+      premiumDeposit: _premiumDepositController.text,
+      installments: List<Map<String, dynamic>>.from(_installments),
+      guardianName: _guardianNameController.text,
+      guardianRelationship: _guardianRelationship,
+      guardianPhone: _guardianPhoneController.text,
+      dietaryPreference: _dietaryPreference,
+      inventoryItems: List<String>.from(_inventoryItems),
+      finalNotes: _finalNotesController.text,
+    );
+
+    // Save to Firestore
+    await StudentService().addStudent(student);
+
+    // Delete the draft
+    if (_currentDraftId != null) {
+      await StudentService().deleteDraft(_currentDraftId!);
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 28),
+            const SizedBox(width: 10),
+            Text(
+              "Onboarding Complete!",
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 18),
+            ),
+          ],
+        ),
+        content: Text(
+          "Student profile for '${student.name}' has been created and saved to cloud successfully.",
+          style: GoogleFonts.plusJakartaSans(fontSize: 14, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // close dialog
+              Navigator.pop(context); // go back to dashboard
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0056D2),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text("Done"),
+          ),
+        ],
       ),
     );
   }
 
   void _saveDraft() {
+    _saveDraftToFirestore();
     setState(() {
-      _hasSavedDraft = true;
       _currentStep = 0;
     });
     _showSnackbar("Draft saved to cloud successfully!");
@@ -190,6 +613,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               setState(() {
                 _currentStep--;
               });
+              _saveDraftToFirestore();
             } else {
               Navigator.pop(context);
             }
@@ -307,9 +731,11 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: () {
+                    _resetForm();
                     setState(() {
                       _currentStep = 1;
                     });
+                    _saveDraftToFirestore();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
@@ -360,123 +786,143 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 14),
 
-        if (_hasSavedDraft)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: StudentService().getDraftsStream(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24.0),
+                  child: CircularProgressIndicator(color: Color(0xFF0056D2)),
                 ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
+              );
+            }
+
+            final drafts = snapshot.data ?? [];
+            if (drafts.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 36.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.cloud_done_outlined,
+                      size: 48,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      "No In-Progress Drafts",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "When you start onboarding a student, progress will auto-save to the cloud and appear here.",
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: const Color(0xFF64748B),
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: drafts.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final draft = drafts[index];
+                final fullName = draft['fullName'] ?? '';
+                final currentStep = draft['currentStep'] ?? 1;
+                return Container(
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
-                    borderRadius: BorderRadius.circular(14),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.description_rounded, color: Color(0xFF4F46E5), size: 24),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text(
-                        _fullNameController.text.isNotEmpty
-                            ? _fullNameController.text
-                            : "Draft Resident Application",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF0F172A),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF2FF),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(Icons.description_rounded, color: Color(0xFF4F46E5), size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              fullName.isNotEmpty ? fullName : "Draft Resident Application",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "Saved on cloud • Step $currentStep In Progress",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        "Saved recently • Step 3 Completed",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          color: const Color(0xFF64748B),
+                      ElevatedButton(
+                        onPressed: () => _loadDraft(draft),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0056D2),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          "Resume",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    _generateInstallmentsFromStep3();
-                    setState(() {
-                      _currentStep = 4;
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0056D2),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: Text(
-                    "Resume",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )
-        else
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 36.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              children: [
-                const Icon(
-                  Icons.cloud_done_outlined,
-                  size: 48,
-                  color: Color(0xFF94A3B8),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  "No In-Progress Drafts",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "When you start onboarding a student and press back, progress will auto-save to cloud and appear here.",
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    color: const Color(0xFF64748B),
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ),
-          ),
+                );
+              },
+            );
+          },
+        ),
       ],
     );
   }
@@ -559,11 +1005,18 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: const Color(0xFFE2E8F0),
-                child: Icon(
-                  _profilePhotoUploaded ? Icons.check_circle_rounded : Icons.person_rounded,
-                  size: 32,
-                  color: _profilePhotoUploaded ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
-                ),
+                backgroundImage: _profilePhotoUrl.isNotEmpty
+                    ? (_profilePhotoUrl.startsWith('http')
+                        ? NetworkImage(_profilePhotoUrl)
+                        : FileImage(File(_profilePhotoUrl)) as ImageProvider)
+                    : null,
+                child: _profilePhotoUrl.isEmpty
+                    ? const Icon(
+                        Icons.person_rounded,
+                        size: 32,
+                        color: Color(0xFF94A3B8),
+                      )
+                    : null,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -592,15 +1045,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                       runSpacing: 8,
                       children: [
                         ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _profilePhotoUploaded = true;
-                            });
-                            _showSnackbar("Profile photo selected!");
-                          },
+                          onPressed: () => _pickImage('profile'),
                           icon: const Icon(Icons.camera_alt_rounded, size: 16),
                           label: Text(
-                            "Choose Photo",
+                            _profilePhotoUrl.isNotEmpty ? "Change Photo" : "Choose Photo",
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
@@ -615,26 +1063,50 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                             ),
                           ),
                         ),
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            _showSnackbar("Photo step skipped for later.");
-                          },
-                          icon: const Icon(Icons.access_time_rounded, size: 15),
-                          label: Text(
-                            "Add Later",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF64748B),
+                        if (_profilePhotoUrl.isNotEmpty)
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _profilePhotoUrl = '';
+                              });
+                            },
+                            icon: const Icon(Icons.delete_rounded, size: 15, color: Color(0xFFEF4444)),
+                            label: Text(
+                              "Remove",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFFEF4444),
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFFCA5A5)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          )
+                        else
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              _showSnackbar("Photo step skipped for later.");
+                            },
+                            icon: const Icon(Icons.access_time_rounded, size: 15),
+                            label: Text(
+                              "Add Later",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFCBD5E1)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFCBD5E1)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ],
@@ -839,6 +1311,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               setState(() {
                 _currentStep = 2;
               });
+              _saveDraftToFirestore();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0056D2),
@@ -997,12 +1470,13 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           icon: Icons.note_add_rounded,
           iconBg: const Color(0xFFEEF2FF),
           iconColor: const Color(0xFF4F46E5),
-          isUploaded: _collegeIdUploaded,
-          onTap: () {
+          fileUrl: _collegeIdUrl,
+          onTap: () => _pickImage('college_id'),
+          onRemove: () {
             setState(() {
-              _collegeIdUploaded = !_collegeIdUploaded;
+              _collegeIdUrl = '';
             });
-            _showSnackbar(_collegeIdUploaded ? "College ID Card uploaded!" : "College ID Card removed.");
+            _showSnackbar("College ID Card removed.");
           },
         ),
         const SizedBox(height: 24),
@@ -1045,12 +1519,13 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           icon: Icons.verified_user_rounded,
           iconBg: const Color(0xFFDCFCE7),
           iconColor: const Color(0xFF16A34A),
-          isUploaded: _govtIdUploaded,
-          onTap: () {
+          fileUrl: _govtIdUrl,
+          onTap: () => _pickImage('govt_id'),
+          onRemove: () {
             setState(() {
-              _govtIdUploaded = !_govtIdUploaded;
+              _govtIdUrl = '';
             });
-            _showSnackbar(_govtIdUploaded ? "Government ID uploaded!" : "Government ID removed.");
+            _showSnackbar("Government ID removed.");
           },
         ),
         const SizedBox(height: 28),
@@ -1143,6 +1618,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     setState(() {
                       _currentStep = 1;
                     });
+                    _saveDraftToFirestore();
                   },
                   icon: const Icon(Icons.arrow_back_rounded, size: 18),
                   label: Text(
@@ -1172,6 +1648,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     setState(() {
                       _currentStep = 3;
                     });
+                    _saveDraftToFirestore();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0056D2),
@@ -1697,6 +2174,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     setState(() {
                       _currentStep = 2;
                     });
+                    _saveDraftToFirestore();
                   },
                   icon: const Icon(Icons.arrow_back_rounded, size: 18),
                   label: Text(
@@ -1727,6 +2205,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     setState(() {
                       _currentStep = 4;
                     });
+                    _saveDraftToFirestore();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0056D2),
@@ -2332,6 +2811,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     setState(() {
                       _currentStep = 3;
                     });
+                    _saveDraftToFirestore();
                   },
                   icon: const Icon(Icons.arrow_back_rounded, size: 18),
                   label: Text(
@@ -2361,6 +2841,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     setState(() {
                       _currentStep = 5;
                     });
+                    _saveDraftToFirestore();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0056D2),
@@ -2687,6 +3168,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     setState(() {
                       _currentStep = 4;
                     });
+                    _saveDraftToFirestore();
                   },
                   icon: const Icon(Icons.arrow_back_rounded, size: 18),
                   label: Text(
@@ -2712,42 +3194,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        title: Row(
-                          children: [
-                            const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 28),
-                            const SizedBox(width: 10),
-                            Text(
-                              "Onboarding Complete!",
-                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 18),
-                            ),
-                          ],
-                        ),
-                        content: Text(
-                          "Student profile for '${_fullNameController.text.isNotEmpty ? _fullNameController.text : 'Resident'}' has been created and saved to cloud successfully.",
-                          style: GoogleFonts.plusJakartaSans(fontSize: 14, color: const Color(0xFF475569)),
-                        ),
-                        actions: [
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              Navigator.pop(context);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0056D2),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            child: const Text("Done"),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                  onPressed: _completeOnboarding,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0056D2),
                     foregroundColor: Colors.white,
@@ -2820,57 +3267,160 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     required IconData icon,
     required Color iconBg,
     required Color iconColor,
-    required bool isUploaded,
+    required String fileUrl,
     required VoidCallback onTap,
+    required VoidCallback onRemove,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        decoration: BoxDecoration(
-          color: isUploaded ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isUploaded ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
-            width: 1.5,
-          ),
+    final hasFile = fileUrl.isNotEmpty;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: hasFile ? Colors.white : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: hasFile ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
+          width: 1.5,
         ),
-        child: Column(
+        boxShadow: hasFile ? [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ] : null,
+      ),
+      child: hasFile ? ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isUploaded ? const Color(0xFFDCFCE7) : iconBg,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isUploaded ? Icons.check_circle_rounded : icon,
-                color: isUploaded ? const Color(0xFF16A34A) : iconColor,
-                size: 28,
+            // Preview Image
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: fileUrl.startsWith('http://') || fileUrl.startsWith('https://')
+                  ? Image.network(fileUrl, fit: BoxFit.cover)
+                  : (fileUrl == 'uploaded'
+                      ? Container(
+                          color: const Color(0xFFEFF6FF),
+                          child: const Icon(
+                            Icons.cloud_done_rounded,
+                            color: Color(0xFF2563EB),
+                            size: 48,
+                          ),
+                        )
+                      : Image.file(File(fileUrl), fit: BoxFit.cover)),
+            ),
+            // Dark gradient overlay at the bottom/top for readability
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.black.withOpacity(0.4), Colors.transparent, Colors.black.withOpacity(0.5)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              isUploaded ? "Uploaded Successfully! (Tap to change)" : title,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w800,
-                color: isUploaded ? const Color(0xFF166534) : const Color(0xFF0056D2),
+            // Selected check badge top left
+            Positioned(
+              top: 12,
+              left: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16A34A),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Colors.white, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      "Selected",
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF64748B),
+            // Remove Button top right
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: Colors.white,
+                shape: const CircleBorder(),
+                elevation: 2,
+                child: IconButton(
+                  icon: const Icon(Icons.delete_rounded, color: Color(0xFFEF4444), size: 18),
+                  onPressed: onRemove,
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(8),
+                ),
+              ),
+            ),
+            // Document Name/Title at the bottom
+            Positioned(
+              bottom: 12,
+              left: 16,
+              right: 16,
+              child: Text(
+                title.replaceAll("Click to Upload ", ""),
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
             ),
           ],
+        ),
+      ) : InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: iconColor,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0056D2),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
+import '../services/auth_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/User/user_home_screen.dart';
 import '../screens/User/mess_menu_screen.dart';
@@ -47,6 +49,7 @@ class UserDrawer extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
+              AuthService().logout();
               Navigator.pop(dialogContext); // close dialog
               Navigator.pushAndRemoveUntil(
                 context,
@@ -138,6 +141,14 @@ class UserDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final student = AuthService().currentUser;
+    final initials = student?.initials.isNotEmpty == true ? student!.initials : "SU";
+    final name = student?.name.isNotEmpty == true ? student!.name : "Student";
+    final roomInfo = student != null 
+        ? "${student.building} • Room ${student.room} (Bed A)"
+        : "Lakshya • Room 304 (Bed A)";
+    final phoneInfo = student?.phone ?? "+91 8208285947";
+
     return Drawer(
       elevation: 0,
       backgroundColor: Colors.white,
@@ -157,21 +168,44 @@ class UserDrawer extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 35,
-                  backgroundColor: Colors.white,
-                  child: Text(
-                    "SU",
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF2563EB),
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
+                student != null && student.profilePhotoUrl.isNotEmpty
+                    ? (student.profilePhotoUrl.startsWith('http')
+                        ? CircleAvatar(
+                            radius: 35,
+                            backgroundImage: NetworkImage(student.profilePhotoUrl),
+                          )
+                        : (student.profilePhotoUrl == 'uploaded'
+                            ? CircleAvatar(
+                                radius: 35,
+                                backgroundColor: Colors.white,
+                                child: Text(
+                                  initials,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: const Color(0xFF2563EB),
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              )
+                            : CircleAvatar(
+                                radius: 35,
+                                backgroundImage: FileImage(File(student.profilePhotoUrl)),
+                              )))
+                    : CircleAvatar(
+                        radius: 35,
+                        backgroundColor: Colors.white,
+                        child: Text(
+                          initials,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF2563EB),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
                 const SizedBox(height: 20),
                 Text(
-                  "Sudhanshu",
+                  name,
                   style: GoogleFonts.plusJakartaSans(
                     color: Colors.white,
                     fontSize: 22,
@@ -180,7 +214,7 @@ class UserDrawer extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "Lakshya • Room 304 (Bed A)",
+                  roomInfo,
                   style: GoogleFonts.plusJakartaSans(
                     color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 13,
@@ -189,7 +223,7 @@ class UserDrawer extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  "+91 8208285947",
+                  phoneInfo,
                   style: GoogleFonts.plusJakartaSans(
                     color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 13,

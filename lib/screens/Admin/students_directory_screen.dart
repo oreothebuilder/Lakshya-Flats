@@ -1,32 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/admin_drawer.dart';
-
-class StudentDirectoryItem {
-  final String id;
-  final String name;
-  final String initials;
-  final String status; // 'Upcoming', 'Paid', 'Defaulters'
-  final String building;
-  final String room;
-  final String phone;
-  final String email;
-  final List<String> notes;
-  final double pendingAmount;
-
-  StudentDirectoryItem({
-    required this.id,
-    required this.name,
-    required this.initials,
-    required this.status,
-    required this.building,
-    required this.room,
-    required this.phone,
-    required this.email,
-    required this.notes,
-    required this.pendingAmount,
-  });
-}
+import '../../models/student_model.dart';
+import '../../services/student_service.dart';
 
 class StudentsDirectoryScreen extends StatefulWidget {
   const StudentsDirectoryScreen({super.key});
@@ -46,95 +23,16 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
     "Lakshya Residency",
     "Univ Homes",
     "Green Villa",
+    "Rameshwaram",
+    "Shivalay",
   ];
 
-  // Dummy list of students structured as per requirements
-  final List<StudentDirectoryItem> _allStudents = [
-    StudentDirectoryItem(
-      id: "STU-001",
-      name: "Sudhanshu",
-      initials: "SU",
-      status: "Upcoming",
-      building: "Lakshya",
-      room: "Room 304 (Bed A)",
-      phone: "+91 8208285947",
-      email: "sudhansu1906@gmail.com",
-      notes: ["1 shared note regarding monthly mess pass extension."],
-      pendingAmount: 3500.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-002",
-      name: "Aarav Kumar",
-      initials: "AK",
-      status: "Paid",
-      building: "Lakshya",
-      room: "Room 102 (Bed B)",
-      phone: "+91 9876543210",
-      email: "aarav.k@gmail.com",
-      notes: [
-        "Fee clearance slip verified for Q3.",
-        "Requested extra chair."
-      ],
-      pendingAmount: 0.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-003",
-      name: "Rohan Mehta",
-      initials: "RM",
-      status: "Defaulter",
-      building: "Univ Homes",
-      room: "Room 205 (Bed A)",
-      phone: "+91 9123456789",
-      email: "rohan.mehta@yahoo.com",
-      notes: [],
-      pendingAmount: 7200.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-004",
-      name: "Priya Sharma",
-      initials: "PS",
-      status: "Upcoming",
-      building: "Univ Homes",
-      room: "Room 104 (Bed C)",
-      phone: "+91 9988776655",
-      email: "priya.s@outlook.com",
-      notes: [
-        "Parent call requested for weekend pass.",
-        "AC repair request logged."
-      ],
-      pendingAmount: 4200.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-005",
-      name: "Vikas Singh",
-      initials: "VS",
-      status: "Paid",
-      building: "Green Villa",
-      room: "Room 301 (Bed A)",
-      phone: "+91 9555443322",
-      email: "vikas.singh@gmail.com",
-      notes: ["Annual security deposit cleared."],
-      pendingAmount: 0.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-006",
-      name: "Ananya Patel",
-      initials: "AP",
-      status: "Defaulter",
-      building: "Green Villa",
-      room: "Room 202 (Bed B)",
-      phone: "+91 9777888999",
-      email: "ananya.p@gmail.com",
-      notes: ["Reminder sent twice on WhatsApp."],
-      pendingAmount: 8500.0,
-    ),
-  ];
-
-  List<StudentDirectoryItem> get _filteredStudents {
-    return _allStudents.where((student) {
+  List<StudentDirectoryItem> _getFilteredStudents(List<StudentDirectoryItem> allStudents) {
+    return allStudents.where((student) {
       // Building Filter
       if (_selectedBuilding != "All Buildings") {
-        if (!student.building.toLowerCase().contains(_selectedBuilding.toLowerCase().replaceAll(" residency", ""))) {
+        final selectedLower = _selectedBuilding.toLowerCase().replaceAll(" residency", "");
+        if (!student.building.toLowerCase().contains(selectedLower)) {
           return false;
         }
       }
@@ -267,7 +165,14 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
+                    final billAmt = double.tryParse(amountController.text.trim()) ?? 0.0;
+                    final updatedStudent = student.copyWith(
+                      pendingAmount: student.pendingAmount + billAmt,
+                      status: (student.pendingAmount + billAmt) > 0 ? "Defaulter" : "Paid",
+                    );
+                    await StudentService().updateStudent(updatedStudent);
+                    if (!context.mounted) return;
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -403,13 +308,15 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                       ),
                       const SizedBox(width: 10),
                       ElevatedButton(
-                        onPressed: () {
+                        onPressed: () async {
                           if (noteInputController.text.trim().isNotEmpty) {
+                            final newNote = noteInputController.text.trim();
                             setState(() {
-                              student.notes.add(noteInputController.text.trim());
+                              student.notes.add(newNote);
                             });
                             setModalState(() {});
                             noteInputController.clear();
+                            await StudentService().updateStudent(student);
                           }
                         },
                         style: ElevatedButton.styleFrom(
@@ -462,14 +369,21 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
               CircleAvatar(
                 radius: 36,
                 backgroundColor: const Color(0xFF0D52CE),
-                child: Text(
-                  student.initials,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                backgroundImage: student.profilePhotoUrl.isNotEmpty
+                    ? (student.profilePhotoUrl.startsWith('http')
+                        ? NetworkImage(student.profilePhotoUrl)
+                        : FileImage(File(student.profilePhotoUrl)) as ImageProvider)
+                    : null,
+                child: student.profilePhotoUrl.isEmpty
+                    ? Text(
+                        student.initials,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
               ),
               const SizedBox(height: 12),
               Text(
@@ -508,6 +422,44 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                       "Payment Status",
                       student.status,
                       statusColor: _getStatusTextColor(student.status),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Uploaded Documents",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    _buildDocumentRow(
+                      context,
+                      "College ID Card",
+                      student.collegeIdUrl,
+                      Icons.note_add_rounded,
+                    ),
+                    const Divider(height: 20),
+                    _buildDocumentRow(
+                      context,
+                      "Government ID",
+                      student.govtIdUrl,
+                      Icons.verified_user_rounded,
                     ),
                   ],
                 ),
@@ -556,6 +508,84 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
             color: statusColor ?? const Color(0xFF0F172A),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildDocumentRow(BuildContext context, String label, String url, IconData icon) {
+    final bool hasDoc = url.isNotEmpty;
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: hasDoc ? const Color(0xFF16A34A) : const Color(0xFF64748B)),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13.5,
+            color: const Color(0xFF64748B),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const Spacer(),
+        if (hasDoc)
+          TextButton.icon(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => Dialog(
+                  backgroundColor: Colors.transparent,
+                  insetPadding: const EdgeInsets.all(16),
+                  child: Stack(
+                    alignment: Alignment.topRight,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: InteractiveViewer(
+                          child: url.startsWith('http')
+                              ? Image.network(url, fit: BoxFit.contain)
+                              : Image.file(File(url), fit: BoxFit.contain),
+                        ),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: CircleAvatar(
+                          backgroundColor: Colors.black.withOpacity(0.5),
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.visibility_rounded, size: 16, color: Color(0xFF0D52CE)),
+            label: Text(
+              "View",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF0D52CE),
+              ),
+            ),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          )
+        else
+          Text(
+            "Not Uploaded",
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFFEF4444),
+            ),
+          ),
       ],
     );
   }
@@ -618,14 +648,21 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                   CircleAvatar(
                     radius: 26,
                     backgroundColor: const Color(0xFF0D52CE),
-                    child: Text(
-                      student.initials,
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    backgroundImage: student.profilePhotoUrl.isNotEmpty
+                        ? (student.profilePhotoUrl.startsWith('http')
+                            ? NetworkImage(student.profilePhotoUrl)
+                            : FileImage(File(student.profilePhotoUrl)) as ImageProvider)
+                        : null,
+                    child: student.profilePhotoUrl.isEmpty
+                        ? Text(
+                            student.initials,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -793,9 +830,22 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredStudents;
+    return StreamBuilder<List<StudentDirectoryItem>>(
+      stream: StudentService().getStudentsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return const Scaffold(
+            backgroundColor: Color(0xFFF8FAFC),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF0D52CE)),
+            ),
+          );
+        }
 
-    return Scaffold(
+        final allStudents = snapshot.data ?? [];
+        final filtered = _getFilteredStudents(allStudents);
+
+        return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       drawer: const AdminDrawer(activeItem: "Students Directory"),
       appBar: AppBar(
@@ -960,6 +1010,8 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
           ],
         ),
       ),
+    );
+      },
     );
   }
 }

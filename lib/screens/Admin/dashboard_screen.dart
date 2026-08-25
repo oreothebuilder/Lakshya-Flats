@@ -7,6 +7,8 @@ import '../student_onboarding_screen.dart';
 import '../mess_menu_management_screen.dart';
 import 'students_directory_screen.dart';
 import 'broadcast_notification_screen.dart';
+import '../../models/mess_menu_model.dart';
+import '../../services/mess_menu_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -16,6 +18,63 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  final MessMenuService _menuService = MessMenuService();
+
+  @override
+  void initState() {
+    super.initState();
+    _menuService.addListener(_onServiceUpdate);
+  }
+
+  @override
+  void dispose() {
+    _menuService.removeListener(_onServiceUpdate);
+    super.dispose();
+  }
+
+  void _onServiceUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  String _getCurrentDayShort() {
+    final now = DateTime.now();
+    switch (now.weekday) {
+      case DateTime.monday: return "Mon";
+      case DateTime.tuesday: return "Tue";
+      case DateTime.wednesday: return "Wed";
+      case DateTime.thursday: return "Thu";
+      case DateTime.friday: return "Fri";
+      case DateTime.saturday: return "Sat";
+      case DateTime.sunday: return "Sun";
+      default: return "Mon";
+    }
+  }
+
+  String _getCurrentDayFull() {
+    final now = DateTime.now();
+    switch (now.weekday) {
+      case DateTime.monday: return "MONDAY";
+      case DateTime.tuesday: return "TUESDAY";
+      case DateTime.wednesday: return "WEDNESDAY";
+      case DateTime.thursday: return "THURSDAY";
+      case DateTime.friday: return "FRIDAY";
+      case DateTime.saturday: return "SATURDAY";
+      case DateTime.sunday: return "SUNDAY";
+      default: return "MONDAY";
+    }
+  }
+
+  List<Map<String, String>> _getMealsList(DayMenu? menu) {
+    if (menu == null) return [];
+    return menu.meals.map((meal) {
+      return {
+        "icon": meal.icon,
+        "type": meal.title,
+        "items": meal.items.isEmpty ? "No items" : meal.items.join(", "),
+      };
+    }).toList();
+  }
+
   void _showSnackbar(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -290,7 +349,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    "MONDAY",
+                                    _getCurrentDayFull(),
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.w800,
@@ -351,34 +410,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildMessCard(
                 buildingName: "Univ Homes",
                 indicatorColor: const Color(0xFF0056D2),
-                meals: [
-                  {"icon": "🌅", "type": "Breakfast", "items": "Indori Poha, Sev, Jalebi, Masala Tea"},
-                  {"icon": "☀️", "type": "Lunch", "items": "Paneer Butter Masala, Dal Fry, Phulka, Rice, Salad"},
-                  {"icon": "🍪", "type": "Snacks", "items": "Veg Sandwich, Tea"},
-                  {"icon": "🌙", "type": "Dinner", "items": "Aloo Matar, Yellow Dal, Chapati, Rice, Kheer"},
-                ],
+                meals: _getMealsList(_menuService.getDayMenu("Univ Homes", _getCurrentDayShort())),
               ),
               const SizedBox(height: 14),
               _buildMessCard(
                 buildingName: "Rameshwaram",
                 indicatorColor: const Color(0xFF16A34A),
-                meals: [
-                  {"icon": "🌅", "type": "Breakfast", "items": "Idli Sambhar, Coconut Chutney, Filter Coffee"},
-                  {"icon": "☀️", "type": "Lunch", "items": "Chole, Bhature, Onion Salad, Boondi Raita"},
-                  {"icon": "🍪", "type": "Snacks", "items": "Samosa, Mint Chutney, Masala Chai"},
-                  {"icon": "🌙", "type": "Dinner", "items": "Paneer Butter Masala, Dal Fry, Roti, Jeera Rice, Gulab Jamun"},
-                ],
+                meals: _getMealsList(_menuService.getDayMenu("Rameshwaram", _getCurrentDayShort())),
               ),
               const SizedBox(height: 14),
               _buildMessCard(
                 buildingName: "Shivalay",
                 indicatorColor: const Color(0xFFD97706),
-                meals: [
-                  {"icon": "🌅", "type": "Breakfast", "items": "Methi Paratha, White Butter, Tea"},
-                  {"icon": "☀️", "type": "Lunch", "items": "Dal Tadka, Mix Veg Sabzi, Rice, Roti, Salad"},
-                  {"icon": "🍪", "type": "Snacks", "items": "Bhel Puri, Mint Lemonade"},
-                  {"icon": "🌙", "type": "Dinner", "items": "Aloo Gobi, Moong Dal, Phulka, Rice, Kheer"},
-                ],
+                meals: _getMealsList(_menuService.getDayMenu("Shivalay", _getCurrentDayShort())),
               ),
               const SizedBox(height: 24),
 

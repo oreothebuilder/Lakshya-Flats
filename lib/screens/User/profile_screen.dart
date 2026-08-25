@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/user_drawer.dart';
+import '../../services/auth_service.dart';
+import '../../services/student_service.dart';
 import 'notifications_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -40,6 +43,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    final student = AuthService().currentUser;
+    if (student != null) {
+      _name = student.name;
+      _email = student.email;
+      _phone = student.phone;
+      _reg = student.regNo;
+      _course = student.course;
+      _branch = student.branch;
+    }
     _nameController = TextEditingController(text: _name);
     _emailController = TextEditingController(text: _email);
     _phoneController = TextEditingController(text: _phone);
@@ -63,9 +75,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 
 
-  void _toggleEditSave() {
+  void _toggleEditSave() async {
     if (_isEditing) {
       if (_formKey.currentState!.validate()) {
+        final student = AuthService().currentUser;
+        if (student != null) {
+          final updatedStudent = student.copyWith(
+            name: _nameController.text,
+            email: _emailController.text,
+            phone: _phoneController.text,
+            regNo: _regController.text,
+            course: _courseController.text,
+            branch: _branchController.text,
+          );
+
+          await StudentService().updateStudent(updatedStudent);
+          AuthService().currentUser = updatedStudent;
+        }
+
         setState(() {
           _name = _nameController.text;
           _email = _emailController.text;
@@ -76,16 +103,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _branch = _branchController.text;
           _isEditing = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Profile updated successfully!",
-              style: GoogleFonts.plusJakartaSans(),
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "Profile updated successfully!",
+                style: GoogleFonts.plusJakartaSans(),
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
             ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+          );
+        }
       }
     } else {
       setState(() {
@@ -348,6 +378,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final student = AuthService().currentUser;
+    final initials = student?.initials.isNotEmpty == true ? student!.initials : "SU";
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       drawer: const UserDrawer(activeItem: "Profile"),
@@ -407,18 +440,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16, left: 4),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: const Color(0xFF2563EB),
-              child: Text(
-                "SU",
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+            child: student != null && student.profilePhotoUrl.isNotEmpty
+                ? (student.profilePhotoUrl.startsWith('http')
+                    ? CircleAvatar(
+                        radius: 18,
+                        backgroundImage: NetworkImage(student.profilePhotoUrl),
+                      )
+                    : (student.profilePhotoUrl == 'uploaded'
+                        ? CircleAvatar(
+                            radius: 18,
+                            backgroundColor: const Color(0xFF2563EB),
+                            child: Text(
+                              initials,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        : CircleAvatar(
+                            radius: 18,
+                            backgroundImage: FileImage(File(student.profilePhotoUrl)),
+                          )))
+                : CircleAvatar(
+                    radius: 18,
+                    backgroundColor: const Color(0xFF2563EB),
+                    child: Text(
+                      initials,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -451,18 +507,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   child: Column(
                     children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: Colors.white,
-                        child: Text(
-                          "SU",
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFF1D4ED8),
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
+                      student != null && student.profilePhotoUrl.isNotEmpty
+                          ? (student.profilePhotoUrl.startsWith('http')
+                              ? CircleAvatar(
+                                  radius: 36,
+                                  backgroundImage: NetworkImage(student.profilePhotoUrl),
+                                )
+                              : (student.profilePhotoUrl == 'uploaded'
+                                  ? CircleAvatar(
+                                      radius: 36,
+                                      backgroundColor: Colors.white,
+                                      child: Text(
+                                        initials,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: const Color(0xFF1D4ED8),
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    )
+                                  : CircleAvatar(
+                                      radius: 36,
+                                      backgroundImage: FileImage(File(student.profilePhotoUrl)),
+                                    )))
+                          : CircleAvatar(
+                              radius: 36,
+                              backgroundColor: Colors.white,
+                              child: Text(
+                                initials,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFF1D4ED8),
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
                       const SizedBox(height: 16),
                       Text(
                         _name,
@@ -479,7 +558,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const Icon(Icons.apartment_rounded, color: Colors.white70, size: 14),
                           const SizedBox(width: 6),
                           Text(
-                            "Lakshya • Room 304 (Bed A)",
+                            student != null ? "${student.building} • Room ${student.room} (Bed A)" : "Lakshya • Room 304 (Bed A)",
                             style: GoogleFonts.plusJakartaSans(
                               color: Colors.white.withValues(alpha: 0.85),
                               fontSize: 13,
@@ -610,8 +689,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         mainAxisSpacing: 12,
                         childAspectRatio: 2.2,
                         children: [
-                          _buildStayBox("Building", "Lakshya"),
-                          _buildStayBox("Room No.", "304"),
+                          _buildStayBox("Building", student?.building ?? "Lakshya"),
+                          _buildStayBox("Room No.", student?.room ?? "304"),
                           _buildStayBox("Bed Type", "Bed A"),
                           _buildStayBox("Move-in Date", "01 Jul 2023"),
                         ],

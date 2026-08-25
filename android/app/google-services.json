@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "365998229887",
+    "project_id": "lakshya-flats",
+    "storage_bucket": "lakshya-flats.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:365998229887:android:8fb1337e1cfc1937f9724a",
+        "android_client_info": {
+          "package_name": "com.lakshya.residency.lakshya_residency"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASkAtM4zYs8sDR9LPeSPzPsEUMw3rKsVM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

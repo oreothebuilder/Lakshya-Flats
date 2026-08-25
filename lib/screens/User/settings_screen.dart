@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/user_drawer.dart';
+import '../../services/auth_service.dart';
+import '../../services/student_service.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 
@@ -16,8 +19,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _phoneController;
 
   // Account State
-  final String _email = "student@university.edu";
-  String _phone = "+1 (555) 019-2834";
   String _passwordSubtext = "Last changed 3 months ago";
 
   // Preference State
@@ -35,7 +36,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _phoneController = TextEditingController(text: _phone);
+    final student = AuthService().currentUser;
+    _phoneController = TextEditingController(text: student?.phone ?? "");
   }
 
   @override
@@ -209,28 +211,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _saveChanges() {
+  void _saveChanges() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _phone = _phoneController.text;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Settings saved successfully!",
-            style: GoogleFonts.plusJakartaSans(),
-          ),
-          backgroundColor: const Color(0xFF1D4ED8),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      final student = AuthService().currentUser;
+      if (student != null) {
+        final updatedStudent = student.copyWith(
+          phone: _phoneController.text.trim(),
+        );
+        try {
+          await StudentService().updateStudent(updatedStudent);
+          AuthService().currentUser = updatedStudent;
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  "Settings saved successfully!",
+                  style: GoogleFonts.plusJakartaSans(),
+                ),
+                backgroundColor: const Color(0xFF1D4ED8),
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  "Error saving settings: $e",
+                  style: GoogleFonts.plusJakartaSans(),
+                ),
+                backgroundColor: Colors.redAccent,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final student = AuthService().currentUser;
+    final initials = student?.initials.isNotEmpty == true ? student!.initials : "SU";
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       drawer: UserDrawer(activeItem: "Settings"),
@@ -265,18 +292,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
             child: Padding(
               padding: const EdgeInsets.only(right: 16, left: 4),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: const Color(0xFF2563EB),
-                child: Text(
-                  "SU",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              child: student != null && student.profilePhotoUrl.isNotEmpty
+                  ? (student.profilePhotoUrl.startsWith('http')
+                      ? CircleAvatar(
+                          radius: 18,
+                          backgroundImage: NetworkImage(student.profilePhotoUrl),
+                        )
+                      : (student.profilePhotoUrl == 'uploaded'
+                          ? CircleAvatar(
+                              radius: 18,
+                              backgroundColor: const Color(0xFF2563EB),
+                              child: Text(
+                                initials,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : CircleAvatar(
+                              radius: 18,
+                              backgroundImage: FileImage(File(student.profilePhotoUrl)),
+                            )))
+                  : CircleAvatar(
+                      radius: 18,
+                      backgroundColor: const Color(0xFF2563EB),
+                      child: Text(
+                        initials,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
             ),
           ),
         ],
@@ -361,7 +411,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 8),
                       TextFormField(
-                        initialValue: _email,
+                        key: ValueKey(student?.email),
+                        initialValue: student?.email ?? "",
                         readOnly: true,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 14,

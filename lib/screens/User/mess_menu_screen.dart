@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/user_drawer.dart';
+import '../../services/auth_service.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
+import '../../services/mess_menu_service.dart';
 
 class MessMenuScreen extends StatefulWidget {
   const MessMenuScreen({super.key});
@@ -24,197 +27,51 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
     "Sunday"
   ];
 
-  // Dummy menu database structured by day
-  final Map<String, List<Map<String, String>>> _menuData = {
-    "Monday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Indori Poha, Sev, Jalebi, Masala Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Paneer Butter Masala, Dal Fry, Phulka, Rice, Salad"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Veg Sandwich, Tea"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Aloo Matar, Yellow Dal, Chapati, Rice, Kheer"
-      },
-    ],
-    "Tuesday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Idli Sambhar, Coconut Chutney, Filter Coffee"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Chole, Bhature, Onion Salad, Boondi Raita"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Samosa, Mint Chutney, Masala Chai"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Paneer Butter Masala, Dal Fry, Roti, Jeera Rice, Gulab Jamun"
-      },
-    ],
-    "Wednesday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Methi Paratha, White Butter, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Dal Tadka, Mix Veg Sabzi, Rice, Roti, Salad"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Bhel Puri, Mint Lemonade"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Aloo Gobi, Moong Dal, Phulka, Rice, Kheer"
-      },
-    ],
-    "Thursday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Aloo Paratha, Curd, Pickle, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Rajma Masala, Steamed Rice, Roti, Curd, Papad"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Kachori, Tea"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Kadahi Paneer, Butter Naan, Rice, Custard"
-      },
-    ],
-    "Friday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Bread Pakoda, Green Chutney, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Veg Pulao, Kadhi Pakoda, Roti, Aloo Jeera"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Pav Bhaji, Tea"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Dal Makhani, Mix Veg, Phulka, Rice, Ice Cream"
-      },
-    ],
-    "Saturday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Upma, Coconut Chutney, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Alu Shimla Mirch, Yellow Dal, Roti, Rice, Curd"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Aloo Tikki Chaat, Tea"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Matar Paneer, Tandoori Roti, Rice, Gulab Jamun"
-      },
-    ],
-    "Sunday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Puri Bhaji, Halwa, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Special Veg Biryani, Mirchi Ka Salan, Raita"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "French Fries, Cold Drink"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Paneer Lababdar, Dal Tadka, Missi Roti, Rice, Rabdi"
-      },
-    ]
-  };
+  final MessMenuService _menuService = MessMenuService();
 
+  @override
+  void initState() {
+    super.initState();
+    _menuService.addListener(_onServiceUpdate);
+  }
 
+  @override
+  void dispose() {
+    _menuService.removeListener(_onServiceUpdate);
+    super.dispose();
+  }
+
+  void _onServiceUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  String _toShortDay(String fullDay) {
+    switch (fullDay) {
+      case "Monday": return "Mon";
+      case "Tuesday": return "Tue";
+      case "Wednesday": return "Wed";
+      case "Thursday": return "Thu";
+      case "Friday": return "Fri";
+      case "Saturday": return "Sat";
+      case "Sunday": return "Sun";
+      default: return "Mon";
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final selectedMeals = _menuData[_selectedDay] ?? [];
+    final student = AuthService().currentUser;
+    final initials = student?.initials.isNotEmpty == true ? student!.initials : "SU";
+    final dayShort = _toShortDay(_selectedDay);
+    final dayMenu = _menuService.getDayMenu("Univ Homes", dayShort);
+    final List<Map<String, String>> selectedMeals = dayMenu == null ? [] : dayMenu.meals.map((meal) {
+      return {
+        "emoji": meal.icon.isEmpty ? "🍽️" : meal.icon,
+        "type": meal.title,
+        "time": meal.timeSlot,
+        "items": meal.items.join(", "),
+      };
+    }).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -258,7 +115,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                   ),
                 ),
                 Text(
-                  "Lakshya • Rm 304",
+                  student != null ? "${student.building} • Rm ${student.room}" : "Lakshya • Rm 304",
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -314,18 +171,41 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
             },
             child: Padding(
               padding: const EdgeInsets.only(right: 16, left: 4),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: const Color(0xFF2563EB),
-                child: Text(
-                  "SU",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              child: student != null && student.profilePhotoUrl.isNotEmpty
+                  ? (student.profilePhotoUrl.startsWith('http')
+                      ? CircleAvatar(
+                          radius: 18,
+                          backgroundImage: NetworkImage(student.profilePhotoUrl),
+                        )
+                      : (student.profilePhotoUrl == 'uploaded'
+                          ? CircleAvatar(
+                              radius: 18,
+                              backgroundColor: const Color(0xFF2563EB),
+                              child: Text(
+                                initials,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : CircleAvatar(
+                              radius: 18,
+                              backgroundImage: FileImage(File(student.profilePhotoUrl)),
+                            )))
+                  : CircleAvatar(
+                      radius: 18,
+                      backgroundColor: const Color(0xFF2563EB),
+                      child: Text(
+                        initials,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
             ),
           ),
         ],

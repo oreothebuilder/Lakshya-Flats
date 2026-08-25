@@ -30,6 +30,29 @@ class MealInfo {
       items: items != null ? List<String>.from(items) : List<String>.from(this.items),
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'type': type.name,
+      'title': title,
+      'timeSlot': timeSlot,
+      'icon': icon,
+      'items': items,
+    };
+  }
+
+  factory MealInfo.fromJson(Map<String, dynamic> json) {
+    return MealInfo(
+      type: MealType.values.firstWhere(
+        (e) => e.name == json['type'],
+        orElse: () => MealType.breakfast,
+      ),
+      title: json['title'] as String? ?? '',
+      timeSlot: json['timeSlot'] as String? ?? '',
+      icon: json['icon'] as String? ?? '',
+      items: List<String>.from(json['items'] as List? ?? []),
+    );
+  }
 }
 
 class DayMenu {
@@ -54,6 +77,24 @@ class DayMenu {
       meals: meals != null ? meals.map((m) => m.copyWith()).toList() : this.meals.map((m) => m.copyWith()).toList(),
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'dayName': dayName,
+      'shortDay': shortDay,
+      'meals': meals.map((m) => m.toJson()).toList(),
+    };
+  }
+
+  factory DayMenu.fromJson(Map<String, dynamic> json) {
+    return DayMenu(
+      dayName: json['dayName'] as String? ?? '',
+      shortDay: json['shortDay'] as String? ?? '',
+      meals: (json['meals'] as List? ?? [])
+          .map((m) => MealInfo.fromJson(Map<String, dynamic>.from(m as Map)))
+          .toList(),
+    );
+  }
 }
 
 class MessSchedule {
@@ -64,4 +105,20 @@ class MessSchedule {
     required this.messName,
     required this.days,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'messName': messName,
+      'days': days.map((d) => d.toJson()).toList(),
+    };
+  }
+
+  factory MessSchedule.fromJson(Map<String, dynamic> json) {
+    return MessSchedule(
+      messName: json['messName'] as String? ?? '',
+      days: (json['days'] as List? ?? [])
+          .map((d) => DayMenu.fromJson(Map<String, dynamic>.from(d as Map)))
+          .toList(),
+    );
+  }
 }
