@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'cloudinary_service.dart';
 import '../models/student_model.dart';
 
 class StudentService extends ChangeNotifier {
@@ -12,14 +13,31 @@ class StudentService extends ChangeNotifier {
 
   StudentService._internal();
 
-  // Uploads an image to Firebase Storage and returns its download URL.
-  // If configuration or upload fails, falls back gracefully to returning local path.
+  // Uploads an image (prioritizing Cloudinary, falling back to Firebase Storage).
+  // Returns download URL, or falls back gracefully to returning local path if both fail.
   Future<String> uploadImage(String studentId, String filePath, String type) async {
     try {
       final file = File(filePath);
       if (!await file.exists()) {
         return filePath;
       }
+
+      // 1. Try Cloudinary
+      try {
+        final bytes = await file.readAsBytes();
+        final filename = '${studentId}_$type.jpg';
+        final cloudinaryUrl = await CloudinaryService().uploadImageBytes(
+          bytes: bytes,
+          filename: filename,
+        );
+        return cloudinaryUrl;
+      } catch (cloudinaryError) {
+        if (kDebugMode) {
+          print("Cloudinary upload failed: $cloudinaryError. Trying Firebase Storage fallback...");
+        }
+      }
+
+      // 2. Try Firebase Storage fallback
       final ref = FirebaseStorage.instance
           .ref()
           .child('students')
@@ -31,7 +49,7 @@ class StudentService extends ChangeNotifier {
       return downloadUrl;
     } catch (e) {
       if (kDebugMode) {
-        print("Error uploading image to Firebase Storage: $e");
+        print("All cloud storage uploads failed for $type: $e");
       }
       // Return the local file path as a fallback
       return filePath;

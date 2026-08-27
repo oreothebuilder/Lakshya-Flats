@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/user_drawer.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/avatar_helper.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
 import '../../services/mess_menu_service.dart';
@@ -171,41 +171,11 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
             },
             child: Padding(
               padding: const EdgeInsets.only(right: 16, left: 4),
-              child: student != null && student.profilePhotoUrl.isNotEmpty
-                  ? (student.profilePhotoUrl.startsWith('http')
-                      ? CircleAvatar(
-                          radius: 18,
-                          backgroundImage: NetworkImage(student.profilePhotoUrl),
-                        )
-                      : (student.profilePhotoUrl == 'uploaded'
-                          ? CircleAvatar(
-                              radius: 18,
-                              backgroundColor: const Color(0xFF2563EB),
-                              child: Text(
-                                initials,
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            )
-                          : CircleAvatar(
-                              radius: 18,
-                              backgroundImage: FileImage(File(student.profilePhotoUrl)),
-                            )))
-                  : CircleAvatar(
-                      radius: 18,
-                      backgroundColor: const Color(0xFF2563EB),
-                      child: Text(
-                        initials,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+              child: StudentAvatar(
+                radius: 18,
+                profilePhotoUrl: student?.profilePhotoUrl,
+                initials: initials,
+              ),
             ),
           ),
         ],

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
@@ -11,6 +10,8 @@ import '../screens/User/tickets_screen.dart';
 import '../screens/User/profile_screen.dart';
 import '../screens/User/notifications_screen.dart';
 import '../screens/User/settings_screen.dart';
+
+import 'avatar_helper.dart';
 
 class UserDrawer extends StatelessWidget {
   final String activeItem;
@@ -168,41 +169,17 @@ class UserDrawer extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                student != null && student.profilePhotoUrl.isNotEmpty
-                    ? (student.profilePhotoUrl.startsWith('http')
-                        ? CircleAvatar(
-                            radius: 35,
-                            backgroundImage: NetworkImage(student.profilePhotoUrl),
-                          )
-                        : (student.profilePhotoUrl == 'uploaded'
-                            ? CircleAvatar(
-                                radius: 35,
-                                backgroundColor: Colors.white,
-                                child: Text(
-                                  initials,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: const Color(0xFF2563EB),
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              )
-                            : CircleAvatar(
-                                radius: 35,
-                                backgroundImage: FileImage(File(student.profilePhotoUrl)),
-                              )))
-                    : CircleAvatar(
-                        radius: 35,
-                        backgroundColor: Colors.white,
-                        child: Text(
-                          initials,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFF2563EB),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
+                StudentAvatar(
+                  radius: 35,
+                  profilePhotoUrl: student?.profilePhotoUrl,
+                  initials: initials,
+                  backgroundColor: Colors.white,
+                  textStyle: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF2563EB),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 20),
                 Text(
                   name,

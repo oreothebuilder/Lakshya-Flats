@@ -1,9 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/user_drawer.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/avatar_helper.dart';
 import 'mess_menu_screen.dart';
 import 'payments_bills_screen.dart';
 import 'tickets_screen.dart';
@@ -238,41 +238,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             },
             child: Container(
               margin: const EdgeInsets.only(right: 12, left: 4),
-              child: student != null && student.profilePhotoUrl.isNotEmpty
-                  ? (student.profilePhotoUrl.startsWith('http')
-                      ? CircleAvatar(
-                          radius: 16,
-                          backgroundImage: NetworkImage(student.profilePhotoUrl),
-                        )
-                      : (student.profilePhotoUrl == 'uploaded'
-                          ? CircleAvatar(
-                              radius: 16,
-                              backgroundColor: const Color(0xFF541FE4),
-                              child: Text(
-                                initials,
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            )
-                          : CircleAvatar(
-                              radius: 16,
-                              backgroundImage: FileImage(File(student.profilePhotoUrl)),
-                            )))
-                  : CircleAvatar(
-                      radius: 16,
-                      backgroundColor: const Color(0xFF541FE4),
-                      child: Text(
-                        initials,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+              child: StudentAvatar(
+                radius: 16,
+                profilePhotoUrl: student?.profilePhotoUrl,
+                initials: initials,
+                backgroundColor: const Color(0xFF541FE4),
+              ),
             ),
           ),
         ],
@@ -324,69 +295,23 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           children: [
                             Row(
                               children: [
-                                student != null && student.profilePhotoUrl.isNotEmpty
-                                    ? (student.profilePhotoUrl.startsWith('http')
-                                        ? Container(
-                                            width: 56,
-                                            height: 56,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
-                                              image: DecorationImage(
-                                                image: NetworkImage(student.profilePhotoUrl),
-                                                fit: BoxFit.cover,
-                                              ),
-                                            ),
-                                          )
-                                        : (student.profilePhotoUrl == 'uploaded'
-                                            ? Container(
-                                                width: 56,
-                                                height: 56,
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
-                                                ),
-                                                child: Center(
-                                                  child: Text(
-                                                    initials,
-                                                    style: GoogleFonts.plusJakartaSans(
-                                                      color: Colors.white,
-                                                      fontSize: 18,
-                                                      fontWeight: FontWeight.w800,
-                                                    ),
-                                                  ),
-                                                ),
-                                              )
-                                            : Container(
-                                                width: 56,
-                                                height: 56,
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
-                                                  image: DecorationImage(
-                                                    image: FileImage(File(student.profilePhotoUrl)),
-                                                    fit: BoxFit.cover,
-                                                  ),
-                                                ),
-                                              )))
-                                    : Container(
-                                        width: 56,
-                                        height: 56,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            initials,
-                                            style: GoogleFonts.plusJakartaSans(
-                                              color: Colors.white,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+                                  ),
+                                  child: StudentAvatar(
+                                    radius: 26.5,
+                                    profilePhotoUrl: student?.profilePhotoUrl,
+                                    initials: initials,
+                                    backgroundColor: Colors.transparent,
+                                    textStyle: GoogleFonts.plusJakartaSans(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(

@@ -1,10 +1,11 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/student_model.dart';
 import '../services/student_service.dart';
+import '../services/cloudinary_service.dart';
+import '../widgets/avatar_helper.dart';
 
 class StudentOnboardingScreen extends StatefulWidget {
   const StudentOnboardingScreen({super.key});
@@ -74,6 +75,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   String _profilePhotoUrl = '';
   String _collegeIdUrl = '';
   String _govtIdUrl = '';
+
+  bool _isUploadingProfile = false;
+  bool _isUploadingCollegeId = false;
+  bool _isUploadingGovtId = false;
 
 
   final List<String> _relationships = ["Father", "Mother", "Guardian", "Sibling", "Other"];
@@ -265,14 +270,54 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         if (pickedFile != null) {
           setState(() {
             if (type == 'profile') {
-              _profilePhotoUrl = pickedFile.path;
+              _isUploadingProfile = true;
             } else if (type == 'college_id') {
-              _collegeIdUrl = pickedFile.path;
+              _isUploadingCollegeId = true;
             } else if (type == 'govt_id') {
-              _govtIdUrl = pickedFile.path;
+              _isUploadingGovtId = true;
             }
           });
-          _showSnackbar("Document selected successfully!");
+
+          try {
+            final bytes = await pickedFile.readAsBytes();
+            final filename = pickedFile.name;
+            final uploadUrl = await CloudinaryService().uploadImageBytes(
+              bytes: bytes,
+              filename: filename,
+            );
+
+            setState(() {
+              if (type == 'profile') {
+                _profilePhotoUrl = uploadUrl;
+              } else if (type == 'college_id') {
+                _collegeIdUrl = uploadUrl;
+              } else if (type == 'govt_id') {
+                _govtIdUrl = uploadUrl;
+              }
+            });
+            _showSnackbar("Document uploaded successfully to Cloudinary!");
+          } catch (e) {
+            setState(() {
+              if (type == 'profile') {
+                _profilePhotoUrl = pickedFile.path;
+              } else if (type == 'college_id') {
+                _collegeIdUrl = pickedFile.path;
+              } else if (type == 'govt_id') {
+                _govtIdUrl = pickedFile.path;
+              }
+            });
+            _showSnackbar("Cloudinary upload failed, using local fallback. Error: $e", isError: true);
+          } finally {
+            setState(() {
+              if (type == 'profile') {
+                _isUploadingProfile = false;
+              } else if (type == 'college_id') {
+                _isUploadingCollegeId = false;
+              } else if (type == 'govt_id') {
+                _isUploadingGovtId = false;
+              }
+            });
+          }
         }
       } catch (e) {
         _showSnackbar("Failed to pick image: $e");
@@ -1005,18 +1050,25 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: const Color(0xFFE2E8F0),
-                backgroundImage: _profilePhotoUrl.isNotEmpty
-                    ? (_profilePhotoUrl.startsWith('http')
-                        ? NetworkImage(_profilePhotoUrl)
-                        : FileImage(File(_profilePhotoUrl)) as ImageProvider)
+                backgroundImage: !_isUploadingProfile && _profilePhotoUrl.isNotEmpty
+                    ? getProfileImage(_profilePhotoUrl)
                     : null,
-                child: _profilePhotoUrl.isEmpty
-                    ? const Icon(
-                        Icons.person_rounded,
-                        size: 32,
-                        color: Color(0xFF94A3B8),
+                child: _isUploadingProfile
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF0056D2),
+                        ),
                       )
-                    : null,
+                    : (_profilePhotoUrl.isEmpty
+                        ? const Icon(
+                            Icons.person_rounded,
+                            size: 32,
+                            color: Color(0xFF94A3B8),
+                          )
+                        : null),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -1045,10 +1097,21 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                       runSpacing: 8,
                       children: [
                         ElevatedButton.icon(
-                          onPressed: () => _pickImage('profile'),
-                          icon: const Icon(Icons.camera_alt_rounded, size: 16),
+                          onPressed: _isUploadingProfile ? null : () => _pickImage('profile'),
+                          icon: _isUploadingProfile
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF0056D2),
+                                  ),
+                                )
+                              : const Icon(Icons.camera_alt_rounded, size: 16),
                           label: Text(
-                            _profilePhotoUrl.isNotEmpty ? "Change Photo" : "Choose Photo",
+                            _isUploadingProfile
+                                ? "Uploading..."
+                                : (_profilePhotoUrl.isNotEmpty ? "Change Photo" : "Choose Photo"),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
@@ -1445,7 +1508,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               ),
             ),
             GestureDetector(
-              onTap: () => _showSnackbar("College ID step skipped for later."),
+              onTap: _isUploadingCollegeId ? null : () => _showSnackbar("College ID step skipped for later."),
               child: Row(
                 children: [
                   const Icon(Icons.access_time_rounded, size: 14, color: Color(0xFF2563EB)),
@@ -1471,6 +1534,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           iconBg: const Color(0xFFEEF2FF),
           iconColor: const Color(0xFF4F46E5),
           fileUrl: _collegeIdUrl,
+          isUploading: _isUploadingCollegeId,
           onTap: () => _pickImage('college_id'),
           onRemove: () {
             setState(() {
@@ -1494,7 +1558,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               ),
             ),
             GestureDetector(
-              onTap: () => _showSnackbar("Government ID step skipped for later."),
+              onTap: _isUploadingGovtId ? null : () => _showSnackbar("Government ID step skipped for later."),
               child: Row(
                 children: [
                   const Icon(Icons.access_time_rounded, size: 14, color: Color(0xFF2563EB)),
@@ -1520,6 +1584,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           iconBg: const Color(0xFFDCFCE7),
           iconColor: const Color(0xFF16A34A),
           fileUrl: _govtIdUrl,
+          isUploading: _isUploadingGovtId,
           onTap: () => _pickImage('govt_id'),
           onRemove: () {
             setState(() {
@@ -1614,12 +1679,14 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               child: SizedBox(
                 height: 52,
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _currentStep = 1;
-                    });
-                    _saveDraftToFirestore();
-                  },
+                  onPressed: (_isUploadingCollegeId || _isUploadingGovtId)
+                      ? null
+                      : () {
+                          setState(() {
+                            _currentStep = 1;
+                          });
+                          _saveDraftToFirestore();
+                        },
                   icon: const Icon(Icons.arrow_back_rounded, size: 18),
                   label: Text(
                     "Back",
@@ -1644,12 +1711,14 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _currentStep = 3;
-                    });
-                    _saveDraftToFirestore();
-                  },
+                  onPressed: (_isUploadingCollegeId || _isUploadingGovtId)
+                      ? null
+                      : () {
+                          setState(() {
+                            _currentStep = 3;
+                          });
+                          _saveDraftToFirestore();
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0056D2),
                     foregroundColor: Colors.white,
@@ -3270,7 +3339,54 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     required String fileUrl,
     required VoidCallback onTap,
     required VoidCallback onRemove,
+    bool isUploading = false,
   }) {
+    if (isUploading) {
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFFCBD5E1),
+            width: 1.5,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 36),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0056D2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Uploading to Cloudinary...",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF0056D2),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "Please wait while the document is saved on the web.",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final hasFile = fileUrl.isNotEmpty;
     return Container(
       width: double.infinity,
@@ -3297,18 +3413,21 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
             // Preview Image
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: fileUrl.startsWith('http://') || fileUrl.startsWith('https://')
-                  ? Image.network(fileUrl, fit: BoxFit.cover)
-                  : (fileUrl == 'uploaded'
-                      ? Container(
-                          color: const Color(0xFFEFF6FF),
-                          child: const Icon(
-                            Icons.cloud_done_rounded,
-                            color: Color(0xFF2563EB),
-                            size: 48,
-                          ),
+              child: fileUrl == 'uploaded'
+                  ? Container(
+                      color: const Color(0xFFEFF6FF),
+                      child: const Icon(
+                        Icons.cloud_done_rounded,
+                        color: Color(0xFF2563EB),
+                        size: 48,
+                      ),
+                    )
+                  : (getProfileImage(fileUrl) != null
+                      ? Image(
+                          image: getProfileImage(fileUrl)!,
+                          fit: BoxFit.cover,
                         )
-                      : Image.file(File(fileUrl), fit: BoxFit.cover)),
+                      : const SizedBox.shrink()),
             ),
             // Dark gradient overlay at the bottom/top for readability
             Positioned.fill(

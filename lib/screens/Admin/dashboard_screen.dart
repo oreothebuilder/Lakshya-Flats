@@ -9,6 +9,7 @@ import 'students_directory_screen.dart';
 import 'broadcast_notification_screen.dart';
 import '../../models/mess_menu_model.dart';
 import '../../services/mess_menu_service.dart';
+import '../../widgets/avatar_helper.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -175,18 +176,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onTap: _handleLogout,
             child: Padding(
               padding: const EdgeInsets.only(right: 16.0),
-              child: CircleAvatar(
+              child: StudentAvatar(
                 radius: 18,
-                backgroundColor: const Color(0xFFE2E8F0),
-                backgroundImage: const NetworkImage(
-                  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 1.5),
-                  ),
-                ),
+                profilePhotoUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+                initials: "AD",
               ),
             ),
           ),

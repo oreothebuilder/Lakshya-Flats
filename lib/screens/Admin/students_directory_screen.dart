@@ -1,9 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/admin_drawer.dart';
 import '../../models/student_model.dart';
 import '../../services/student_service.dart';
+import '../../widgets/avatar_helper.dart';
 
 class StudentsDirectoryScreen extends StatefulWidget {
   const StudentsDirectoryScreen({super.key});
@@ -366,24 +366,16 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              CircleAvatar(
+              StudentAvatar(
                 radius: 36,
+                profilePhotoUrl: student.profilePhotoUrl,
+                initials: student.initials,
                 backgroundColor: const Color(0xFF0D52CE),
-                backgroundImage: student.profilePhotoUrl.isNotEmpty
-                    ? (student.profilePhotoUrl.startsWith('http')
-                        ? NetworkImage(student.profilePhotoUrl)
-                        : FileImage(File(student.profilePhotoUrl)) as ImageProvider)
-                    : null,
-                child: student.profilePhotoUrl.isEmpty
-                    ? Text(
-                        student.initials,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
+                textStyle: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 12),
               Text(
@@ -541,9 +533,9 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: InteractiveViewer(
-                          child: url.startsWith('http')
-                              ? Image.network(url, fit: BoxFit.contain)
-                              : Image.file(File(url), fit: BoxFit.contain),
+                          child: getProfileImage(url) != null
+                              ? Image(image: getProfileImage(url)!, fit: BoxFit.contain)
+                              : const SizedBox.shrink(),
                         ),
                       ),
                       Positioned(
@@ -645,24 +637,16 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  CircleAvatar(
+                  StudentAvatar(
                     radius: 26,
+                    profilePhotoUrl: student.profilePhotoUrl,
+                    initials: student.initials,
                     backgroundColor: const Color(0xFF0D52CE),
-                    backgroundImage: student.profilePhotoUrl.isNotEmpty
-                        ? (student.profilePhotoUrl.startsWith('http')
-                            ? NetworkImage(student.profilePhotoUrl)
-                            : FileImage(File(student.profilePhotoUrl)) as ImageProvider)
-                        : null,
-                    child: student.profilePhotoUrl.isEmpty
-                        ? Text(
-                            student.initials,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
+                    textStyle: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
