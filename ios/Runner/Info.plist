@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Lakshya Residency requires access to the camera to take profile photos and capture identification documents.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Lakshya Residency requires access to the photo library to select profile photos and upload ID cards.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Lakshya Residency requires access to the microphone for video features.</string>
 </dict>
 </plist>

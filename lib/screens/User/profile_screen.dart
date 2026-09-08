@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/user_drawer.dart';
+import '../../models/user_role_model.dart';
+import '../../services/firebase_auth_service.dart';
+import '../../services/firestore_service.dart';
 import 'notifications_screen.dart';
+import 'user_home_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final AppUser? currentUser;
+
+  const ProfileScreen({super.key, this.currentUser});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -24,13 +30,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _branchController;
 
   // Initial user values
-  String _name = "Sudhanshu";
-  String _email = "sudhanshu.k@example.com";
-  String _phone = "+91 8208285947";
-  String _dob = "15 Aug 2001";
-  String _reg = "2021BCS0123";
+  String _name = "Student Resident";
+  String _email = "";
+  String _phone = "";
+  String _dob = "15 Aug 2002";
+  String _reg = "REG-RESIDENT";
   String _course = "B.Tech";
-  String _branch = "Computer Science & Engineering";
+  String _branch = "Engineering";
 
   // Account Settings state
   bool _pushNotifications = true;
@@ -40,6 +46,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    final u = widget.currentUser;
+    final authUser = FirebaseAuthService().currentUser;
+    if (u != null) {
+      if (u.fullName.isNotEmpty) _name = u.fullName;
+      if (u.email.isNotEmpty) _email = u.email;
+      if (u.phone.isNotEmpty) _phone = u.phone;
+      if (u.registrationNumber?.isNotEmpty == true) _reg = u.registrationNumber!;
+      if (u.building?.isNotEmpty == true) _course = "${u.building!} • Room ${u.room ?? 'N/A'}";
+    } else if (authUser != null) {
+      if (authUser.displayName?.isNotEmpty == true) _name = authUser.displayName!;
+      if (authUser.email?.isNotEmpty == true) _email = authUser.email!;
+      if (authUser.phoneNumber?.isNotEmpty == true) _phone = authUser.phoneNumber!;
+    }
+
     _nameController = TextEditingController(text: _name);
     _emailController = TextEditingController(text: _email);
     _phoneController = TextEditingController(text: _phone);
@@ -47,6 +67,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _regController = TextEditingController(text: _reg);
     _courseController = TextEditingController(text: _course);
     _branchController = TextEditingController(text: _branch);
+
+    _loadStudentDetails();
+  }
+
+  Future<void> _loadStudentDetails() async {
+    try {
+      final authUser = FirebaseAuthService().currentUser;
+      if (authUser == null) return;
+      final lookupEmail = _email.isNotEmpty ? _email : (authUser.email ?? '');
+      if (lookupEmail.isEmpty) return;
+      final doc = await FirestoreService().findStudentByRegNoOrEmail(lookupEmail);
+      if (doc != null && mounted) {
+        setState(() {
+          if (doc['fullName'] != null && doc['fullName'].toString().isNotEmpty) {
+            _name = doc['fullName'].toString();
+            _nameController.text = _name;
+          }
+          if (doc['phone'] != null && doc['phone'].toString().isNotEmpty) {
+            _phone = doc['phone'].toString();
+            _phoneController.text = _phone;
+          }
+          if (doc['registrationNumber'] != null && doc['registrationNumber'].toString().isNotEmpty) {
+            _reg = doc['registrationNumber'].toString();
+            _regController.text = _reg;
+          }
+          if (doc['course'] != null && doc['course'].toString().isNotEmpty) {
+            _course = doc['course'].toString();
+            _courseController.text = _course;
+          }
+          if (doc['branch'] != null && doc['branch'].toString().isNotEmpty) {
+            _branch = doc['branch'].toString();
+            _branchController.text = _branch;
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -346,82 +402,100 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _handleBackToHome() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const UserHomeScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      drawer: const UserDrawer(activeItem: "Profile"),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        leading: Builder(
-          builder: (context) {
-            return IconButton(
-              icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A)),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            );
-          },
-        ),
-        title: Text(
-          "Profile",
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFF0F172A),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackToHome();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        drawer: UserDrawer(activeItem: "Profile", currentUser: widget.currentUser),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+            tooltip: "Back to Home",
+            onPressed: _handleBackToHome,
           ),
-        ),
-        actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                  );
-                },
-              ),
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.redAccent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Text(
-                    "2",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
+          title: Text(
+            "Profile",
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF0F172A),
+            ),
+          ),
+          actions: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                    );
+                  },
+                ),
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.redAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Text(
+                      "2",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16, left: 4),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: const Color(0xFF2563EB),
-              child: Text(
-                "SU",
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8, left: 4),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(0xFF2563EB),
+                child: Text(
+                  "SU",
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+            Builder(
+              builder: (drawerCtx) => IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Color(0xFF475569)),
+                tooltip: "Open Menu",
+                onPressed: () => Scaffold.of(drawerCtx).openDrawer(),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20.0),
@@ -814,7 +888,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildInfoField(String label, TextEditingController controller, String value, bool isEditing, {TextInputType keyboardType = TextInputType.text}) {

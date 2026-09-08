@@ -1,35 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/admin_drawer.dart';
-
-class StudentDirectoryItem {
-  final String id;
-  final String name;
-  final String initials;
-  final String status; // 'Upcoming', 'Paid', 'Defaulters'
-  final String building;
-  final String room;
-  final String phone;
-  final String email;
-  final List<String> notes;
-  final double pendingAmount;
-
-  StudentDirectoryItem({
-    required this.id,
-    required this.name,
-    required this.initials,
-    required this.status,
-    required this.building,
-    required this.room,
-    required this.phone,
-    required this.email,
-    required this.notes,
-    required this.pendingAmount,
-  });
-}
+import '../../models/student_profile_model.dart';
+import '../../models/user_role_model.dart';
+import '../../services/firestore_service.dart';
+import '../student_onboarding_screen.dart';
+import 'student_profile_detail_screen.dart';
+import 'dashboard_screen.dart';
 
 class StudentsDirectoryScreen extends StatefulWidget {
-  const StudentsDirectoryScreen({super.key});
+  final AppUser? currentUser;
+  final String? initialBuilding;
+
+  const StudentsDirectoryScreen({
+    super.key,
+    this.currentUser,
+    this.initialBuilding,
+  });
 
   @override
   State<StudentsDirectoryScreen> createState() => _StudentsDirectoryScreenState();
@@ -41,100 +29,40 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
   String _searchQuery = "";
   final TextEditingController _searchController = TextEditingController();
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialBuilding != null && widget.initialBuilding!.isNotEmpty) {
+      // Find matching item or set directly
+      for (final b in _buildings) {
+        if (b.toLowerCase().contains(widget.initialBuilding!.toLowerCase()) ||
+            widget.initialBuilding!.toLowerCase().contains(b.toLowerCase())) {
+          _selectedBuilding = b;
+          break;
+        }
+      }
+    }
+  }
+
   final List<String> _buildings = [
     "All Buildings",
-    "Lakshya Residency",
-    "Univ Homes",
-    "Green Villa",
+    "Lakshya",
+    "Shivalya",
+    "Ishaan",
+    "Univ homes",
+    "Tirupati",
+    "Rameshwaram",
+    "Livano",
+    "Somnath",
   ];
 
-  // Dummy list of students structured as per requirements
-  final List<StudentDirectoryItem> _allStudents = [
-    StudentDirectoryItem(
-      id: "STU-001",
-      name: "Sudhanshu",
-      initials: "SU",
-      status: "Upcoming",
-      building: "Lakshya",
-      room: "Room 304 (Bed A)",
-      phone: "+91 8208285947",
-      email: "sudhansu1906@gmail.com",
-      notes: ["1 shared note regarding monthly mess pass extension."],
-      pendingAmount: 3500.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-002",
-      name: "Aarav Kumar",
-      initials: "AK",
-      status: "Paid",
-      building: "Lakshya",
-      room: "Room 102 (Bed B)",
-      phone: "+91 9876543210",
-      email: "aarav.k@gmail.com",
-      notes: [
-        "Fee clearance slip verified for Q3.",
-        "Requested extra chair."
-      ],
-      pendingAmount: 0.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-003",
-      name: "Rohan Mehta",
-      initials: "RM",
-      status: "Defaulter",
-      building: "Univ Homes",
-      room: "Room 205 (Bed A)",
-      phone: "+91 9123456789",
-      email: "rohan.mehta@yahoo.com",
-      notes: [],
-      pendingAmount: 7200.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-004",
-      name: "Priya Sharma",
-      initials: "PS",
-      status: "Upcoming",
-      building: "Univ Homes",
-      room: "Room 104 (Bed C)",
-      phone: "+91 9988776655",
-      email: "priya.s@outlook.com",
-      notes: [
-        "Parent call requested for weekend pass.",
-        "AC repair request logged."
-      ],
-      pendingAmount: 4200.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-005",
-      name: "Vikas Singh",
-      initials: "VS",
-      status: "Paid",
-      building: "Green Villa",
-      room: "Room 301 (Bed A)",
-      phone: "+91 9555443322",
-      email: "vikas.singh@gmail.com",
-      notes: ["Annual security deposit cleared."],
-      pendingAmount: 0.0,
-    ),
-    StudentDirectoryItem(
-      id: "STU-006",
-      name: "Ananya Patel",
-      initials: "AP",
-      status: "Defaulter",
-      building: "Green Villa",
-      room: "Room 202 (Bed B)",
-      phone: "+91 9777888999",
-      email: "ananya.p@gmail.com",
-      notes: ["Reminder sent twice on WhatsApp."],
-      pendingAmount: 8500.0,
-    ),
-  ];
-
-  List<StudentDirectoryItem> get _filteredStudents {
-    return _allStudents.where((student) {
+  List<StudentProfile> _filterStudents(List<StudentProfile> students) {
+    return students.where((student) {
       // Building Filter
       if (_selectedBuilding != "All Buildings") {
-        if (!student.building.toLowerCase().contains(_selectedBuilding.toLowerCase().replaceAll(" residency", ""))) {
+        final bSearch = _selectedBuilding.toLowerCase().replaceAll(" residency", "").replaceAll(" homes", "");
+        final sBuilding = student.building.toLowerCase();
+        if (!sBuilding.contains(bSearch)) {
           return false;
         }
       }
@@ -142,172 +70,42 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
       // Search Query Filter
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
-        final matchesName = student.name.toLowerCase().contains(query);
+        final matchesName = student.fullName.toLowerCase().contains(query);
         final matchesRoom = student.room.toLowerCase().contains(query);
         final matchesPhone = student.phone.toLowerCase().contains(query);
         final matchesEmail = student.email.toLowerCase().contains(query);
-        return matchesName || matchesRoom || matchesPhone || matchesEmail;
+        final matchesReg = student.registrationNumber.toLowerCase().contains(query);
+        return matchesName || matchesRoom || matchesPhone || matchesEmail || matchesReg;
       }
 
       return true;
     }).toList();
   }
 
-  void _openSendBillBottomSheet(StudentDirectoryItem student) {
-    final amountController = TextEditingController(text: student.pendingAmount > 0 ? "${student.pendingAmount.toInt()}" : "4500");
-    final noteController = TextEditingController(text: "Monthly Rent & Mess Charges for August");
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F0FE),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF0D52CE)),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Send Bill / Invoice",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      Text(
-                        "To: ${student.name} (${student.room})",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12.5,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text(
-                "Bill Amount (₹)",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF334155),
-                ),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  prefixText: "₹ ",
-                  hintText: "Enter amount",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                "Bill Description",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF334155),
-                ),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: noteController,
-                decoration: InputDecoration(
-                  hintText: "Enter bill details",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          "Invoice of ₹${amountController.text} sent to ${student.name} via SMS & Email!",
-                          style: GoogleFonts.plusJakartaSans(),
-                        ),
-                        backgroundColor: const Color(0xFF0D52CE),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.send_rounded, size: 18),
-                  label: Text(
-                    "Send Invoice Bill Now",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D52CE),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+  void _showSnackbar(String msg, {bool isSuccess = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          msg,
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: Colors.white),
+        ),
+        backgroundColor: isSuccess ? const Color(0xFF003896) : const Color(0xFFDC2626),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 
-  void _openNotesBottomSheet(StudentDirectoryItem student) {
-    final noteInputController = TextEditingController();
+  void _openSendBillBottomSheet(StudentProfile student) {
+    final amountController = TextEditingController(
+      text: student.monthlyRent.replaceAll(',', '').trim().isNotEmpty
+          ? student.monthlyRent.replaceAll(',', '').trim()
+          : "12500",
+    );
+    final noteController = TextEditingController(text: "Hostel Rent");
+    String billType = "Hostel Rent";
+    bool isSending = false;
 
     showModalBottomSheet(
       context: context,
@@ -344,85 +142,179 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      const Icon(Icons.notes_rounded, color: Color(0xFF0D52CE)),
-                      const SizedBox(width: 10),
-                      Text(
-                        "Shared Notes for ${student.name}",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.bold,
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F0FE),
+                          borderRadius: BorderRadius.circular(12),
                         ),
+                        child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF003896)),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Issue Bill / Invoice",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            "To: ${student.fullName} (${student.room})",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12.5,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  if (student.notes.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: Text(
-                        "No notes added yet for this student.",
-                        style: GoogleFonts.plusJakartaSans(color: Colors.grey[600]),
-                      ),
-                    )
-                  else
-                    ...student.notes.map((note) => Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.label_important_outline_rounded, size: 16, color: Color(0xFF0D52CE)),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  note,
-                                  style: GoogleFonts.plusJakartaSans(fontSize: 13),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: noteInputController,
-                          decoration: InputDecoration(
-                            hintText: "Add a new note...",
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (noteInputController.text.trim().isNotEmpty) {
-                            setState(() {
-                              student.notes.add(noteInputController.text.trim());
-                            });
-                            setModalState(() {});
-                            noteInputController.clear();
-                          }
+                  const SizedBox(height: 20),
+
+                  // Bill Type selector
+                  Text(
+                    "Bill Category",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: billType,
+                        isExpanded: true,
+                        items: ["Hostel Rent", "Security Deposit", "Electricity", "Mess Fee", "Maintenance Fee", "WiFi Subscription"].map((t) {
+                          return DropdownMenuItem(value: t, child: Text(t));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setModalState(() => billType = val);
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0D52CE),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Icon(Icons.add, size: 20),
                       ),
-                    ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  Text(
+                    "Bill Amount (₹)",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      prefixText: "₹ ",
+                      hintText: "Enter amount",
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    "Bill Description / Month",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: noteController,
+                    decoration: InputDecoration(
+                      hintText: "e.g. October Rent & Mess",
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: isSending
+                          ? null
+                          : () async {
+                              final amt = double.tryParse(amountController.text.trim()) ?? 0.0;
+                              if (amt <= 0) {
+                                _showSnackbar("Please enter a valid amount", isSuccess: false);
+                                return;
+                              }
+                              setModalState(() => isSending = true);
+                              try {
+                                await FirestoreService().issueBill({
+                                  'studentId': student.id,
+                                  'studentName': student.fullName,
+                                  'phone': student.phone,
+                                  'building': student.building,
+                                  'room': student.room,
+                                  'billType': billType,
+                                  'amount': amt,
+                                  'paidAmount': 0.0,
+                                  'dueDate': Timestamp.fromDate(DateTime.now().add(const Duration(days: 7))),
+                                  'status': 'Pending',
+                                  'invoiceNo': 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+                                  'billingMonth': noteController.text.trim(),
+                                });
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                  _showSnackbar("Invoice of ₹${amt.toStringAsFixed(0)} issued for ${student.fullName}!");
+                                }
+                              } catch (e) {
+                                setModalState(() => isSending = false);
+                                _showSnackbar("Error issuing bill: $e", isSuccess: false);
+                              }
+                            },
+                      icon: isSending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.send_rounded, size: 18),
+                      label: Text(
+                        "Generate & Issue Invoice",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF003896),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -433,162 +325,26 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
     );
   }
 
-  void _openProfileBottomSheet(StudentDirectoryItem student) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              CircleAvatar(
-                radius: 36,
-                backgroundColor: const Color(0xFF0D52CE),
-                child: Text(
-                  student.initials,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                student.name,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF0F172A),
-                ),
-              ),
-              Text(
-                "${student.building} • ${student.room}",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  color: const Color(0xFF64748B),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Column(
-                  children: [
-                    _buildProfileDetailRow(Icons.phone_rounded, "Phone", student.phone),
-                    const Divider(height: 20),
-                    _buildProfileDetailRow(Icons.email_rounded, "Email", student.email),
-                    const Divider(height: 20),
-                    _buildProfileDetailRow(Icons.badge_rounded, "Student ID", student.id),
-                    const Divider(height: 20),
-                    _buildProfileDetailRow(
-                      Icons.account_balance_wallet_rounded,
-                      "Payment Status",
-                      student.status,
-                      statusColor: _getStatusTextColor(student.status),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(
-                    "Close Profile",
-                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+
+  void _openStudentProfileScreen(StudentProfile student, {int initialSectionIndex = 0}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => StudentProfileDetailScreen(
+          student: student,
+          currentUser: widget.currentUser,
+          initialSectionIndex: initialSectionIndex,
+        ),
+      ),
     );
   }
 
-  Widget _buildProfileDetailRow(IconData icon, String label, String value, {Color? statusColor}) {
-    return Row(
-      children: [
-        Icon(icon, size: 20, color: const Color(0xFF64748B)),
-        const SizedBox(width: 12),
-        Text(
-          label,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 13.5,
-            color: const Color(0xFF64748B),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          value,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: statusColor ?? const Color(0xFF0F172A),
-          ),
-        ),
-      ],
-    );
-  }
 
-  Color _getStatusBgColor(String status) {
-    switch (status) {
-      case "Paid":
-        return const Color(0xFFDCFCE7);
-      case "Defaulter":
-      case "Defaulters":
-        return const Color(0xFFFEE2E2);
-      case "Upcoming":
-      case "Upcoming Dues":
-      default:
-        return const Color(0xFFE0F2FE);
-    }
-  }
+  Widget _buildStudentCard(StudentProfile student) {
+    final initials = student.firstName.isNotEmpty && student.fullName.split(' ').length > 1
+        ? "${student.fullName.split(' ')[0][0]}${student.fullName.split(' ')[1][0]}".toUpperCase()
+        : (student.fullName.isNotEmpty ? student.fullName.substring(0, 1).toUpperCase() : "ST");
 
-  Color _getStatusTextColor(String status) {
-    switch (status) {
-      case "Paid":
-        return const Color(0xFF15803D);
-      case "Defaulter":
-      case "Defaulters":
-        return const Color(0xFFB91C1C);
-      case "Upcoming":
-      case "Upcoming Dues":
-      default:
-        return const Color(0xFF0369A1);
-    }
-  }
-
-  Widget _buildStudentCard(StudentDirectoryItem student) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -604,7 +360,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
         ],
       ),
       child: InkWell(
-        onTap: () => _openProfileBottomSheet(student),
+        onTap: () => _openStudentProfileScreen(student, initialSectionIndex: 0),
         borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -617,15 +373,20 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                 children: [
                   CircleAvatar(
                     radius: 26,
-                    backgroundColor: const Color(0xFF0D52CE),
-                    child: Text(
-                      student.initials,
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    backgroundColor: const Color(0xFF003896),
+                    backgroundImage: student.photoUrl != null && student.photoUrl!.isNotEmpty
+                        ? NetworkImage(student.photoUrl!)
+                        : null,
+                    child: student.photoUrl == null || student.photoUrl!.isEmpty
+                        ? Text(
+                            initials,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -636,11 +397,11 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                           children: [
                             Flexible(
                               child: Text(
-                                student.name,
+                                student.fullName.isNotEmpty ? student.fullName : "Student",
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 18,
+                                  fontSize: 17,
                                   fontWeight: FontWeight.bold,
                                   color: const Color(0xFF0F172A),
                                 ),
@@ -650,7 +411,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: _getStatusBgColor(student.status),
+                                color: const Color(0xFFDCFCE7),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
@@ -658,7 +419,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w700,
-                                  color: _getStatusTextColor(student.status),
+                                  color: const Color(0xFF15803D),
                                 ),
                               ),
                             ),
@@ -705,7 +466,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                 children: [
                   // Shared Notes Left Link
                   InkWell(
-                    onTap: () => _openNotesBottomSheet(student),
+                    onTap: () => _openStudentProfileScreen(student, initialSectionIndex: 1),
                     borderRadius: BorderRadius.circular(6),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -718,7 +479,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            "${student.notes.length} shared notes",
+                            "${student.notes.length} notes",
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
@@ -733,51 +494,60 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                   // Action Buttons Right (Send Bill & Profile)
                   Row(
                     children: [
-                      OutlinedButton.icon(
-                        onPressed: () => _openSendBillBottomSheet(student),
-                        icon: const Icon(
-                          Icons.receipt_long_outlined,
-                          size: 15,
-                          color: Color(0xFF0D52CE),
-                        ),
-                        label: Text(
-                          "Send Bill",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0D52CE),
+                      // Only Super Admin can issue bills directly from Directory
+                      if (widget.currentUser?.canManagePayments ?? true) ...[
+                        OutlinedButton.icon(
+                          onPressed: () => _openSendBillBottomSheet(student),
+                          icon: const Icon(
+                            Icons.receipt_long_outlined,
+                            size: 15,
+                            color: Color(0xFF003896),
+                          ),
+                          label: Text(
+                            "Send Bill",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF003896),
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFBFDBFE)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                         ),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFFBFDBFE)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton.icon(
-                        onPressed: () => _openProfileBottomSheet(student),
+                        const SizedBox(width: 8),
+                      ],
+                      ElevatedButton.icon(
+                        onPressed: () => _openStudentProfileScreen(student, initialSectionIndex: 0),
                         icon: const Icon(
                           Icons.account_circle_outlined,
-                          size: 17,
-                          color: Color(0xFF475569),
+                          size: 16,
+                          color: Colors.white,
                         ),
                         label: Text(
                           "Profile",
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFF475569),
+                            color: Colors.white,
                           ),
                         ),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF003896),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          elevation: 0,
                         ),
                       ),
                     ],
@@ -791,129 +561,152 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
     );
   }
 
+  void _handleBackToDashboard() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (context) => DashboardScreen(currentUser: widget.currentUser),
+      ),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredStudents;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      drawer: const AdminDrawer(activeItem: "Students Directory"),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        leading: Builder(
-          builder: (context) {
-            return IconButton(
-              icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A), size: 24),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            );
-          },
-        ),
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                onChanged: (val) {
-                  setState(() {
-                    _searchQuery = val;
-                  });
-                },
-                decoration: InputDecoration(
-                  hintText: "Search name, room, phone...",
-                  hintStyle: GoogleFonts.plusJakartaSans(fontSize: 14, color: Colors.grey[500]),
-                  border: InputBorder.none,
-                ),
-                style: GoogleFonts.plusJakartaSans(fontSize: 15),
-              )
-            : Text(
-                "Students Directory",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0F172A),
-                ),
-              ),
-        actions: [
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close_rounded : Icons.search_rounded, color: const Color(0xFF0F172A)),
-            onPressed: () {
-              setState(() {
-                if (_isSearching) {
-                  _isSearching = false;
-                  _searchQuery = "";
-                  _searchController.clear();
-                } else {
-                  _isSearching = true;
-                }
-              });
-            },
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackToDashboard();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAF9),
+        drawer: AdminDrawer(activeItem: "Students Directory", currentUser: widget.currentUser),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+            tooltip: "Back to Dashboard",
+            onPressed: _handleBackToDashboard,
           ),
-        ],
-      ),
+          title: _isSearching
+              ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val;
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: "Search name, room, phone, reg no...",
+                    hintStyle: GoogleFonts.plusJakartaSans(fontSize: 14, color: Colors.grey[500]),
+                    border: InputBorder.none,
+                  ),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 15),
+                )
+              : Text(
+                  "Students Directory",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+          actions: [
+            IconButton(
+              icon: Icon(_isSearching ? Icons.close_rounded : Icons.search_rounded, color: const Color(0xFF0F172A)),
+              onPressed: () {
+                setState(() {
+                  if (_isSearching) {
+                    _isSearching = false;
+                    _searchQuery = "";
+                    _searchController.clear();
+                  } else {
+                    _isSearching = true;
+                  }
+                });
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFF003896)),
+              tooltip: "Onboard Student",
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const StudentOnboardingScreen()),
+                );
+              },
+            ),
+            Builder(
+              builder: (drawerCtx) => IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A), size: 24),
+                tooltip: "Open Menu",
+                onPressed: () => Scaffold.of(drawerCtx).openDrawer(),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
       body: SafeArea(
         child: Column(
           children: [
-            // Top Controls Bar (Building Selector & Status Chips)
+            // Top Controls Bar (Building Selector)
             Container(
               color: Colors.white,
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
+              child: Row(
                 children: [
-                  // Row 1: Building Selector Dropdown
-                  Row(
-                    children: [
-                      Text(
-                        "Building:",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F172A),
-                        ),
+                  Text(
+                    "Building:",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedBuilding,
+                          isExpanded: true,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF003896)),
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF0F172A),
                           ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedBuilding,
-                              isExpanded: true,
-                              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0D52CE)),
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF0F172A),
+                          items: _buildings.map((b) {
+                            return DropdownMenuItem<String>(
+                              value: b,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.domain_rounded, size: 18, color: Color(0xFF64748B)),
+                                  const SizedBox(width: 8),
+                                  Text(b),
+                                ],
                               ),
-                              items: _buildings.map((b) {
-                                return DropdownMenuItem<String>(
-                                  value: b,
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.domain_rounded, size: 18, color: Color(0xFF64748B)),
-                                      const SizedBox(width: 8),
-                                      Text(b),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (newVal) {
-                                if (newVal != null) {
-                                  setState(() {
-                                    _selectedBuilding = newVal;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
+                            );
+                          }).toList(),
+                          onChanged: (newVal) {
+                            if (newVal != null) {
+                              setState(() {
+                                _selectedBuilding = newVal;
+                              });
+                            }
+                          },
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -921,45 +714,108 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
 
             const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-            // Student List
+            // Student List via real-time Firestore stream
             Expanded(
-              child: filtered.isEmpty
-                  ? Center(
+              child: StreamBuilder<List<StudentProfile>>(
+                stream: FirestoreService().getStudentsStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: Color(0xFF003896)),
+                    );
+                  }
+
+                  final allStudents = snapshot.data ?? [];
+                  final filtered = _filterStudents(allStudents);
+
+                  if (filtered.isEmpty) {
+                    return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.search_off_rounded, size: 54, color: Colors.grey[400]),
-                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFEEF2FF),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.people_outline_rounded, size: 44, color: Color(0xFF003896)),
+                          ),
+                          const SizedBox(height: 16),
                           Text(
-                            "No students found",
+                            allStudents.isEmpty ? "No students enrolled yet" : "No matching students found",
                             style: GoogleFonts.plusJakartaSans(
-                              fontSize: 16,
+                              fontSize: 17,
                               fontWeight: FontWeight.bold,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            allStudents.isEmpty
+                                ? "Onboard your first real resident to get started."
+                                : "Try clearing search query or changing building filter.",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13,
                               color: const Color(0xFF64748B),
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "Try clearing search or changing filters.",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              color: const Color(0xFF94A3B8),
+                          if (allStudents.isEmpty) ...[
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const StudentOnboardingScreen()),
+                                );
+                              },
+                              icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                              label: Text(
+                                "Onboard Student Now",
+                                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF003896),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        return _buildStudentCard(filtered[index]);
-                      },
-                    ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      return _buildStudentCard(filtered[index]);
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
       ),
-    );
-  }
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const StudentOnboardingScreen()),
+          );
+        },
+        backgroundColor: const Color(0xFF003896),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.person_add_rounded),
+        label: Text(
+          "Onboard Student",
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        ),
+      ),
+    ),
+  );
+}
 }

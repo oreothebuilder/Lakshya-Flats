@@ -1,26 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/user_role_model.dart';
 import '../theme/app_colors.dart';
+import '../services/firebase_auth_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/Admin/dashboard_screen.dart';
 import '../screens/mess_menu_management_screen.dart';
 import '../screens/student_onboarding_screen.dart';
 import '../screens/Admin/students_directory_screen.dart';
 import '../screens/Admin/broadcast_notification_screen.dart';
+import '../screens/Admin/payment_collection_screen.dart';
+import '../screens/Admin/buildings_management_screen.dart';
+import '../screens/Admin/tickets_management_screen.dart';
+import '../screens/Admin/expense_tracker_screen.dart';
+import '../screens/Admin/personal_todo_screen.dart';
+import '../screens/Admin/staff_screen.dart';
 
 class AdminDrawer extends StatelessWidget {
   final String activeItem;
+  final AppUser? currentUser;
 
   const AdminDrawer({
     super.key,
     required this.activeItem,
+    this.currentUser,
   });
 
   void _handleLogout(BuildContext context) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           "Log Out",
           style: GoogleFonts.plusJakartaSans(
@@ -29,8 +39,11 @@ class AdminDrawer extends StatelessWidget {
           ),
         ),
         content: Text(
-          "Are you sure you want to log out of Lakshya Residency Admin?",
-          style: GoogleFonts.plusJakartaSans(fontSize: 14),
+          "Are you sure you want to log out of the admin panel?",
+          style: GoogleFonts.plusJakartaSans(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+          ),
         ),
         actions: [
           TextButton(
@@ -44,8 +57,12 @@ class AdminDrawer extends StatelessWidget {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(dialogContext);
+              try {
+                await FirebaseAuthService().signOut();
+              } catch (_) {}
+              if (!context.mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(
@@ -149,20 +166,44 @@ class AdminDrawer extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  "Lakshya Residency Admin",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        currentUser?.fullName ?? "Lakshya Residency",
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: (currentUser?.isAdmin ?? true)
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF38BDF8),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        (currentUser?.isAdmin ?? true) ? "ADMIN" : "STAFF",
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "owner@lakshya.com",
+                  currentUser?.email ?? "owner@lakshya.com",
                   style: GoogleFonts.plusJakartaSans(
                     color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 13.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -183,9 +224,12 @@ class AdminDrawer extends StatelessWidget {
                   onTap: () {
                     Navigator.pop(context);
                     if (activeItem != "Dashboard") {
-                      Navigator.pushReplacement(
+                      Navigator.pushAndRemoveUntil(
                         context,
-                        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => DashboardScreen(currentUser: currentUser),
+                        ),
+                        (route) => false,
                       );
                     }
                   },
@@ -198,28 +242,110 @@ class AdminDrawer extends StatelessWidget {
                   isSelected: activeItem == "Building",
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text("Building selected.", style: GoogleFonts.plusJakartaSans()),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    if (activeItem != "Building") {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => BuildingsManagementScreen(currentUser: currentUser),
+                        ),
+                      );
+                    }
                   },
                 ),
                 const SizedBox(height: 4),
                 _buildDrawerItem(
                   context: context,
-                  icon: Icons.payments_outlined,
-                  title: "Payment Collection",
-                  isSelected: activeItem == "Payment Collection",
+                  icon: Icons.badge_outlined,
+                  title: "Staff",
+                  isSelected: activeItem == "Staff",
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text("Payment Collection selected.", style: GoogleFonts.plusJakartaSans()),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    if (activeItem != "Staff") {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => StaffScreen(currentUser: currentUser),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                // Payment Collection: Only visible to Super Admin
+                if (currentUser?.canManagePayments ?? true) ...[
+                  const SizedBox(height: 4),
+                  _buildDrawerItem(
+                    context: context,
+                    icon: Icons.payments_outlined,
+                    title: "Payment Collection",
+                    isSelected: activeItem == "Payment Collection",
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (activeItem != "Payment Collection") {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const PaymentCollectionScreen(),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ],
+                // Expense Tracker: Visible to Admin
+                if (currentUser?.canManageExpenses ?? true) ...[
+                  const SizedBox(height: 4),
+                  _buildDrawerItem(
+                    context: context,
+                    icon: Icons.account_balance_wallet_outlined,
+                    title: "Expense Tracker",
+                    isSelected: activeItem == "Expense Tracker",
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (activeItem != "Expense Tracker") {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ExpenseTrackerScreen(currentUser: currentUser),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ],
+                const SizedBox(height: 4),
+                _buildDrawerItem(
+                  context: context,
+                  icon: Icons.check_circle_outline_rounded,
+                  title: "Personal To-Do",
+                  isSelected: activeItem == "Personal To-Do",
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (activeItem != "Personal To-Do") {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => PersonalTodoScreen(currentUser: currentUser),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 4),
+                _buildDrawerItem(
+                  context: context,
+                  icon: Icons.confirmation_number_outlined,
+                  title: "Ticket Management",
+                  isSelected: activeItem == "Ticket Management",
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (activeItem != "Ticket Management") {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => TicketsManagementScreen(currentUser: currentUser),
+                        ),
+                      );
+                    }
                   },
                 ),
                 const SizedBox(height: 4),

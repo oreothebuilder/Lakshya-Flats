@@ -7,9 +7,25 @@ import '../student_onboarding_screen.dart';
 import '../mess_menu_management_screen.dart';
 import 'students_directory_screen.dart';
 import 'broadcast_notification_screen.dart';
+import 'staff_screen.dart';
+import 'expense_tracker_screen.dart';
+import 'personal_todo_screen.dart';
+import 'payment_collection_screen.dart';
+import 'building_space_screen.dart';
+import 'buildings_management_screen.dart';
+import 'tickets_management_screen.dart';
+import '../../models/user_role_model.dart';
+import '../../models/complaint_model.dart';
+import '../../models/building_model.dart';
+import '../../models/bill_model.dart';
+import '../../models/mess_menu_model.dart';
+import '../../services/firestore_service.dart';
+import '../../services/mess_menu_service.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final AppUser? currentUser;
+
+  const DashboardScreen({super.key, this.currentUser});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -27,6 +43,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
+    );
+  }
+
+  String _formatIndianCurrency(double amount) {
+    int val = amount.round();
+    if (val < 0) val = 0;
+    String s = val.toString();
+    if (s.length <= 3) return "₹$s";
+    String lastThree = s.substring(s.length - 3);
+    String otherNumbers = s.substring(0, s.length - 3);
+    if (otherNumbers.isNotEmpty) {
+      RegExp reg = RegExp(r'(\d+?)(?=(\d{2})+(?!\d))');
+      otherNumbers = otherNumbers.replaceAllMapped(reg, (Match m) => "${m[1]},");
+    }
+    return "₹$otherNumbers,$lastThree";
+  }
+
+  void _showQuickStatusDialog(ComplaintModel ticket) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Update Ticket Status",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  ticket.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...[
+                  ComplaintModel.statusReceived,
+                  ComplaintModel.statusUnderExecution,
+                  ComplaintModel.statusResolved,
+                ].map((s) {
+                  final isSelected = ticket.status.toLowerCase() == s.toLowerCase();
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                      color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF94A3B8),
+                    ),
+                    title: Text(
+                      s,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      if (s != ticket.status) {
+                        try {
+                          await FirestoreService().updateComplaintStatus(
+                            complaintId: ticket.id,
+                            status: s,
+                            complaint: ticket,
+                          );
+                          _showSnackbar("Ticket status updated to '$s'");
+                        } catch (e) {
+                          _showSnackbar("Failed to update status: $e");
+                        }
+                      }
+                    },
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -90,7 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF9),
-      drawer: const AdminDrawer(activeItem: "Dashboard"),
+      drawer: AdminDrawer(activeItem: "Dashboard", currentUser: widget.currentUser),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -139,52 +248,114 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Analytics Metric Cards Grid (2x2)
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-                childAspectRatio: 1.25,
-                children: [
-                  _buildMetricCard(
-                    icon: Icons.account_balance_wallet_rounded,
-                    iconBg: const Color(0xFFFEE2E2),
-                    iconColor: const Color(0xFFEF4444),
-                    title: "Total Pending Fees",
-                    value: "\$124,500",
-                    tag: "Requires attention",
-                    tagColor: const Color(0xFFEF4444),
-                  ),
-                  _buildMetricCard(
-                    icon: Icons.person_off_rounded,
-                    iconBg: const Color(0xFFE0F2FE),
-                    iconColor: const Color(0xFF0284C7),
-                    title: "Fee Defaulters",
-                    value: "84",
-                    tag: "High priority",
-                    tagColor: const Color(0xFF475569),
-                  ),
-                  _buildMetricCard(
-                    icon: Icons.receipt_rounded,
-                    iconBg: const Color(0xFFFEE2E2),
-                    iconColor: const Color(0xFFEF4444),
-                    title: "Pending Payments",
-                    value: "42",
-                    tag: "Requires attention",
-                    tagColor: const Color(0xFFEF4444),
-                  ),
-                  _buildMetricCard(
-                    icon: Icons.confirmation_number_rounded,
-                    iconBg: const Color(0xFFEEF2FF),
-                    iconColor: const Color(0xFF4F46E5),
-                    title: "Active Tickets",
-                    value: "18",
-                    tag: "5 high priority",
-                    tagColor: const Color(0xFF475569),
-                  ),
-                ],
+              // Top Analytics Metric Cards Grid (2x2) backed by live Firestore streams
+              StreamBuilder<List<BillModel>>(
+                stream: FirestoreService().getBillsStream(),
+                builder: (context, billsSnapshot) {
+                  final bills = billsSnapshot.data ?? [];
+                  final unpaidBills = bills.where((b) => !b.isPaid).toList();
+                  final double totalPending = unpaidBills.fold(0.0, (sum, b) => sum + b.amount);
+                  final int pendingPaymentsCount = unpaidBills.length;
+                  final now = DateTime.now();
+                  final defaultersCount = unpaidBills
+                      .where((b) => b.dueDate.isBefore(now))
+                      .map((b) => b.studentId)
+                      .where((id) => id.isNotEmpty)
+                      .toSet()
+                      .length;
+
+                  return StreamBuilder<List<ComplaintModel>>(
+                    stream: FirestoreService().getComplaintsStream(),
+                    builder: (context, complaintsSnapshot) {
+                      final complaints = complaintsSnapshot.data ?? [];
+                      final activeTickets = complaints
+                          .where((c) => c.status != ComplaintModel.statusResolved)
+                          .toList();
+                      final highPriorityCount = activeTickets
+                          .where((c) => c.priority.toLowerCase() == 'high')
+                          .length;
+
+                      return GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: 1.25,
+                        children: [
+                          _buildMetricCard(
+                            icon: Icons.account_balance_wallet_rounded,
+                            iconBg: const Color(0xFFFEE2E2),
+                            iconColor: const Color(0xFFEF4444),
+                            title: "Total Pending Fees",
+                            value: _formatIndianCurrency(totalPending),
+                            tag: totalPending > 0 ? "Requires attention" : "All cleared",
+                            tagColor: totalPending > 0 ? const Color(0xFFEF4444) : const Color(0xFF16A34A),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const PaymentCollectionScreen(initialFilter: 'Pending'),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildMetricCard(
+                            icon: Icons.person_off_rounded,
+                            iconBg: const Color(0xFFE0F2FE),
+                            iconColor: const Color(0xFF0284C7),
+                            title: "Fee Defaulters",
+                            value: defaultersCount.toString(),
+                            tag: defaultersCount > 0 ? "High priority" : "Zero defaulters",
+                            tagColor: defaultersCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const PaymentCollectionScreen(initialFilter: 'Defaulters'),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildMetricCard(
+                            icon: Icons.receipt_rounded,
+                            iconBg: const Color(0xFFFEE2E2),
+                            iconColor: const Color(0xFFEF4444),
+                            title: "Pending Payments",
+                            value: pendingPaymentsCount.toString(),
+                            tag: pendingPaymentsCount > 0 ? "Requires attention" : "All settled",
+                            tagColor: pendingPaymentsCount > 0 ? const Color(0xFFEF4444) : const Color(0xFF16A34A),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const PaymentCollectionScreen(initialFilter: 'Pending'),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildMetricCard(
+                            icon: Icons.confirmation_number_rounded,
+                            iconBg: const Color(0xFFEEF2FF),
+                            iconColor: const Color(0xFF4F46E5),
+                            title: "Active Tickets",
+                            value: activeTickets.length.toString(),
+                            tag: highPriorityCount > 0 ? "$highPriorityCount high priority" : "Normal pace",
+                            tagColor: highPriorityCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF475569),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => TicketsManagementScreen(currentUser: widget.currentUser),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
               ),
               const SizedBox(height: 24),
 
@@ -210,7 +381,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const StudentsDirectoryScreen()),
+                          MaterialPageRoute(builder: (context) => StudentsDirectoryScreen(currentUser: widget.currentUser)),
                         );
                       },
                     ),
@@ -221,7 +392,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       icon: Icons.receipt_long_rounded,
                       label: "Issue Bill",
                       color: const Color(0xFF006B54),
-                      onTap: () => _showSnackbar("Issue Bill"),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const PaymentCollectionScreen(openIssueBillModal: true)),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -250,6 +426,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const BroadcastNotificationScreen()),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildOutlinedActionButton(
+                      icon: Icons.badge_outlined,
+                      label: "Staff Directory",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => StaffScreen(currentUser: widget.currentUser),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildOutlinedActionButton(
+                      icon: Icons.person_add_rounded,
+                      label: "Add Staff Profile",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => StaffScreen(currentUser: widget.currentUser),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildOutlinedActionButton(
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: "Expense Tracker",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ExpenseTrackerScreen(currentUser: widget.currentUser),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildOutlinedActionButton(
+                      icon: Icons.check_circle_outline_rounded,
+                      label: "Personal To-Do",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => PersonalTodoScreen(currentUser: widget.currentUser),
+                          ),
                         );
                       },
                     ),
@@ -290,7 +534,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    "MONDAY",
+                                    MessMenuService().getCurrentDayName().toUpperCase(),
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.w800,
@@ -347,85 +591,119 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Building Mess Cards (Univ Homes, Rameshwaram, Shivalay)
-              _buildMessCard(
-                buildingName: "Univ Homes",
-                indicatorColor: const Color(0xFF0056D2),
-                meals: [
-                  {"icon": "🌅", "type": "Breakfast", "items": "Indori Poha, Sev, Jalebi, Masala Tea"},
-                  {"icon": "☀️", "type": "Lunch", "items": "Paneer Butter Masala, Dal Fry, Phulka, Rice, Salad"},
-                  {"icon": "🍪", "type": "Snacks", "items": "Veg Sandwich, Tea"},
-                  {"icon": "🌙", "type": "Dinner", "items": "Aloo Matar, Yellow Dal, Chapati, Rice, Kheer"},
-                ],
-              ),
-              const SizedBox(height: 14),
-              _buildMessCard(
-                buildingName: "Rameshwaram",
-                indicatorColor: const Color(0xFF16A34A),
-                meals: [
-                  {"icon": "🌅", "type": "Breakfast", "items": "Idli Sambhar, Coconut Chutney, Filter Coffee"},
-                  {"icon": "☀️", "type": "Lunch", "items": "Chole, Bhature, Onion Salad, Boondi Raita"},
-                  {"icon": "🍪", "type": "Snacks", "items": "Samosa, Mint Chutney, Masala Chai"},
-                  {"icon": "🌙", "type": "Dinner", "items": "Paneer Butter Masala, Dal Fry, Roti, Jeera Rice, Gulab Jamun"},
-                ],
-              ),
-              const SizedBox(height: 14),
-              _buildMessCard(
-                buildingName: "Shivalay",
-                indicatorColor: const Color(0xFFD97706),
-                meals: [
-                  {"icon": "🌅", "type": "Breakfast", "items": "Methi Paratha, White Butter, Tea"},
-                  {"icon": "☀️", "type": "Lunch", "items": "Dal Tadka, Mix Veg Sabzi, Rice, Roti, Salad"},
-                  {"icon": "🍪", "type": "Snacks", "items": "Bhel Puri, Mint Lemonade"},
-                  {"icon": "🌙", "type": "Dinner", "items": "Aloo Gobi, Moong Dal, Phulka, Rice, Kheer"},
-                ],
+              // Dynamic Mess Cards for Univ Homes, Rameshwaram, Shivalay
+              ListenableBuilder(
+                listenable: MessMenuService(),
+                builder: (context, _) {
+                  final messService = MessMenuService();
+                  return Column(
+                    children: [
+                      _buildDynamicMessCard(
+                        buildingName: "Univ Homes",
+                        indicatorColor: const Color(0xFF0056D2),
+                        dayMenu: messService.getTodayMenu("Univ Homes"),
+                      ),
+                      const SizedBox(height: 14),
+                      _buildDynamicMessCard(
+                        buildingName: "Rameshwaram",
+                        indicatorColor: const Color(0xFF16A34A),
+                        dayMenu: messService.getTodayMenu("Rameshwaram"),
+                      ),
+                      const SizedBox(height: 14),
+                      _buildDynamicMessCard(
+                        buildingName: "Shivalay",
+                        indicatorColor: const Color(0xFFD97706),
+                        dayMenu: messService.getTodayMenu("Shivalay"),
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 24),
 
-              // Recent Maintenance Tickets Header
-              Text(
-                "Recent Maintenance Tickets",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF1E293B),
-                ),
+              // Recent Maintenance Tickets Header (Matching Photo 1)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Recent Maintenance Tickets",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF1E293B),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => TicketsManagementScreen(currentUser: widget.currentUser),
+                        ),
+                      );
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      "View All",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF2563EB),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
 
-              // Horizontal Maintenance Tickets Carousel
-              SizedBox(
-                height: 180,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    _buildTicketItemCard(
-                      icon: Icons.ac_unit_rounded,
-                      title: "AC not working",
-                      ticketId: "#TKT-029",
-                      reportedBy: "Sudhanshu",
-                      priority: "High",
-                      priorityBg: const Color(0xFFFEE2E2),
-                      priorityColor: const Color(0xFFDC2626),
-                      status: "Yet to start",
+              // Live Maintenance Tickets Carousel (Matching Photo 1)
+              StreamBuilder<List<ComplaintModel>>(
+                stream: FirestoreService().getComplaintsStream(),
+                builder: (context, snapshot) {
+                  final tickets = snapshot.data ?? [];
+                  if (tickets.isEmpty) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "No recent maintenance tickets.",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return SizedBox(
+                    height: 175,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: tickets.length,
+                      separatorBuilder: (context, index) => const SizedBox(width: 14),
+                      itemBuilder: (context, index) {
+                        final ticket = tickets[index];
+                        return _buildLiveTicketCard(ticket);
+                      },
                     ),
-                    const SizedBox(width: 14),
-                    _buildTicketItemCard(
-                      icon: Icons.water_drop_rounded,
-                      title: "Leak in pipe",
-                      ticketId: "#TKT-030",
-                      reportedBy: "Rahul Verma",
-                      priority: "Medium",
-                      priorityBg: const Color(0xFFFEF3C7),
-                      priorityColor: const Color(0xFFD97706),
-                      status: "In progress",
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
               const SizedBox(height: 24),
 
-              // Property Glimpse Header
+              // Property Glimpse Header (Matching Photo 1)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -438,7 +716,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () => _showSnackbar("View All Properties"),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => BuildingsManagementScreen(currentUser: widget.currentUser),
+                        ),
+                      );
+                    },
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
@@ -465,29 +750,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 14),
 
-              // Property Horizontal ListView
-              SizedBox(
-                height: 210,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    _buildPropertyCard(
-                      imageUrl: "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=500",
-                      occupancy: "88% Full",
-                      title: "Lakshya Residency",
-                      subtitle: "Main Campus",
-                      price: "₹ 2,40,000",
+              // Live Property Horizontal ListView (Matching Photo 1)
+              StreamBuilder<List<BuildingModel>>(
+                stream: FirestoreService().getBuildingsStream(),
+                builder: (context, snapshot) {
+                  final buildings = snapshot.data ?? [];
+                  if (buildings.isEmpty) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "No properties registered yet.",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return SizedBox(
+                    height: 215,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: buildings.length,
+                      separatorBuilder: (context, index) => const SizedBox(width: 14),
+                      itemBuilder: (context, index) {
+                        final building = buildings[index];
+                        return _buildLivePropertyCard(building);
+                      },
                     ),
-                    const SizedBox(width: 14),
-                    _buildPropertyCard(
-                      imageUrl: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=500",
-                      occupancy: "88% Full",
-                      title: "Ishaan",
-                      subtitle: "North Campus",
-                      price: "₹ 2,80,000",
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
             ],
@@ -505,64 +807,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String value,
     required String tag,
     required Color tagColor,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(10),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
             ),
-            child: Icon(icon, color: iconColor, size: 20),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF64748B),
-                ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0F172A),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                tag,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: tagColor,
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(height: 2),
+                Text(
+                  tag,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: tagColor,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -669,10 +979,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildMessCard({
+  Widget _buildDynamicMessCard({
     required String buildingName,
     required Color indicatorColor,
-    required List<Map<String, String>> meals,
+    required DayMenu? dayMenu,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -744,74 +1054,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Column(
-            children: meals.map((meal) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0), width: 0.8),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      meal['icon'] ?? "🍽️",
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: "${meal['type']}: ",
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF0F172A),
+          if (dayMenu != null && dayMenu.meals.isNotEmpty)
+            Column(
+              children: dayMenu.meals.map((meal) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0), width: 0.8),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        meal.icon.isNotEmpty ? meal.icon : "🍽️",
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: "${meal.title}: ",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
                               ),
-                            ),
-                            TextSpan(
-                              text: meal['items'] ?? "",
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w400,
-                                color: const Color(0xFF475569),
+                              TextSpan(
+                                text: meal.items.isNotEmpty ? meal.items.join(', ') : "No items listed",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w400,
+                                  color: const Color(0xFF475569),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                );
+              }).toList(),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              alignment: Alignment.center,
+              child: Text(
+                "No menu configured for today",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12.5,
+                  color: const Color(0xFF64748B),
                 ),
-              );
-            }).toList(),
-          ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildTicketItemCard({
-    required IconData icon,
-    required String title,
-    required String ticketId,
-    required String reportedBy,
-    required String priority,
-    required Color priorityBg,
-    required Color priorityColor,
-    required String status,
-  }) {
+
+  Widget _buildLiveTicketCard(ComplaintModel ticket) {
     return Container(
       width: 240,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -824,66 +1141,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE0F2FE),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: const Color(0xFF0284C7), size: 20),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: priorityBg,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  priority,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: priorityColor,
-                  ),
-                ),
-              ),
-            ],
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.build_rounded, color: Color(0xFF0056D2), size: 20),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    ticketId,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF94A3B8),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
               Text(
-                "Reported by: $reportedBy",
+                ticket.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                "${ticket.studentName.isNotEmpty ? ticket.studentName : 'Resident'} • Room ${ticket.room.isNotEmpty ? ticket.room : 'N/A'}",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w500,
@@ -898,30 +1181,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Text(
                 "Status",
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11,
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                   color: const Color(0xFF94A3B8),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF003896),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      status,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+              GestureDetector(
+                onTap: () => _showQuickStatusDialog(ticket),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBFDBFE), width: 1.0),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        ticket.status,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0056D2),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: Colors.white),
-                  ],
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 15,
+                        color: Color(0xFF0056D2),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -931,113 +1223,140 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildPropertyCard({
-    required String imageUrl,
-    required String occupancy,
-    required String title,
-    required String subtitle,
-    required String price,
-  }) {
-    return Container(
-      width: 170,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
+  Widget _buildLivePropertyCard(BuildingModel building) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => BuildingSpaceScreen(
+              building: building,
+              currentUser: widget.currentUser,
+            ),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: Image.network(
-                  imageUrl,
-                  height: 100,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: 100,
-                    color: const Color(0xFFCBD5E1),
-                    child: const Icon(Icons.business_rounded, color: Colors.white),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6EE7B7),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    occupancy,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF065F46),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        );
+      },
+      child: Container(
+        width: 170,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
               children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  child: SizedBox(
+                    height: 105,
+                    width: double.infinity,
+                    child: building.hasRemoteImage
+                        ? Image.network(
+                            building.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => _buildBuildingFallback(),
+                          )
+                        : Image.asset(
+                            building.imageAsset,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => _buildBuildingFallback(),
+                          ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF94A3B8),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
                         ),
+                      ],
+                    ),
+                    child: Text(
+                      "${building.occupancyPercentage}% Full",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0056D2),
                       ),
                     ),
-                    const Icon(Icons.chevron_right_rounded, size: 14, color: Color(0xFF2563EB)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  price,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF2563EB),
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    building.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          "${building.occupiedCount}/${building.totalCapacity} Students",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, size: 15, color: Color(0xFF2563EB)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    "₹${building.startingRent.toInt()} / mo",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0056D2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBuildingFallback() {
+    return Container(
+      color: const Color(0xFFE2E8F0),
+      child: const Center(
+        child: Icon(Icons.business_rounded, color: Color(0xFF94A3B8), size: 36),
       ),
     );
   }

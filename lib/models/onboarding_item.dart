@@ -11,7 +11,7 @@ class OnboardingItem {
     required this.title,
     required this.description,
     this.imagePath,
-    required this.networkImageUrl,
+    this.networkImageUrl = "",
     this.isSplitLayout = false,
     this.splitTopImage,
     this.splitBottomImage,
@@ -22,8 +22,7 @@ final List<OnboardingItem> onboardingItems = [
   OnboardingItem(
     title: "Welcome to Lakshya Residency",
     description: "Discover premium student housing designed for your success.",
-    networkImageUrl:
-        "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1000&auto=format&fit=crop",
+    imagePath: "assets/buildings/Tirupati.png",
   ),
   OnboardingItem(
     title: "All-Inclusive Amenities",

@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/user_drawer.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
+import 'user_home_screen.dart';
+import '../../services/mess_menu_service.dart';
 
 class MessMenuScreen extends StatefulWidget {
   const MessMenuScreen({super.key});
@@ -12,7 +14,13 @@ class MessMenuScreen extends StatefulWidget {
 }
 
 class _MessMenuScreenState extends State<MessMenuScreen> {
-  String _selectedDay = "Monday";
+  late String _selectedDay;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDay = MessMenuService().getCurrentDayName();
+  }
 
   final List<String> _days = [
     "Monday",
@@ -24,312 +32,155 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
     "Sunday"
   ];
 
-  // Dummy menu database structured by day
-  final Map<String, List<Map<String, String>>> _menuData = {
-    "Monday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Indori Poha, Sev, Jalebi, Masala Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Paneer Butter Masala, Dal Fry, Phulka, Rice, Salad"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Veg Sandwich, Tea"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Aloo Matar, Yellow Dal, Chapati, Rice, Kheer"
-      },
-    ],
-    "Tuesday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Idli Sambhar, Coconut Chutney, Filter Coffee"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Chole, Bhature, Onion Salad, Boondi Raita"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Samosa, Mint Chutney, Masala Chai"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Paneer Butter Masala, Dal Fry, Roti, Jeera Rice, Gulab Jamun"
-      },
-    ],
-    "Wednesday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Methi Paratha, White Butter, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Dal Tadka, Mix Veg Sabzi, Rice, Roti, Salad"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Bhel Puri, Mint Lemonade"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Aloo Gobi, Moong Dal, Phulka, Rice, Kheer"
-      },
-    ],
-    "Thursday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Aloo Paratha, Curd, Pickle, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Rajma Masala, Steamed Rice, Roti, Curd, Papad"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Kachori, Tea"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Kadahi Paneer, Butter Naan, Rice, Custard"
-      },
-    ],
-    "Friday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Bread Pakoda, Green Chutney, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Veg Pulao, Kadhi Pakoda, Roti, Aloo Jeera"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Pav Bhaji, Tea"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Dal Makhani, Mix Veg, Phulka, Rice, Ice Cream"
-      },
-    ],
-    "Saturday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Upma, Coconut Chutney, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Alu Shimla Mirch, Yellow Dal, Roti, Rice, Curd"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "Aloo Tikki Chaat, Tea"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Matar Paneer, Tandoori Roti, Rice, Gulab Jamun"
-      },
-    ],
-    "Sunday": [
-      {
-        "emoji": "🌅",
-        "type": "Breakfast",
-        "time": "07:30 AM - 09:30 AM",
-        "items": "Puri Bhaji, Halwa, Tea"
-      },
-      {
-        "emoji": "☀️",
-        "type": "Lunch",
-        "time": "12:30 PM - 02:30 PM",
-        "items": "Special Veg Biryani, Mirchi Ka Salan, Raita"
-      },
-      {
-        "emoji": "☕",
-        "type": "Evening Snacks",
-        "time": "05:00 PM - 06:00 PM",
-        "items": "French Fries, Cold Drink"
-      },
-      {
-        "emoji": "🌙",
-        "type": "Dinner",
-        "time": "07:30 PM - 09:30 PM",
-        "items": "Paneer Lababdar, Dal Tadka, Missi Roti, Rice, Rabdi"
-      },
-    ]
-  };
-
-
+  void _handleBackToHome() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const UserHomeScreen()),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final selectedMeals = _menuData[_selectedDay] ?? [];
+    return ListenableBuilder(
+      listenable: MessMenuService(),
+      builder: (context, _) {
+        final dayMenu = MessMenuService().getDayMenuByName("Univ Homes", _selectedDay);
+        final selectedMeals = dayMenu != null
+            ? dayMenu.meals.map((m) => {
+                "emoji": m.icon,
+                "type": m.title,
+                "time": m.timeSlot,
+                "items": m.items.join(", "),
+              }).toList()
+            : const <Map<String, String>>[];
+        final isTodaySelected =
+            _selectedDay.toLowerCase() == MessMenuService().getCurrentDayName().toLowerCase();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      drawer: const UserDrawer(activeItem: "Mess Menu"),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        leading: Builder(
-          builder: (context) {
-            return IconButton(
-              icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A)),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            );
-          },
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F0FE),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.home_outlined,
-                color: Color(0xFF1A65D6),
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Mess Menu & Timings",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
-                  ),
+        return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackToHome();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        drawer: const UserDrawer(activeItem: "Mess Menu"),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+            tooltip: "Back to Home",
+            onPressed: _handleBackToHome,
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F0FE),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                Text(
-                  "Lakshya • Rm 304",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF64748B),
+                child: const Icon(
+                  Icons.home_outlined,
+                  color: Color(0xFF1A65D6),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Mess Menu & Timings",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  Text(
+                    "Lakshya • Rm 304",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                    );
+                  },
+                ),
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.redAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Text(
+                      "2",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-          ],
-        ),
-        actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                  );
-                },
-              ),
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.redAccent,
-                    shape: BoxShape.circle,
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileScreen(),
                   ),
-                  child: const Text(
-                    "2",
-                    style: TextStyle(
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8, left: 4),
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: const Color(0xFF2563EB),
+                  child: Text(
+                    "SU",
+                    style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
-                      fontSize: 8,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ProfileScreen(),
-                ),
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(right: 16, left: 4),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: const Color(0xFF2563EB),
-                child: Text(
-                  "SU",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+            ),
+            Builder(
+              builder: (drawerCtx) => IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Color(0xFF475569)),
+                tooltip: "Open Menu",
+                onPressed: () => Scaffold.of(drawerCtx).openDrawer(),
               ),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(width: 4),
+          ],
+        ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20.0),
@@ -394,22 +245,24 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        "TODAY",
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF1D4ED8),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                          letterSpacing: 0.5,
+                    if (isTodaySelected) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          "TODAY",
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF1D4ED8),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -523,25 +376,31 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                Text(
-                                  meal["emoji"] ?? "🍽️",
-                                  style: const TextStyle(fontSize: 18),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  meal["type"] ?? "",
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF0F172A),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Text(
+                                    meal["emoji"] ?? "🍽️",
+                                    style: const TextStyle(fontSize: 18),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      meal["type"] ?? "",
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
@@ -585,6 +444,9 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+},
+);
+}
 }

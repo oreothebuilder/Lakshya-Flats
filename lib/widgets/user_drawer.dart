@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
+import '../services/firebase_auth_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/User/user_home_screen.dart';
 import '../screens/User/mess_menu_screen.dart';
@@ -10,12 +11,16 @@ import '../screens/User/profile_screen.dart';
 import '../screens/User/notifications_screen.dart';
 import '../screens/User/settings_screen.dart';
 
+import '../models/user_role_model.dart';
+
 class UserDrawer extends StatelessWidget {
   final String activeItem;
+  final AppUser? currentUser;
 
   const UserDrawer({
     super.key,
     required this.activeItem,
+    this.currentUser,
   });
 
   void _handleLogout(BuildContext context) {
@@ -46,8 +51,12 @@ class UserDrawer extends StatelessWidget {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(dialogContext); // close dialog
+              try {
+                await FirebaseAuthService().signOut();
+              } catch (_) {}
+              if (!context.mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(
@@ -154,49 +163,84 @@ class UserDrawer extends StatelessWidget {
                 end: Alignment.bottomRight,
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 35,
-                  backgroundColor: Colors.white,
-                  child: Text(
-                    "SU",
-                    style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF2563EB),
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
+            child: Builder(
+              builder: (context) {
+                final authUser = FirebaseAuthService().currentUser;
+                final displayName = currentUser?.fullName.isNotEmpty == true
+                    ? currentUser!.fullName
+                    : (authUser?.displayName?.isNotEmpty == true ? authUser!.displayName! : "Resident Student");
+
+                String initials = "RS";
+                final nameParts = displayName.trim().split(RegExp(r'\s+'));
+                if (nameParts.length >= 2 && nameParts[0].isNotEmpty && nameParts[1].isNotEmpty) {
+                  initials = "${nameParts[0][0]}${nameParts[1][0]}".toUpperCase();
+                } else if (displayName.isNotEmpty) {
+                  initials = displayName.substring(0, displayName.length >= 2 ? 2 : 1).toUpperCase();
+                }
+
+                String locationInfo = "";
+                if (currentUser?.building != null && currentUser!.building!.isNotEmpty) {
+                  locationInfo = currentUser!.building!;
+                  if (currentUser?.room != null && currentUser!.room!.isNotEmpty) {
+                    locationInfo += " • Room ${currentUser!.room!}";
+                  }
+                } else {
+                  locationInfo = "Lakshya Residency";
+                }
+
+                final contactInfo = currentUser?.phone.isNotEmpty == true
+                    ? currentUser!.phone
+                    : (currentUser?.email.isNotEmpty == true
+                        ? currentUser!.email
+                        : (authUser?.email ?? ""));
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 35,
+                      backgroundColor: Colors.white,
+                      child: Text(
+                        initials,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF2563EB),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  "Sudhanshu",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "Lakshya • Room 304 (Bed A)",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  "+91 8208285947",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+                    const SizedBox(height: 20),
+                    Text(
+                      displayName,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      locationInfo,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (contactInfo.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        contactInfo,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
           
@@ -213,9 +257,10 @@ class UserDrawer extends StatelessWidget {
                   onTap: () {
                     Navigator.pop(context);
                     if (activeItem != "Home") {
-                      Navigator.pushReplacement(
+                      Navigator.pushAndRemoveUntil(
                         context,
                         MaterialPageRoute(builder: (context) => const UserHomeScreen()),
+                        (route) => false,
                       );
                     }
                   },

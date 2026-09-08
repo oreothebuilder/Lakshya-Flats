@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/mess_menu_model.dart';
 import '../services/mess_menu_service.dart';
+import 'Admin/dashboard_screen.dart';
 
 class MessMenuManagementScreen extends StatefulWidget {
   final String initialMess;
@@ -84,45 +85,59 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
     return match["full"]!;
   }
 
+  void _handleBackToDashboard() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const DashboardScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dayMenu = _menuService.getDayMenu(_selectedMess, _selectedDayShort);
     final fullDayName = _getFullDayName(_selectedDayShort);
     final isCurrentDay = _isToday(_selectedDayShort);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              "Mess Menu Management",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF0F172A),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackToDashboard();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+            tooltip: "Back to Dashboard",
+            onPressed: _handleBackToDashboard,
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Mess Menu Management",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              "Weekly Schedule & Building Meals",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF64748B),
+              const SizedBox(height: 2),
+              Text(
+                "Weekly Schedule & Building Meals",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF64748B),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF0F172A)),
@@ -231,8 +246,8 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: EdgeInsets.symmetric(
-                        horizontal: isSelected ? 14 : 10,
-                        vertical: 8,
+                        horizontal: isSelected ? 12 : 8,
+                        vertical: 7,
                       ),
                       decoration: BoxDecoration(
                         color: isSelected ? const Color(0xFF0056D2) : Colors.transparent,
@@ -244,16 +259,16 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
                           Text(
                             short,
                             style: GoogleFonts.plusJakartaSans(
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                               color: isSelected ? Colors.white : const Color(0xFF334155),
                             ),
                           ),
                           if (isSelected) ...[
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 3),
                             Container(
-                              width: 5,
-                              height: 5,
+                              width: 4,
+                              height: 4,
                               decoration: const BoxDecoration(
                                 color: Colors.white,
                                 shape: BoxShape.circle,
@@ -269,108 +284,59 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Info Banner Card
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFBFDBFE), width: 1),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDBEAFE),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.sync_rounded,
-                        color: Color(0xFF1D4ED8),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Weekly Fixed Schedule ($_selectedMess)",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF1E40AF),
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            "The mess menu is fixed for the whole week and repeats every week. Edits apply automatically.",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w400,
-                              color: const Color(0xFF1E3A8A),
-                              height: 1.35,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
 
             // Menu Header Row (Monday Menu, TODAY, Edit Menu)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        "$fullDayName Menu",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      if (isCurrentDay) ...[
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF16A34A),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
                           child: Text(
-                            "TODAY",
+                            "$fullDayName Menu",
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10.5,
+                              fontSize: 18,
                               fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: 0.5,
+                              color: const Color(0xFF0F172A),
                             ),
                           ),
                         ),
+                        if (isCurrentDay) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF16A34A),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              "TODAY",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                  if (widget.isAdmin)
+                  if (widget.isAdmin) ...[
+                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () => _openBulkEditModal(context, dayMenu),
-                      icon: const Icon(Icons.edit_rounded, size: 16, color: Colors.white),
+                      icon: const Icon(Icons.edit_rounded, size: 15, color: Colors.white),
                       label: Text(
                         "Edit Menu",
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),
@@ -378,12 +344,13 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0056D2),
                         elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -407,8 +374,9 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildMealCard(MealInfo meal) {
     Color headerBg;
@@ -456,7 +424,7 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
         children: [
           // Header Bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: headerBg,
               borderRadius: const BorderRadius.only(
@@ -465,33 +433,40 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
               ),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      meal.icon,
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      meal.title,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: textColor,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Text(
+                        meal.icon,
+                        style: const TextStyle(fontSize: 17),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text(
+                          meal.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w800,
+                            color: textColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.access_time_rounded, size: 14, color: timeColor),
+                    Icon(Icons.access_time_rounded, size: 13, color: timeColor),
                     const SizedBox(width: 4),
                     Text(
                       meal.timeSlot,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w700,
                         color: timeColor,
                       ),
@@ -745,22 +720,26 @@ class _EditMessMenuBottomSheetState extends State<_EditMessMenuBottomSheet> {
                         children: [
                           Text(meal.icon, style: const TextStyle(fontSize: 18)),
                           const SizedBox(width: 8),
-                          Text(
-                            meal.title,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF0F172A),
+                          Expanded(
+                            child: Text(
+                              meal.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF0F172A),
+                              ),
                             ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: 8),
                           SizedBox(
-                            width: 170,
+                            width: 145,
                             height: 38,
                             child: TextField(
                               controller: _timeControllers[meal.type],
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
                               ),
                               decoration: InputDecoration(

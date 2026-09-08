@@ -77,32 +77,47 @@ class OnboardingPageContent extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(24),
-            child: Image.network(
-              item.networkImageUrl,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: const Color(0xFFE5E7EB),
-                  child: const Center(
-                    child: Icon(Icons.image, size: 48, color: Colors.grey),
+            child: (item.imagePath != null && item.imagePath!.isNotEmpty)
+                ? Image.asset(
+                    item.imagePath!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: const Color(0xFFE5E7EB),
+                        child: const Center(
+                          child: Icon(Icons.image, size: 48, color: Colors.grey),
+                        ),
+                      );
+                    },
+                  )
+                : Image.network(
+                    item.networkImageUrl,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: const Color(0xFFE5E7EB),
+                        child: const Center(
+                          child: Icon(Icons.image, size: 48, color: Colors.grey),
+                        ),
+                      );
+                    },
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        color: const Color(0xFFF3F4F6),
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primary,
+                            strokeWidth: 2.5,
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: const Color(0xFFF3F4F6),
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primary,
-                      strokeWidth: 2.5,
-                    ),
-                  ),
-                );
-              },
-            ),
           ),
         ),
 

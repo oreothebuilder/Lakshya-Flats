@@ -1,5 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/cloudinary_service.dart';
+import '../config/cloudinary_config.dart';
+import '../services/firebase_auth_service.dart';
+import '../services/firestore_service.dart';
+import '../services/email_service.dart';
+import 'Admin/dashboard_screen.dart';
 
 class StudentOnboardingScreen extends StatefulWidget {
   const StudentOnboardingScreen({super.key});
@@ -15,30 +24,36 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   // Step 1 Controllers & State
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
-  final TextEditingController _otpController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _regNoController = TextEditingController();
   final TextEditingController _courseController = TextEditingController();
   final TextEditingController _branchController = TextEditingController();
   final TextEditingController _roomNumberController = TextEditingController();
+  final TextEditingController _bedNumberController = TextEditingController();
 
   // Step 3 Lease Configuration Controllers & State
   String _selectedPlan = "Rent Only"; // "Rent Only" or "Full Package"
   String _paymentFrequency = "Pay Monthly"; // "Pay Monthly" or "Whole Year"
-  String _packageInstallmentType = "Single"; // "Single", "Quarterly", "Custom"
+  String _packageInstallmentType = "Quarterly"; // "Single", "Quarterly", "Custom"
+  int _packageInstallmentsCount = 4;
+  bool _isCustomPackageInstallments = false;
 
   final TextEditingController _monthlyRentController = TextEditingController(text: "12,500");
   final TextEditingController _securityDepositController = TextEditingController(text: "25,000");
   final TextEditingController _yearInstallmentsController = TextEditingController(text: "4");
   final TextEditingController _totalAcademicFeesController = TextEditingController(text: "1,50,000");
-  final TextEditingController _customInstallmentsController = TextEditingController(text: "6");
+  final TextEditingController _customInstallmentsController = TextEditingController(text: "4");
   final TextEditingController _premiumDepositController = TextEditingController(text: "30,000");
   String? _selectedBuilding;
   final List<String> _buildings = [
-    "Univ Homes",
+    "Lakshya",
+    "Shivalya",
+    "Ishaan",
+    "Univ homes",
+    "Tirupati",
     "Rameshwaram",
-    "Shivalay",
-    "Lakshya Residency Main Campus",
+    "Livano",
+    "Somnath",
   ];
 
   // Step 4 Emergency Contact & Preferences State
@@ -54,9 +69,9 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     "Bed",
     "Cupboard",
     "Study Table",
-    "Study Chair",
+    "Chair",
     "Geyser",
-    "Bedside Table",
+    "Fan",
     "Curtains",
     "Pillow",
     "Bucket",
@@ -64,13 +79,45 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   ];
   final TextEditingController _customInventoryController = TextEditingController();
   final TextEditingController _finalNotesController = TextEditingController();
+  final List<String> _attachedNotes = [];
+
+  final ImagePicker _imagePicker = ImagePicker();
+  Uint8List? _profilePhotoBytes;
+  String? _profilePhotoUrl;
+  bool _isUploadingPhoto = false;
+  bool _profilePhotoAddLater = false;
+  bool _isSavingStudent = false;
+
+  Uint8List? _collegeIdBytes;
+  String? _collegeIdUrl;
+  bool _isUploadingCollegeId = false;
+  bool _collegeIdAddLater = false;
+
+  Uint8List? _govtIdBytes;
+  String? _govtIdUrl;
+  bool _isUploadingGovtId = false;
+  bool _govtIdAddLater = false;
 
   bool _profilePhotoUploaded = false;
   bool _collegeIdUploaded = false;
   bool _govtIdUploaded = false;
-  bool _hasSavedDraft = false;
+  final List<Map<String, dynamic>> _savedDrafts = [];
+  String? _activeDraftId;
 
   final List<String> _relationships = ["Father", "Mother", "Guardian", "Sibling", "Other"];
+
+  String _getBuildingAsset(String? buildingName) {
+    if (buildingName == null) return "assets/buildings/Lakshya.png";
+    final b = buildingName.toLowerCase().replaceAll(' ', '');
+    if (b.contains('ishaan')) return "assets/buildings/Ishaan.png";
+    if (b.contains('shival')) return "assets/buildings/Shivalay.png";
+    if (b.contains('univ')) return "assets/buildings/univhomes.png";
+    if (b.contains('tirupati')) return "assets/buildings/Tirupati.png";
+    if (b.contains('rameshwaram')) return "assets/buildings/Rameshwaram.png";
+    if (b.contains('livano')) return "assets/buildings/Livano.png";
+    if (b.contains('somnath')) return "assets/buildings/Somnath.png";
+    return "assets/buildings/Lakshya.png";
+  }
 
   @override
   void initState() {
@@ -82,12 +129,12 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   void dispose() {
     _fullNameController.dispose();
     _mobileController.dispose();
-    _otpController.dispose();
     _emailController.dispose();
     _regNoController.dispose();
     _courseController.dispose();
     _branchController.dispose();
     _roomNumberController.dispose();
+    _bedNumberController.dispose();
     _monthlyRentController.dispose();
     _securityDepositController.dispose();
     _yearInstallmentsController.dispose();
@@ -104,110 +151,1182 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   void _generateInstallmentsFromStep3() {
     _installments.clear();
     int count = 12;
+    final now = DateTime.now();
 
     if (_selectedPlan == "Rent Only") {
       int monthlyRent = int.tryParse(_monthlyRentController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 12500;
       if (_paymentFrequency == "Pay Monthly") {
         count = 12;
         for (int i = 1; i <= count; i++) {
-          final monthStr = (i < 10) ? "0$i" : "$i";
-          _installments.add({
+          final instDate = DateTime(now.year, now.month + (i - 1), 10);
+          final dayStr = instDate.day.toString().padLeft(2, '0');
+          final monthStr = instDate.month.toString().padLeft(2, '0');
+          _installments.add(<String, String>{
             "title": "Installment $i",
             "amount": "$monthlyRent",
-            "dueDate": "24/$monthStr/2024",
+            "dueDate": "$dayStr/$monthStr/${instDate.year}",
           });
         }
       } else {
         count = int.tryParse(_yearInstallmentsController.text.trim()) ?? 4;
-        int instAmount = (monthlyRent * 12) ~/ (count > 0 ? count : 1);
+        if (count < 1) count = 1;
+        int instAmount = (monthlyRent * 12) ~/ count;
+        int remainder = (monthlyRent * 12) % count;
+        final stepMonths = (12 / count).round().clamp(1, 12);
         for (int i = 1; i <= count; i++) {
-          final monthStr = (i * 3 < 10) ? "0${i * 3}" : "${i * 3}";
-          _installments.add({
+          int currentInst = (i == 1) ? (instAmount + remainder) : instAmount;
+          final instDate = DateTime(now.year, now.month + (i - 1) * stepMonths, 10);
+          final dayStr = instDate.day.toString().padLeft(2, '0');
+          final monthStr = instDate.month.toString().padLeft(2, '0');
+          _installments.add(<String, String>{
             "title": "Installment $i",
-            "amount": "$instAmount",
-            "dueDate": "24/$monthStr/2024",
+            "amount": "$currentInst",
+            "dueDate": "$dayStr/$monthStr/${instDate.year}",
           });
         }
       }
     } else {
       // Full Package
       int totalAmount = int.tryParse(_totalAcademicFeesController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 150000;
-      if (_packageInstallmentType == "Single") {
-        count = 1;
-      } else if (_packageInstallmentType == "Quarterly") {
-        count = 4;
-      } else {
-        count = int.tryParse(_customInstallmentsController.text.trim()) ?? 6;
-      }
+      count = _packageInstallmentsCount > 0 ? _packageInstallmentsCount : 1;
 
-      int instAmount = totalAmount ~/ (count > 0 ? count : 1);
+      int instAmount = totalAmount ~/ count;
+      int remainder = totalAmount % count;
+      final stepMonths = (12 / count).round().clamp(1, 12);
+
       for (int i = 1; i <= count; i++) {
-        final monthNum = ((i - 1) * (12 ~/ (count > 0 ? count : 1)) + 8) % 12 + 1;
-        final monthStr = (monthNum < 10) ? "0$monthNum" : "$monthNum";
-        _installments.add({
+        int currentInst = (i == 1) ? (instAmount + remainder) : instAmount;
+        final instDate = DateTime(now.year, now.month + (i - 1) * stepMonths, 10);
+        final dayStr = instDate.day.toString().padLeft(2, '0');
+        final monthStr = instDate.month.toString().padLeft(2, '0');
+        _installments.add(<String, String>{
           "title": "Installment $i",
-          "amount": "$instAmount",
-          "dueDate": "24/$monthStr/2024",
+          "amount": "$currentInst",
+          "dueDate": "$dayStr/$monthStr/${instDate.year}",
         });
       }
     }
   }
 
-  void _showSnackbar(String message, {bool isError = false}) {
+  Widget _buildInstallmentOptionChip(String label, int count) {
+    final bool isSelected = (count == -1)
+        ? _isCustomPackageInstallments
+        : (!_isCustomPackageInstallments && _packageInstallmentsCount == count);
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (count == -1) {
+            _isCustomPackageInstallments = true;
+            _packageInstallmentsCount = int.tryParse(_customInstallmentsController.text.trim()) ?? 4;
+          } else {
+            _isCustomPackageInstallments = false;
+            _packageInstallmentsCount = count;
+            _customInstallmentsController.text = "$count";
+          }
+          _generateInstallmentsFromStep3();
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF0056D2) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF0056D2) : const Color(0xFFCBD5E1),
+            width: isSelected ? 1.5 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF0056D2).withValues(alpha: 0.2),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF334155),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPackageBreakdownBanner() {
+    int total = int.tryParse(_totalAcademicFeesController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 150000;
+    int count = _packageInstallmentsCount > 0 ? _packageInstallmentsCount : 1;
+    int perInst = total ~/ count;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFF0056D2), size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "Schedule: ₹ $perInst / installment ($count ${_packageInstallmentsCount == 1 ? 'installment' : 'installments'})",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF1E3A8A),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSnackbar(String message, {bool isError = false, bool isSuccess = true}) {
+    final bool errorMode = isError || !isSuccess;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           message,
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
         ),
-        backgroundColor: isError ? Colors.redAccent : const Color(0xFF0056D2),
+        backgroundColor: errorMode ? Colors.redAccent : const Color(0xFF0056D2),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
     );
   }
 
-  void _saveDraft() {
+  Future<void> _capturePhotoFromCamera() async {
+    try {
+      final XFile? photo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (photo == null) return; // User closed camera
+
+      final bytes = await photo.readAsBytes();
+      setState(() {
+        _profilePhotoBytes = bytes;
+        _isUploadingPhoto = true;
+      });
+
+      _showSnackbar("Photo captured! Uploading...");
+
+      // Attempt Cloudinary upload
+      final uploadedUrl = await CloudinaryService.uploadImage(
+        photo,
+        folder: CloudinaryConfig.folderStudentAvatars,
+      );
+
+      setState(() {
+        _isUploadingPhoto = false;
+        _profilePhotoUploaded = true;
+        _profilePhotoUrl = uploadedUrl;
+      });
+
+      if (uploadedUrl != null) {
+        _showSnackbar("Resident photo uploaded successfully!");
+      } else {
+        _showSnackbar("Photo captured and attached to profile!");
+      }
+    } catch (e) {
+      setState(() {
+        _isUploadingPhoto = false;
+      });
+      _showSnackbar("Could not access camera: $e", isError: true);
+    }
+  }
+
+  Future<void> _handleUploadDocument({
+    required String documentType,
+    required ImageSource source,
+  }) async {
+    try {
+      final XFile? file = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
+
+      if (file == null) return;
+
+      final bytes = await file.readAsBytes();
+
+      if (documentType == "College ID") {
+        setState(() {
+          _collegeIdBytes = bytes;
+          _isUploadingCollegeId = true;
+        });
+      } else {
+        setState(() {
+          _govtIdBytes = bytes;
+          _isUploadingGovtId = true;
+        });
+      }
+
+      _showSnackbar("Uploading $documentType...");
+
+      final uploadedUrl = await CloudinaryService.uploadImage(
+        file,
+        folder: CloudinaryConfig.folderStudentDocs,
+      );
+
+      setState(() {
+        if (documentType == "College ID") {
+          _isUploadingCollegeId = false;
+          _collegeIdUploaded = true;
+          _collegeIdUrl = uploadedUrl;
+        } else {
+          _isUploadingGovtId = false;
+          _govtIdUploaded = true;
+          _govtIdUrl = uploadedUrl;
+        }
+      });
+
+      if (uploadedUrl != null) {
+        _showSnackbar("$documentType uploaded successfully!");
+      } else {
+        _showSnackbar("$documentType captured and saved!");
+      }
+    } catch (e) {
+      setState(() {
+        if (documentType == "College ID") {
+          _isUploadingCollegeId = false;
+        } else {
+          _isUploadingGovtId = false;
+        }
+      });
+      _showSnackbar("Could not access camera/file: $e", isError: true);
+    }
+  }
+
+  void _showDocumentSourceSheet(String documentType) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "Upload $documentType",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded, color: Color(0xFF0056D2), size: 22),
+                ),
+                title: Text(
+                  "Take Photo with Camera",
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14.5),
+                ),
+                subtitle: Text(
+                  "Use device camera to capture document",
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleUploadDocument(documentType: documentType, source: ImageSource.camera);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.photo_library_rounded, color: Color(0xFF475569), size: 22),
+                ),
+                title: Text(
+                  "Choose from Gallery / Files",
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14.5),
+                ),
+                subtitle: Text(
+                  "Select an existing file or image from device",
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleUploadDocument(documentType: documentType, source: ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleCompleteOnboarding() async {
+    final fullName = _fullNameController.text.trim().isNotEmpty ? _fullNameController.text.trim() : "Resident";
+    final firstName = fullName.split(' ').first;
+    final email = _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : "student@university.edu";
+    final phone = _mobileController.text.trim();
+    final regNo = _regNoController.text.trim().isNotEmpty ? _regNoController.text.trim() : "REG101";
+    final course = _courseController.text.trim();
+    final branch = _branchController.text.trim();
+    final building = _selectedBuilding ?? "Lakshya Residency";
+    final room = _roomNumberController.text.trim().isNotEmpty ? _roomNumberController.text.trim() : "Room 101";
+    final bedNumber = _bedNumberController.text.trim();
+    final defaultPassword = "$firstName@$regNo";
+
+    setState(() => _isSavingStudent = true);
+
+    try {
+      // 1. Save student record to Firestore
+      final studentId = "STU-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
+      await FirestoreService().saveStudentProfile(studentId, {
+        'studentId': studentId,
+        'fullName': fullName,
+        'firstName': firstName,
+        'email': email,
+        'phone': phone,
+        'registrationNumber': regNo,
+        'course': course,
+        'branch': branch,
+        'building': building,
+        'room': room,
+        'bedNumber': bedNumber,
+        'plan': _selectedPlan,
+        'paymentFrequency': _paymentFrequency,
+        'monthlyRent': _monthlyRentController.text.trim(),
+        'securityDeposit': _securityDepositController.text.trim(),
+        'guardianName': _guardianNameController.text.trim(),
+        'guardianPhone': _guardianPhoneController.text.trim(),
+        'guardianRelationship': _guardianRelationship,
+        'dietaryPreference': _dietaryPreference,
+        'photoUrl': _profilePhotoUrl,
+        'collegeIdUrl': _collegeIdUrl,
+        'govtIdUrl': _govtIdUrl,
+        'photoAddLater': _profilePhotoAddLater,
+        'collegeIdAddLater': _collegeIdAddLater,
+        'govtIdAddLater': _govtIdAddLater,
+        'inventory': _inventoryItems,
+        'notes': _attachedNotes,
+        'installments': _installments,
+        'defaultPassword': defaultPassword,
+        'status': 'Active',
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+
+      // 2. Auto-issue initial bills to Firestore
+      // 2A. Security Deposit bill (if applicable)
+      final depositAmount = double.tryParse(_securityDepositController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0.0;
+      if (depositAmount > 0) {
+        try {
+          await FirestoreService().issueBill({
+            'studentId': studentId,
+            'studentName': fullName,
+            'phone': phone,
+            'building': building,
+            'room': room,
+            'bedNumber': bedNumber,
+            'billType': 'Security Deposit',
+            'amount': depositAmount,
+            'paidAmount': 0.0,
+            'dueDate': Timestamp.fromDate(DateTime.now().add(const Duration(days: 7))),
+            'status': 'Pending',
+            'invoiceNo': 'INV-DEP-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+            'billingMonth': 'Security Deposit',
+          });
+        } catch (billErr) {
+          debugPrint("Initial deposit bill error: $billErr");
+        }
+      }
+
+      // 2B. Auto-issue individual bills for EVERY selected installment so they appear on Collect Payments page
+      if (_installments.isNotEmpty) {
+        for (int i = 0; i < _installments.length; i++) {
+          final inst = _installments[i];
+          final title = inst['title']?.toString() ?? "Installment ${i + 1}";
+          final amount = double.tryParse(inst['amount'].toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0.0;
+          
+          Timestamp instDueDate;
+          if (inst['dueDateTimestamp'] is Timestamp) {
+            instDueDate = inst['dueDateTimestamp'] as Timestamp;
+          } else if (inst['dueDate'] != null) {
+            final parts = inst['dueDate'].toString().split('/');
+            if (parts.length == 3) {
+              final d = int.tryParse(parts[0]) ?? 10;
+              final m = int.tryParse(parts[1]) ?? 1;
+              final y = int.tryParse(parts[2]) ?? DateTime.now().year;
+              instDueDate = Timestamp.fromDate(DateTime(y, m, d, 23, 59, 59));
+            } else {
+              instDueDate = Timestamp.fromDate(DateTime.now().add(Duration(days: (i * 30) + 10)));
+            }
+          } else {
+            instDueDate = Timestamp.fromDate(DateTime.now().add(Duration(days: (i * 30) + 10)));
+          }
+
+          if (amount > 0) {
+            try {
+              final invSuffix = (DateTime.now().millisecondsSinceEpoch + i + 10).toString().substring(7);
+              await FirestoreService().issueBill({
+                'studentId': studentId,
+                'studentName': fullName,
+                'phone': phone,
+                'building': building,
+                'room': room,
+                'bedNumber': bedNumber,
+                'billType': 'Hostel Fees',
+                'amount': amount,
+                'paidAmount': 0.0,
+                'dueDate': instDueDate,
+                'status': 'Pending',
+                'invoiceNo': 'INV-INST-$invSuffix',
+                'billingMonth': title,
+              });
+            } catch (billErr) {
+              debugPrint("Installment bill error ($title): $billErr");
+            }
+          }
+        }
+      } else {
+        // Fallback if installments list was empty
+        final rentAmount = double.tryParse(_monthlyRentController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0.0;
+        if (rentAmount > 0) {
+          try {
+            await FirestoreService().issueBill({
+              'studentId': studentId,
+              'studentName': fullName,
+              'phone': phone,
+              'building': building,
+              'room': room,
+              'bedNumber': bedNumber,
+              'billType': 'Hostel Fees',
+              'amount': rentAmount,
+              'paidAmount': 0.0,
+              'dueDate': Timestamp.fromDate(DateTime.now().add(const Duration(days: 15))),
+              'status': 'Pending',
+              'invoiceNo': 'INV-${(DateTime.now().millisecondsSinceEpoch + 1).toString().substring(7)}',
+              'billingMonth': 'Installment 1',
+            });
+          } catch (billErr) {
+            debugPrint("Fallback rent bill error: $billErr");
+          }
+        }
+      }
+
+      // 3. Register user with default password (firstName@regNo) in Auth
+      try {
+        await FirebaseAuthService().createStudentAuthAccount(
+          email: email,
+          password: defaultPassword,
+        );
+      } catch (authErr) {
+        debugPrint("Auth notice: $authErr");
+      }
+
+      // 4. Send official account credentials email via EmailService
+      try {
+        await EmailService().sendStudentCredentialsEmail(
+          studentEmail: email,
+          studentName: fullName,
+          registrationNumber: regNo,
+          password: defaultPassword,
+          building: building,
+          room: room,
+          bedNumber: bedNumber,
+          course: course,
+          branch: branch,
+        );
+      } catch (emailErr) {
+        debugPrint("Credentials email dispatch error: $emailErr");
+      }
+
+      // 5. Remove active cloud draft if student completed onboarding
+      if (_activeDraftId != null) {
+        try {
+          await FirestoreService().deleteDraftFromCloud(_activeDraftId!);
+        } catch (_) {}
+        _activeDraftId = null;
+      }
+    } catch (e) {
+      debugPrint("Storage notice: $e");
+    } finally {
+      if (mounted) setState(() => _isSavingStudent = false);
+    }
+
+    if (!mounted) return;
+
+    // Show credential confirmation dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(22.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Success Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFDCFCE7),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 28),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Onboarding Complete!",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                        Text(
+                          "Profile stored & password mailed",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Email Confirmation Banner
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.mark_email_read_rounded, color: Color(0xFF0056D2), size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: "Password Confirmation Email Sent!\n",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: const Color(0xFF003896),
+                              ),
+                            ),
+                            TextSpan(
+                              text: "The student will receive an email confirming their login credentials at ",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: const Color(0xFF1E3A8A),
+                              ),
+                            ),
+                            TextSpan(
+                              text: email,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: const Color(0xFF003896),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Credentials Card
+              Text(
+                "Student Login Credentials",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF334155),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Username / Email",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            email,
+                            textAlign: TextAlign.right,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Password",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              "Sent to student's mail",
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF003896),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Summary Info
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "$fullName • $regNo",
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        "$building ($room${bedNumber.isNotEmpty ? ' • Bed: $bedNumber' : ''})",
+                        textAlign: TextAlign.right,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Action buttons
+              Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(
+                              text: "Lakshya Residency Resident Login:\nUsername / Email: $email\nRegistration No: $regNo\nRoom: $room${bedNumber.isNotEmpty ? ' (Bed: $bedNumber)' : ''}\nNote: Password sent to $email",
+                            ));
+                            _showSnackbar("Login details copied to clipboard!");
+                          },
+                          icon: const Icon(Icons.copy_rounded, size: 16),
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              "Copy",
+                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            side: const BorderSide(color: Color(0xFFCBD5E1)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            _showSnackbar("Re-dispatching credentials email to $email...");
+                            final res = await EmailService().sendStudentCredentialsEmail(
+                              studentEmail: email,
+                              studentName: fullName,
+                              registrationNumber: regNo,
+                              password: defaultPassword,
+                              building: building,
+                              room: room,
+                              bedNumber: bedNumber,
+                              course: course,
+                              branch: branch,
+                            );
+                            if (res['success'] == true) {
+                              _showSnackbar(res['message']?.toString() ?? "Credentials email re-sent successfully to $email!");
+                            } else {
+                              _showSnackbar("Failed to send: ${res['message']}", isSuccess: false);
+                            }
+                          },
+                          icon: const Icon(Icons.mark_email_read_outlined, size: 16),
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              "Resend Email",
+                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12.5),
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            side: const BorderSide(color: Color(0xFF0056D2)),
+                            foregroundColor: const Color(0xFF0056D2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0056D2),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(
+                        "Done & Finish",
+                        style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleBackNavigation() async {
+    if (_currentStep == 0) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        (route) => false,
+      );
+      return;
+    }
+
+    final hasData = _fullNameController.text.trim().isNotEmpty ||
+        _mobileController.text.trim().isNotEmpty ||
+        _emailController.text.trim().isNotEmpty ||
+        _regNoController.text.trim().isNotEmpty ||
+        _profilePhotoBytes != null ||
+        _collegeIdBytes != null ||
+        _govtIdBytes != null ||
+        _currentStep > 1;
+
+    if (!hasData) {
+      setState(() => _currentStep = 0);
+      return;
+    }
+
+    final action = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.fromLTRB(22, 20, 22, 10),
+        actionsPadding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.bookmark_border_rounded, color: Color(0xFF0056D2), size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Save as Draft?",
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "You are currently filling out the student onboarding form. Would you like to save your progress as a draft to resume later, or continue editing?",
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 14,
+            color: const Color(0xFF475569),
+            height: 1.45,
+          ),
+        ),
+        actions: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(dialogCtx, 'save'),
+                  icon: const Icon(Icons.save_outlined, size: 18),
+                  label: Text(
+                    "Save as Draft",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0056D2),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(dialogCtx, 'continue'),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: Text(
+                    "Continue Editing",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx, 'discard'),
+                child: Text(
+                  "Discard Changes & Exit",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFFEF4444),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    if (action == 'save') {
+      _saveDraft();
+    } else if (action == 'discard') {
+      _resetForm();
+      setState(() => _currentStep = 0);
+    }
+  }
+
+  Future<void> _saveDraft() async {
+    final fullName = _fullNameController.text.trim().isNotEmpty
+        ? _fullNameController.text.trim()
+        : "Draft Resident Application";
+    final building = _selectedBuilding ?? "Lakshya";
+    final room = _roomNumberController.text.trim().isNotEmpty ? _roomNumberController.text.trim() : "TBD";
+
+    final draftId = _activeDraftId ?? 'DRAFT-${DateTime.now().millisecondsSinceEpoch}';
+    _activeDraftId = draftId;
+
+    final newDraft = {
+      'id': draftId,
+      'fullName': _fullNameController.text,
+      'mobile': _mobileController.text,
+      'email': _emailController.text,
+      'regNo': _regNoController.text,
+      'course': _courseController.text,
+      'branch': _branchController.text,
+      'roomNumber': _roomNumberController.text,
+      'selectedBuilding': _selectedBuilding,
+      'selectedPlan': _selectedPlan,
+      'paymentFrequency': _paymentFrequency,
+      'packageInstallmentType': _packageInstallmentType,
+      'monthlyRent': _monthlyRentController.text,
+      'securityDeposit': _securityDepositController.text,
+      'yearInstallments': _yearInstallmentsController.text,
+      'totalAcademicFees': _totalAcademicFeesController.text,
+      'customInstallments': _customInstallmentsController.text,
+      'premiumDeposit': _premiumDepositController.text,
+      'guardianName': _guardianNameController.text,
+      'guardianPhone': _guardianPhoneController.text,
+      'guardianRelationship': _guardianRelationship,
+      'dietaryPreference': _dietaryPreference,
+      'profilePhotoUrl': _profilePhotoUrl,
+      'profilePhotoUploaded': _profilePhotoUploaded,
+      'collegeIdUrl': _collegeIdUrl,
+      'collegeIdUploaded': _collegeIdUploaded,
+      'govtIdBytes': _govtIdBytes,
+      'govtIdUrl': _govtIdUrl,
+      'govtIdUploaded': _govtIdUploaded,
+      'savedStep': _currentStep > 0 ? _currentStep : 1,
+      'lastSaved': DateTime.now().toIso8601String(),
+      'displayName': fullName,
+      'subtitle': "Saved at Step ${_currentStep > 0 ? _currentStep : 1} • $building ($room)",
+    };
+
+    try {
+      await FirestoreService().saveDraftToCloud(draftId, newDraft);
+    } catch (e) {
+      debugPrint("Draft cloud save error: $e");
+    }
+
     setState(() {
-      _hasSavedDraft = true;
+      _savedDrafts.removeWhere((d) => d['id'] == draftId || (d['fullName'] == _fullNameController.text && _fullNameController.text.isNotEmpty));
+      _savedDrafts.insert(0, newDraft);
       _currentStep = 0;
     });
-    _showSnackbar("Draft saved to cloud successfully!");
+
+    _showSnackbar("Application saved to cloud drafts!");
+  }
+
+  void _resumeDraft(Map<String, dynamic> draft) {
+    _activeDraftId = draft['id']?.toString();
+    setState(() {
+      _fullNameController.text = draft['fullName'] ?? "";
+      _mobileController.text = draft['mobile'] ?? "";
+      _emailController.text = draft['email'] ?? "";
+      _regNoController.text = draft['regNo'] ?? "";
+      _courseController.text = draft['course'] ?? "";
+      _branchController.text = draft['branch'] ?? "";
+      _roomNumberController.text = draft['roomNumber'] ?? "";
+      _bedNumberController.text = draft['bedNumber'] ?? "";
+      _selectedBuilding = draft['selectedBuilding'];
+      _selectedPlan = draft['selectedPlan'] ?? "Rent Only";
+      _paymentFrequency = draft['paymentFrequency'] ?? "Pay Monthly";
+      _packageInstallmentType = draft['packageInstallmentType'] ?? "Single";
+      _monthlyRentController.text = draft['monthlyRent'] ?? "12,500";
+      _securityDepositController.text = draft['securityDeposit'] ?? "25,000";
+      _yearInstallmentsController.text = draft['yearInstallments'] ?? "4";
+      _totalAcademicFeesController.text = draft['totalAcademicFees'] ?? "1,50,000";
+      _customInstallmentsController.text = draft['customInstallments'] ?? "6";
+      _premiumDepositController.text = draft['premiumDeposit'] ?? "30,000";
+      _guardianNameController.text = draft['guardianName'] ?? "";
+      _guardianPhoneController.text = draft['guardianPhone'] ?? "";
+      _guardianRelationship = draft['guardianRelationship'] ?? "Father";
+      _dietaryPreference = draft['dietaryPreference'] ?? "Vegetarian";
+      _profilePhotoBytes = draft['profilePhotoBytes'];
+      _profilePhotoUrl = draft['profilePhotoUrl'];
+      _profilePhotoUploaded = draft['profilePhotoUploaded'] ?? false;
+      _collegeIdBytes = draft['collegeIdBytes'];
+      _collegeIdUrl = draft['collegeIdUrl'];
+      _collegeIdUploaded = draft['collegeIdUploaded'] ?? false;
+      _govtIdBytes = draft['govtIdBytes'];
+      _govtIdUrl = draft['govtIdUrl'];
+      _govtIdUploaded = draft['govtIdUploaded'] ?? false;
+      _currentStep = draft['savedStep'] ?? 1;
+    });
+
+    _generateInstallmentsFromStep3();
+    _showSnackbar("Resumed draft for ${draft['displayName'] ?? 'Resident'}");
+  }
+
+  Future<void> _deleteDraft(String draftId) async {
+    try {
+      await FirestoreService().deleteDraftFromCloud(draftId);
+    } catch (_) {}
+    setState(() {
+      _savedDrafts.removeWhere((d) => d['id'] == draftId);
+    });
+    _showSnackbar("Draft removed from cloud.");
+  }
+
+  void _resetForm() {
+    _fullNameController.clear();
+    _mobileController.clear();
+    _emailController.clear();
+    _regNoController.clear();
+    _courseController.clear();
+    _branchController.clear();
+    _roomNumberController.clear();
+    _bedNumberController.clear();
+    _selectedBuilding = null;
+    _selectedPlan = "Rent Only";
+    _paymentFrequency = "Pay Monthly";
+    _profilePhotoBytes = null;
+    _profilePhotoUrl = null;
+    _profilePhotoUploaded = false;
+    _profilePhotoAddLater = false;
+    _collegeIdBytes = null;
+    _collegeIdUrl = null;
+    _collegeIdUploaded = false;
+    _collegeIdAddLater = false;
+    _govtIdBytes = null;
+    _govtIdUrl = null;
+    _govtIdUploaded = false;
+    _govtIdAddLater = false;
+    _guardianNameController.clear();
+    _guardianPhoneController.clear();
+    _inventoryItems.clear();
+    _inventoryItems.addAll([
+      "AC",
+      "Bed",
+      "Cupboard",
+      "Study Table",
+      "Chair",
+      "Geyser",
+      "Fan",
+      "Curtains",
+      "Pillow",
+      "Bucket",
+      "Mug",
+    ]);
+    _attachedNotes.clear();
+    _finalNotesController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAF9),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF0F172A)),
-          onPressed: () {
-            if (_currentStep > 0) {
-              setState(() {
-                _currentStep--;
-              });
-            } else {
-              Navigator.pop(context);
-            }
-          },
-        ),
-        title: Text(
-          _currentStep == 0 ? "Student Onboarding Page" : "Lakshya Residency",
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: const Color(0xFF0F172A),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackNavigation();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAF9),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF0F172A)),
+            onPressed: _handleBackNavigation,
+          ),
+          title: Text(
+            _currentStep == 0 ? "Student Onboarding Page" : "Lakshya Residency",
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0F172A),
+            ),
           ),
         ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20.0),
-          child: _buildCurrentView(),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: _buildCurrentView(),
+          ),
         ),
       ),
     );
@@ -307,6 +1426,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: () {
+                    _resetForm();
                     setState(() {
                       _currentStep = 1;
                     });
@@ -360,123 +1480,141 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 14),
 
-        if (_hasSavedDraft)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(Icons.description_rounded, color: Color(0xFF4F46E5), size: 24),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _fullNameController.text.isNotEmpty
-                            ? _fullNameController.text
-                            : "Draft Resident Application",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF0F172A),
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: FirestoreService().getDraftsStream(),
+          builder: (context, snapshot) {
+            final cloudDrafts = snapshot.data ?? _savedDrafts;
+
+            if (cloudDrafts.isNotEmpty) {
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: cloudDrafts.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final draft = cloudDrafts[index];
+                  final draftId = draft['id']?.toString() ?? "";
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        "Saved recently • Step 3 Completed",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          color: const Color(0xFF64748B),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEEF2FF),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.description_rounded, color: Color(0xFF4F46E5), size: 24),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                draft['displayName'] ?? draft['fullName'] ?? "Draft Resident",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                draft['subtitle'] ?? "Saved at Step ${draft['savedStep'] ?? 1}",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFF94A3B8), size: 20),
+                              onPressed: () => _deleteDraft(draftId),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => _resumeDraft(draft),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0056D2),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: Text(
+                                "Resume",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            }
+
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 36.0),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.cloud_done_outlined,
+                    size: 48,
+                    color: Color(0xFF94A3B8),
                   ),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    _generateInstallmentsFromStep3();
-                    setState(() {
-                      _currentStep = 4;
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0056D2),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                  const SizedBox(height: 14),
+                  Text(
+                    "No In-Progress Drafts",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
                     ),
                   ),
-                  child: Text(
-                    "Resume",
+                  const SizedBox(height: 8),
+                  Text(
+                    "When you start onboarding a student and save as draft, progress will appear here.",
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 13,
-                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF64748B),
                     ),
                   ),
-                ),
-              ],
-            ),
-          )
-        else
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 36.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              children: [
-                const Icon(
-                  Icons.cloud_done_outlined,
-                  size: 48,
-                  color: Color(0xFF94A3B8),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  "No In-Progress Drafts",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "When you start onboarding a student and press back, progress will auto-save to cloud and appear here.",
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    color: const Color(0xFF64748B),
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -516,25 +1654,6 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
             color: const Color(0xFF0056D2),
           ),
         ),
-        const SizedBox(height: 20),
-
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Text(
-            "Please provide your academic and contact details to start your stay application. This information will be used for your official resident profile.",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w400,
-              color: const Color(0xFF475569),
-              height: 1.45,
-            ),
-          ),
-        ),
         const SizedBox(height: 24),
 
         Text(
@@ -551,36 +1670,97 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(
+              color: _profilePhotoBytes != null ? const Color(0xFF0056D2) : const Color(0xFFE2E8F0),
+              width: _profilePhotoBytes != null ? 1.5 : 1.0,
+            ),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: const Color(0xFFE2E8F0),
-                child: Icon(
-                  _profilePhotoUploaded ? Icons.check_circle_rounded : Icons.person_rounded,
-                  size: 32,
-                  color: _profilePhotoUploaded ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
-                ),
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: const Color(0xFFEEF2FF),
+                    backgroundImage: _profilePhotoBytes != null ? MemoryImage(_profilePhotoBytes!) : null,
+                    child: _isUploadingPhoto
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Color(0xFF0056D2),
+                            ),
+                          )
+                        : (_profilePhotoBytes == null
+                            ? Icon(
+                                _profilePhotoUploaded ? Icons.check_circle_rounded : Icons.person_rounded,
+                                size: 34,
+                                color: _profilePhotoUploaded ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
+                              )
+                            : null),
+                  ),
+                  if (_profilePhotoBytes != null && !_isUploadingPhoto)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF16A34A),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.check_rounded, color: Colors.white, size: 12),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      "Upload Resident Photo",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0F172A),
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            "Upload Resident Photo",
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                        if (_profilePhotoBytes != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDCFCE7),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              "Ready",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF16A34A),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      "Take photo via camera or select from gallery",
+                      _isUploadingPhoto
+                          ? "Uploading to server..."
+                          : (_profilePhotoBytes != null
+                              ? "Photo attached. You can retake if needed."
+                              : "Take photo via camera or select from device"),
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
                         color: const Color(0xFF64748B),
@@ -592,15 +1772,19 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                       runSpacing: 8,
                       children: [
                         ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _profilePhotoUploaded = true;
-                            });
-                            _showSnackbar("Profile photo selected!");
-                          },
-                          icon: const Icon(Icons.camera_alt_rounded, size: 16),
+                          onPressed: _isUploadingPhoto ? null : _capturePhotoFromCamera,
+                          icon: _isUploadingPhoto
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.camera_alt_rounded, size: 16),
                           label: Text(
-                            "Choose Photo",
+                            _profilePhotoBytes != null ? "Retake Photo" : "Choose Photo",
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
@@ -615,26 +1799,67 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                             ),
                           ),
                         ),
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            _showSnackbar("Photo step skipped for later.");
-                          },
-                          icon: const Icon(Icons.access_time_rounded, size: 15),
-                          label: Text(
-                            "Add Later",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF64748B),
+                        if (_profilePhotoBytes != null)
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _profilePhotoBytes = null;
+                                _profilePhotoUrl = null;
+                                _profilePhotoUploaded = false;
+                                _profilePhotoAddLater = false;
+                              });
+                              _showSnackbar("Photo removed");
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded, size: 15, color: Colors.redAccent),
+                            label: Text(
+                              "Remove",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFFECACA)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          )
+                        else
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _profilePhotoAddLater = !_profilePhotoAddLater;
+                              });
+                              if (_profilePhotoAddLater) {
+                                _showSnackbar("Profile photo marked as 'Add Later'.");
+                              }
+                            },
+                            icon: Icon(
+                              _profilePhotoAddLater ? Icons.check_circle_rounded : Icons.access_time_rounded,
+                              size: 15,
+                              color: _profilePhotoAddLater ? const Color(0xFF16A34A) : const Color(0xFF475569),
+                            ),
+                            label: Text(
+                              _profilePhotoAddLater ? "Marked: Add Later" : "Add Later",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _profilePhotoAddLater ? const Color(0xFF16A34A) : const Color(0xFF475569),
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _profilePhotoAddLater ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: BorderSide(
+                                  color: _profilePhotoAddLater ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
+                                ),
+                              ),
                             ),
                           ),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFCBD5E1)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ],
@@ -645,18 +1870,18 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 24),
 
-        _buildInputLabel("Full Name"),
+        _buildInputLabel("Full Name *"),
         const SizedBox(height: 6),
         TextField(
           controller: _fullNameController,
           decoration: _buildInputDecoration(
-            hintText: "Enter your legal full name",
+            hintText: "Enter your legal full name (Mandatory)",
             prefixIcon: Icons.person_outline_rounded,
           ),
         ),
         const SizedBox(height: 18),
 
-        _buildInputLabel("Mobile Number (India +91)"),
+        _buildInputLabel("Mobile Number (India +91) *"),
         const SizedBox(height: 6),
         Row(
           children: [
@@ -689,30 +1914,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 controller: _mobileController,
                 keyboardType: TextInputType.phone,
                 decoration: _buildInputDecoration(
-                  hintText: "9876543210",
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 52,
-              child: OutlinedButton(
-                onPressed: () {
-                  _showSnackbar("OTP sent to mobile number!");
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF0056D2), width: 1.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  "Resend",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF0056D2),
-                  ),
+                  hintText: "10-digit mobile number",
                 ),
               ),
             ),
@@ -720,112 +1922,46 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 18),
 
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "OTP Verification",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => _showSnackbar("OTP resent to mobile!"),
-                    child: Text(
-                      "Resend OTP",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF2563EB),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _otpController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.shield_outlined, color: Color(0xFF64748B), size: 20),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.arrow_forward_rounded, color: Color(0xFF0056D2)),
-                    onPressed: () {
-                      _showSnackbar("OTP verified successfully!");
-                    },
-                  ),
-                  hintText: "Enter 6-digit OTP",
-                  hintStyle: GoogleFonts.plusJakartaSans(fontSize: 14, color: const Color(0xFF94A3B8)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF0056D2), width: 1.8),
-                  ),
-                  fillColor: Colors.white,
-                  filled: true,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-
-        _buildInputLabel("Email ID"),
+        _buildInputLabel("Email ID *"),
         const SizedBox(height: 6),
         TextField(
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
           decoration: _buildInputDecoration(
-            hintText: "student@university.edu",
+            hintText: "student@university.edu (Compulsory)",
             prefixIcon: Icons.mail_outline_rounded,
           ),
         ),
         const SizedBox(height: 18),
 
-        _buildInputLabel("College Registration Number"),
+        _buildInputLabel("College Registration Number *"),
         const SizedBox(height: 6),
         TextField(
           controller: _regNoController,
           decoration: _buildInputDecoration(
-            hintText: "Enter registration number or roll no",
+            hintText: "Registration or Roll number (Compulsory)",
             prefixIcon: Icons.badge_outlined,
           ),
         ),
         const SizedBox(height: 18),
 
-        _buildInputLabel("Course"),
+        _buildInputLabel("Course *"),
         const SizedBox(height: 6),
         TextField(
           controller: _courseController,
           decoration: _buildInputDecoration(
-            hintText: "e.g. B.Tech / B.Sc / MBA",
+            hintText: "e.g. B.Tech / B.Sc / MBA (Compulsory)",
             prefixIcon: Icons.school_outlined,
           ),
         ),
         const SizedBox(height: 18),
 
-        _buildInputLabel("Branch"),
+        _buildInputLabel("Branch / Specialization *"),
         const SizedBox(height: 6),
         TextField(
           controller: _branchController,
           decoration: _buildInputDecoration(
-            hintText: "e.g. Computer Science & Engineering",
+            hintText: "e.g. Computer Science & Engineering / AI & ML",
             prefixIcon: Icons.account_tree_outlined,
           ),
         ),
@@ -836,6 +1972,35 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           height: 52,
           child: ElevatedButton(
             onPressed: () {
+              if (_profilePhotoBytes == null && !_profilePhotoUploaded && !_profilePhotoAddLater) {
+                _showSnackbar("Please upload Profile Photo or select 'Add Later'", isSuccess: false);
+                return;
+              }
+              if (_fullNameController.text.trim().isEmpty) {
+                _showSnackbar("Please enter student's legal full name", isSuccess: false);
+                return;
+              }
+              final phoneDigits = _mobileController.text.trim().replaceAll(RegExp(r'\D'), '');
+              if (phoneDigits.length < 10) {
+                _showSnackbar("Please enter a valid 10-digit mobile number", isSuccess: false);
+                return;
+              }
+              if (_emailController.text.trim().isEmpty || !_emailController.text.contains('@')) {
+                _showSnackbar("Please enter a valid email address", isSuccess: false);
+                return;
+              }
+              if (_regNoController.text.trim().isEmpty) {
+                _showSnackbar("Please enter College Registration Number", isSuccess: false);
+                return;
+              }
+              if (_courseController.text.trim().isEmpty) {
+                _showSnackbar("Please enter Course", isSuccess: false);
+                return;
+              }
+              if (_branchController.text.trim().isEmpty) {
+                _showSnackbar("Please enter Branch / Specialization", isSuccess: false);
+                return;
+              }
               setState(() {
                 _currentStep = 2;
               });
@@ -941,68 +2106,78 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 20),
 
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Text(
-            "Please provide digital copies of your identification documents. High-resolution photos or PDF scans are preferred.",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w400,
-              color: const Color(0xFF475569),
-              height: 1.45,
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              "College ID Card",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0F172A),
+            Expanded(
+              child: Text(
+                "College ID Card *",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
+                ),
               ),
             ),
-            GestureDetector(
-              onTap: () => _showSnackbar("College ID step skipped for later."),
-              child: Row(
-                children: [
-                  const Icon(Icons.access_time_rounded, size: 14, color: Color(0xFF2563EB)),
-                  const SizedBox(width: 4),
-                  Text(
-                    "Add Later",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF2563EB),
-                    ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _collegeIdAddLater = !_collegeIdAddLater;
+                });
+                if (_collegeIdAddLater) {
+                  _showSnackbar("College ID marked as 'Add Later'.");
+                }
+              },
+              icon: Icon(
+                _collegeIdAddLater ? Icons.check_circle_rounded : Icons.access_time_rounded,
+                size: 13,
+                color: _collegeIdAddLater ? const Color(0xFF16A34A) : const Color(0xFF475569),
+              ),
+              label: Text(
+                _collegeIdAddLater ? "Marked: Add Later" : "Add Later",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: _collegeIdAddLater ? const Color(0xFF16A34A) : const Color(0xFF475569),
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _collegeIdAddLater ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: _collegeIdAddLater ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
                   ),
-                ],
+                ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
         _buildUploadCard(
-          title: "Click to Upload College ID Card",
+          title: _collegeIdAddLater ? "College ID (Marked for Add Later)" : "Click to Upload College ID Card",
           subtitle: "📸 Take Photo with Camera or 📁 Choose File",
           icon: Icons.note_add_rounded,
           iconBg: const Color(0xFFEEF2FF),
           iconColor: const Color(0xFF4F46E5),
           isUploaded: _collegeIdUploaded,
+          isUploading: _isUploadingCollegeId,
+          previewBytes: _collegeIdBytes,
           onTap: () {
+            setState(() => _collegeIdAddLater = false);
+            _showDocumentSourceSheet("College ID");
+          },
+          onRemove: () {
             setState(() {
-              _collegeIdUploaded = !_collegeIdUploaded;
+              _collegeIdBytes = null;
+              _collegeIdUrl = null;
+              _collegeIdUploaded = false;
+              _collegeIdAddLater = false;
             });
-            _showSnackbar(_collegeIdUploaded ? "College ID Card uploaded!" : "College ID Card removed.");
+            _showSnackbar("College ID Card removed.");
           },
         ),
         const SizedBox(height: 24),
@@ -1010,47 +2185,76 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              "Government Authorized ID\n(Aadhar, PAN, DL)",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0F172A),
-                height: 1.2,
+            Expanded(
+              child: Text(
+                "Government Authorized ID *\n(Aadhar, PAN, DL)",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
+                  height: 1.2,
+                ),
               ),
             ),
-            GestureDetector(
-              onTap: () => _showSnackbar("Government ID step skipped for later."),
-              child: Row(
-                children: [
-                  const Icon(Icons.access_time_rounded, size: 14, color: Color(0xFF2563EB)),
-                  const SizedBox(width: 4),
-                  Text(
-                    "Add Later",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF2563EB),
-                    ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _govtIdAddLater = !_govtIdAddLater;
+                });
+                if (_govtIdAddLater) {
+                  _showSnackbar("Government ID marked as 'Add Later'.");
+                }
+              },
+              icon: Icon(
+                _govtIdAddLater ? Icons.check_circle_rounded : Icons.access_time_rounded,
+                size: 13,
+                color: _govtIdAddLater ? const Color(0xFF16A34A) : const Color(0xFF475569),
+              ),
+              label: Text(
+                _govtIdAddLater ? "Marked: Add Later" : "Add Later",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: _govtIdAddLater ? const Color(0xFF16A34A) : const Color(0xFF475569),
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _govtIdAddLater ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: _govtIdAddLater ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
                   ),
-                ],
+                ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
         _buildUploadCard(
-          title: "Click to Upload Government Authorized ID",
+          title: _govtIdAddLater ? "Government ID (Marked for Add Later)" : "Click to Upload Government Authorized ID",
           subtitle: "📸 Take Photo with Camera or 📁 Choose File",
           icon: Icons.verified_user_rounded,
           iconBg: const Color(0xFFDCFCE7),
           iconColor: const Color(0xFF16A34A),
           isUploaded: _govtIdUploaded,
+          isUploading: _isUploadingGovtId,
+          previewBytes: _govtIdBytes,
           onTap: () {
+            setState(() => _govtIdAddLater = false);
+            _showDocumentSourceSheet("Government ID");
+          },
+          onRemove: () {
             setState(() {
-              _govtIdUploaded = !_govtIdUploaded;
+              _govtIdBytes = null;
+              _govtIdUrl = null;
+              _govtIdUploaded = false;
+              _govtIdAddLater = false;
             });
-            _showSnackbar(_govtIdUploaded ? "Government ID uploaded!" : "Government ID removed.");
+            _showSnackbar("Government ID removed.");
           },
         ),
         const SizedBox(height: 28),
@@ -1077,7 +2281,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         const SizedBox(height: 20),
 
         // Selected Building Dropdown
-        _buildInputLabel("Selected Building"),
+        _buildInputLabel("Selected Building *"),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1091,7 +2295,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               value: _selectedBuilding,
               isExpanded: true,
               hint: Text(
-                "Choose a building",
+                "Choose a building (Mandatory)",
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 14,
                   color: const Color(0xFF94A3B8),
@@ -1121,15 +2325,46 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 20),
 
-        // Room Number Field
-        _buildInputLabel("Room Number"),
-        const SizedBox(height: 6),
-        TextField(
-          controller: _roomNumberController,
-          decoration: _buildInputDecoration(
-            hintText: "e.g. 402-A",
-            suffixIcon: Icons.door_sliding_outlined,
-          ),
+        // Room & Bed Assignment Row
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInputLabel("Room Number *"),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _roomNumberController,
+                    decoration: _buildInputDecoration(
+                      hintText: "e.g. 402-A (Mandatory)",
+                      suffixIcon: Icons.door_sliding_outlined,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInputLabel("Bed Number"),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _bedNumberController,
+                    decoration: _buildInputDecoration(
+                      hintText: "e.g. Bed 1 / A",
+                      suffixIcon: Icons.bed_outlined,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 32),
 
@@ -1169,6 +2404,22 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
+                    if (_collegeIdBytes == null && !_collegeIdUploaded && !_collegeIdAddLater) {
+                      _showSnackbar("Please upload College ID Card or select 'Add Later'", isSuccess: false);
+                      return;
+                    }
+                    if (_govtIdBytes == null && !_govtIdUploaded && !_govtIdAddLater) {
+                      _showSnackbar("Please upload Government ID or select 'Add Later'", isSuccess: false);
+                      return;
+                    }
+                    if (_selectedBuilding == null || _selectedBuilding!.isEmpty) {
+                      _showSnackbar("Please select a building", isSuccess: false);
+                      return;
+                    }
+                    if (_roomNumberController.text.trim().isEmpty) {
+                      _showSnackbar("Please enter a room number", isSuccess: false);
+                      return;
+                    }
                     setState(() {
                       _currentStep = 3;
                     });
@@ -1256,20 +2507,21 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         const SizedBox(height: 24),
 
         Text(
-          "Choose Your Plan",
+          "Choose Your Plan *",
           style: GoogleFonts.plusJakartaSans(
             fontSize: 15,
             fontWeight: FontWeight.w700,
             color: const Color(0xFF0F172A),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Container(
-          height: 52,
-          padding: const EdgeInsets.all(4),
+          height: 56,
+          padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: Row(
             children: [
@@ -1282,11 +2534,22 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
                       color: _selectedPlan == "Rent Only"
                           ? const Color(0xFF0056D2)
                           : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: _selectedPlan == "Rent Only"
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFF0056D2).withValues(alpha: 0.25),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
+                          : null,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1300,7 +2563,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                         Text(
                           "Rent Only",
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14.5,
+                            fontSize: 14,
                             fontWeight: FontWeight.w700,
                             color: _selectedPlan == "Rent Only" ? Colors.white : const Color(0xFF475569),
                           ),
@@ -1310,6 +2573,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
               Expanded(
                 child: GestureDetector(
                   onTap: () {
@@ -1319,11 +2583,22 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
                       color: _selectedPlan == "Full Package"
                           ? const Color(0xFF0056D2)
                           : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: _selectedPlan == "Full Package"
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFF0056D2).withValues(alpha: 0.25),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
+                          : null,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1337,7 +2612,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                         Text(
                           "Full Package",
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14.5,
+                            fontSize: 14,
                             fontWeight: FontWeight.w700,
                             color: _selectedPlan == "Full Package" ? Colors.white : const Color(0xFF475569),
                           ),
@@ -1363,14 +2638,14 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
 
         if (_selectedPlan == "Rent Only") ...[
           Text(
-            "Payment Frequency",
+            "Payment Frequency *",
             style: GoogleFonts.plusJakartaSans(
               fontSize: 15,
               fontWeight: FontWeight.w700,
               color: const Color(0xFF0F172A),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -1381,41 +2656,23 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     });
                   },
                   child: Container(
-                    padding: const EdgeInsets.all(16),
+                    height: 48,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: _paymentFrequency == "Pay Monthly"
-                          ? const Color(0xFFEFF6FF)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
+                      color: _paymentFrequency == "Pay Monthly" ? const Color(0xFFEFF6FF) : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: _paymentFrequency == "Pay Monthly"
-                            ? const Color(0xFF0056D2)
-                            : const Color(0xFFE2E8F0),
-                        width: _paymentFrequency == "Pay Monthly" ? 2 : 1.2,
+                        color: _paymentFrequency == "Pay Monthly" ? const Color(0xFF0056D2) : const Color(0xFFE2E8F0),
+                        width: _paymentFrequency == "Pay Monthly" ? 1.8 : 1,
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Pay Monthly",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "12 Monthly\nInstallments",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF64748B),
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      "Pay Monthly",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _paymentFrequency == "Pay Monthly" ? const Color(0xFF0056D2) : const Color(0xFF0F172A),
+                      ),
                     ),
                   ),
                 ),
@@ -1429,41 +2686,23 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     });
                   },
                   child: Container(
-                    padding: const EdgeInsets.all(16),
+                    height: 48,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: _paymentFrequency == "Whole Year"
-                          ? const Color(0xFFEFF6FF)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
+                      color: _paymentFrequency == "Whole Year" ? const Color(0xFFEFF6FF) : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: _paymentFrequency == "Whole Year"
-                            ? const Color(0xFF0056D2)
-                            : const Color(0xFFE2E8F0),
-                        width: _paymentFrequency == "Whole Year" ? 2 : 1.2,
+                        color: _paymentFrequency == "Whole Year" ? const Color(0xFF0056D2) : const Color(0xFFE2E8F0),
+                        width: _paymentFrequency == "Whole Year" ? 1.8 : 1,
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Whole Year",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Custom\nInstallments",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF64748B),
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      "Whole Year",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _paymentFrequency == "Whole Year" ? const Color(0xFF0056D2) : const Color(0xFF0F172A),
+                      ),
                     ),
                   ),
                 ),
@@ -1486,7 +2725,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
             const SizedBox(height: 20),
           ],
 
-          _buildInputLabel("Total Monthly Rent (₹)"),
+          _buildInputLabel("Monthly Rent (₹) *"),
           const SizedBox(height: 6),
           TextField(
             controller: _monthlyRentController,
@@ -1498,7 +2737,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           ),
           const SizedBox(height: 18),
 
-          _buildInputLabel("Security Deposit (₹)"),
+          _buildInputLabel("Security Deposit (₹) *"),
           const SizedBox(height: 6),
           TextField(
             controller: _securityDepositController,
@@ -1508,57 +2747,142 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               prefixIcon: Icons.shield_outlined,
             ),
           ),
-        ],
-
-        if (_selectedPlan == "Full Package") ...[
-          _buildInputLabel("Total Fees for Academic Year (₹)"),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _totalAcademicFeesController,
-            keyboardType: TextInputType.number,
-            decoration: _buildInputDecoration(
-              hintText: "₹ 1,50,000",
-              prefixIcon: Icons.payments_outlined,
+          const SizedBox(height: 4),
+          Text(
+            "Refundable at the end of tenancy",
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              color: const Color(0xFF64748B),
             ),
           ),
-          const SizedBox(height: 20),
-
+        ] else ...[
           Text(
-            "Number of Installments",
+            "Total Academic Package Fee (₹) *",
             style: GoogleFonts.plusJakartaSans(
               fontSize: 15,
               fontWeight: FontWeight.w700,
               color: const Color(0xFF0F172A),
             ),
           ),
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              _buildInstallmentSegment("Single"),
-              const SizedBox(width: 8),
-              _buildInstallmentSegment("Quarterly"),
-              const SizedBox(width: 8),
-              _buildInstallmentSegment("Custom"),
-            ],
+          const SizedBox(height: 6),
+          TextField(
+            controller: _totalAcademicFeesController,
+            keyboardType: TextInputType.number,
+            onChanged: (val) {
+              setState(() {
+                _generateInstallmentsFromStep3();
+              });
+            },
+            decoration: _buildInputDecoration(
+              hintText: "₹ 1,50,000",
+              prefixIcon: Icons.currency_rupee_rounded,
+            ),
           ),
           const SizedBox(height: 20),
 
-          if (_packageInstallmentType == "Custom") ...[
-            _buildInputLabel("Enter Custom Number of Installments"),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _customInstallmentsController,
-              keyboardType: TextInputType.number,
-              decoration: _buildInputDecoration(
-                hintText: "6",
-                prefixIcon: Icons.format_list_numbered_rounded,
+          // Number of Installments Selector
+          _buildInputLabel("Number of Installments *"),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildInstallmentOptionChip("1 (Full Pay)", 1),
+                const SizedBox(width: 8),
+                _buildInstallmentOptionChip("2 (Semester)", 2),
+                const SizedBox(width: 8),
+                _buildInstallmentOptionChip("3 (Tri-Term)", 3),
+                const SizedBox(width: 8),
+                _buildInstallmentOptionChip("4 (Quarterly)", 4),
+                const SizedBox(width: 8),
+                _buildInstallmentOptionChip("Custom", -1),
+              ],
+            ),
+          ),
+          if (_isCustomPackageInstallments) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFCBD5E1)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Custom Installments Count",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                        Text(
+                          "Choose between 1 to 12 installments",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11.5,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: _packageInstallmentsCount > 1
+                            ? () {
+                                setState(() {
+                                  _packageInstallmentsCount--;
+                                  _customInstallmentsController.text = "$_packageInstallmentsCount";
+                                  _generateInstallmentsFromStep3();
+                                });
+                              }
+                            : null,
+                        icon: const Icon(Icons.remove_circle_outline_rounded),
+                        color: const Color(0xFF0056D2),
+                      ),
+                      Container(
+                        width: 36,
+                        alignment: Alignment.center,
+                        child: Text(
+                          "$_packageInstallmentsCount",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _packageInstallmentsCount < 12
+                            ? () {
+                                setState(() {
+                                  _packageInstallmentsCount++;
+                                  _customInstallmentsController.text = "$_packageInstallmentsCount";
+                                  _generateInstallmentsFromStep3();
+                                });
+                              }
+                            : null,
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                        color: const Color(0xFF0056D2),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 20),
           ],
+          const SizedBox(height: 12),
+          _buildPackageBreakdownBanner(),
+          const SizedBox(height: 20),
 
-          _buildInputLabel("Premium Security Deposit (₹)"),
+          _buildInputLabel("Premium Security Deposit (₹) *"),
           const SizedBox(height: 6),
           TextField(
             controller: _premiumDepositController,
@@ -1597,24 +2921,44 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                "Unit Summary",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0056D2),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Unit Summary",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0056D2),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _selectedBuilding ?? "Lakshya",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0056D2),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: Image.network(
-                  "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=600",
-                  height: 140,
+                child: Image.asset(
+                  _getBuildingAsset(_selectedBuilding),
+                  height: 160,
                   width: double.infinity,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) => Container(
-                    height: 140,
+                    height: 160,
                     color: const Color(0xFFCBD5E1),
                     child: const Icon(Icons.business_rounded, color: Colors.white, size: 40),
                   ),
@@ -1622,7 +2966,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                "Lakshya — Room 101",
+                "${_selectedBuilding ?? 'Lakshya'} — Room ${_roomNumberController.text.trim().isEmpty ? '101' : _roomNumberController.text.trim()}",
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -1631,7 +2975,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                "Lakshya Residency",
+                "${_selectedBuilding ?? 'Lakshya'} Residency",
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w500,
@@ -1645,18 +2989,18 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "Lease Term",
+                    "Plan Selected",
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 13.5,
                       color: const Color(0xFF64748B),
                     ),
                   ),
                   Text(
-                    "12 Months",
+                    _selectedPlan,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
+                      color: const Color(0xFF0056D2),
                     ),
                   ),
                 ],
@@ -1666,14 +3010,14 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "Move-in Date",
+                    "Lease Term",
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 13.5,
                       color: const Color(0xFF64748B),
                     ),
                   ),
                   Text(
-                    "Sept 1st, 2024",
+                    "12 Months",
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w800,
@@ -1723,6 +3067,22 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
+                    if (_selectedPlan == "Rent Only" && _monthlyRentController.text.trim().isEmpty) {
+                      _showSnackbar("Please enter monthly rent", isSuccess: false);
+                      return;
+                    }
+                    if (_selectedPlan == "Rent Only" && _securityDepositController.text.trim().isEmpty) {
+                      _showSnackbar("Please enter security deposit", isSuccess: false);
+                      return;
+                    }
+                    if (_selectedPlan == "Full Package" && _totalAcademicFeesController.text.trim().isEmpty) {
+                      _showSnackbar("Please enter total academic fee", isSuccess: false);
+                      return;
+                    }
+                    if (_selectedPlan == "Full Package" && _premiumDepositController.text.trim().isEmpty) {
+                      _showSnackbar("Please enter premium deposit", isSuccess: false);
+                      return;
+                    }
                     _generateInstallmentsFromStep3();
                     setState(() {
                       _currentStep = 4;
@@ -1815,68 +3175,57 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    "Installment Breakdown\nSchedule",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0056D2),
-                      height: 1.25,
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        final idx = _installments.length + 1;
-                        _installments.add({
-                          "title": "Installment $idx",
-                          "amount": "25000",
-                          "dueDate": "24/${idx < 10 ? '0$idx' : '$idx'}/2024",
-                        });
-                      });
-                      _showSnackbar("Added new custom installment!");
-                    },
-                    icon: const Icon(Icons.add_rounded, size: 18, color: Color(0xFF0056D2)),
-                    label: Text(
-                      "Add",
+                  Expanded(
+                    child: Text(
+                      "Installment Schedule",
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14,
+                        fontSize: 16,
                         fontWeight: FontWeight.w800,
                         color: const Color(0xFF0056D2),
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _showAddInstallmentDialog(),
+                    icon: const Icon(Icons.add_rounded, size: 16),
+                    label: Text(
+                      "Add",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0056D2),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                "Security Deposit: ₹ $secDepositVal | Plan: $_selectedPlan",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF64748B),
-                ),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               // Security Deposit Card (Amber Bordered)
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFFBEB),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
                 ),
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.shield_outlined, color: Color(0xFFD97706), size: 20),
+                        const Icon(Icons.shield_outlined, color: Color(0xFFD97706), size: 18),
                         const SizedBox(width: 8),
                         Text(
                           "Security Deposit",
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
+                            fontSize: 14.5,
                             fontWeight: FontWeight.w800,
                             color: const Color(0xFF92400E),
                           ),
@@ -1889,7 +3238,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            "Deposit",
+                            "One-time",
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -1897,11 +3246,9 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                             ),
                           ),
                         ),
-                        const Spacer(),
-                        const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 20),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         Expanded(
@@ -1909,27 +3256,27 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Deposit Amount (₹)",
+                                "Deposit Amount",
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 12,
+                                  fontSize: 11.5,
                                   fontWeight: FontWeight.w600,
                                   color: const Color(0xFF92400E),
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Container(
-                                height: 48,
-                                padding: const EdgeInsets.symmetric(horizontal: 14),
+                                height: 44,
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
                                 alignment: Alignment.centerLeft,
                                 decoration: BoxDecoration(
                                   color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   border: Border.all(color: const Color(0xFFFCD34D)),
                                 ),
                                 child: Text(
                                   "₹ $secDepositVal",
                                   style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 14.5,
+                                    fontSize: 14,
                                     fontWeight: FontWeight.w800,
                                     color: const Color(0xFF0F172A),
                                   ),
@@ -1944,35 +3291,30 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Due On Check-In",
+                                "Due Timeline",
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 12,
+                                  fontSize: 11.5,
                                   fontWeight: FontWeight.w600,
                                   color: const Color(0xFF92400E),
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Container(
-                                height: 48,
-                                padding: const EdgeInsets.symmetric(horizontal: 14),
+                                height: 44,
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                alignment: Alignment.centerLeft,
                                 decoration: BoxDecoration(
                                   color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   border: Border.all(color: const Color(0xFFFCD34D)),
                                 ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      "24/08/24",
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFF0056D2)),
-                                  ],
+                                child: Text(
+                                  "At Move-In",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                  ),
                                 ),
                               ),
                             ],
@@ -1990,33 +3332,46 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _installments.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 12),
+                separatorBuilder: (context, index) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final item = _installments[index];
                   return Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
                     child: Column(
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.calendar_today_rounded, color: Color(0xFF0056D2), size: 18),
+                            const Icon(Icons.receipt_long_rounded, color: Color(0xFF0056D2), size: 18),
                             const SizedBox(width: 8),
-                            Text(
-                              item['title'] ?? "Installment ${index + 1}",
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF0F172A),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => _showEditInstallmentNameDialog(index),
+                                child: Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        item['title'] ?? "Installment ${index + 1}",
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 14.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0056D2)),
+                                  ],
+                                ),
                               ),
                             ),
-                            const Spacer(),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 20),
+                              icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 18),
                               onPressed: () {
                                 setState(() {
                                   _installments.removeAt(index);
@@ -2026,7 +3381,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         Row(
                           children: [
                             Expanded(
@@ -2036,55 +3391,65 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                                   Text(
                                     "Amount (₹)",
                                     style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 12,
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w600,
                                       color: const Color(0xFF64748B),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  TextField(
-                                    controller: TextEditingController(text: item['amount']),
+                                  TextFormField(
+                                    initialValue: item['amount'],
                                     keyboardType: TextInputType.number,
-                                    decoration: _buildInputDecoration(hintText: "₹ 25000"),
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w700),
+                                    decoration: _buildInputDecoration(hintText: "25000"),
+                                    onChanged: (val) {
+                                      item['amount'] = val;
+                                    },
                                   ),
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "Due Date / Deadline",
+                                    "Due Date",
                                     style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 12,
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w600,
                                       color: const Color(0xFF64748B),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Container(
-                                    height: 48,
-                                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: const Color(0xFFCBD5E1)),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          item['dueDate'] ?? "24/08/24",
-                                          style: GoogleFonts.plusJakartaSans(
-                                            fontSize: 13.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: const Color(0xFF0F172A),
+                                  GestureDetector(
+                                    onTap: () => _pickDueDate(index),
+                                    child: Container(
+                                      height: 48,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              item['dueDate'] ?? "24/08/2024",
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF0F172A),
+                                              ),
+                                            ),
                                           ),
-                                        ),
-                                        const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFF0056D2)),
-                                      ],
+                                          const Icon(Icons.calendar_month_rounded, size: 16, color: Color(0xFF0056D2)),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -2097,49 +3462,14 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   );
                 },
               ),
-              const SizedBox(height: 16),
-
-              // Add Custom Installment Button
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      final idx = _installments.length + 1;
-                      _installments.add({
-                        "title": "Installment $idx",
-                        "amount": "25000",
-                        "dueDate": "24/${idx < 10 ? '0$idx' : '$idx'}/2024",
-                      });
-                    });
-                    _showSnackbar("Added custom installment!");
-                  },
-                  icon: const Icon(Icons.add_circle_outline_rounded, size: 20, color: Color(0xFF0056D2)),
-                  label: Text(
-                    "Add Custom Installment",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0056D2),
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF0056D2), width: 1.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
         const SizedBox(height: 28),
 
-        // Emergency Contact & Preferences Section Title
+        // Emergency Contact Section
         Text(
-          "Emergency Contact & Preferences",
+          "Emergency Contact Details",
           style: GoogleFonts.plusJakartaSans(
             fontSize: 16,
             fontWeight: FontWeight.w800,
@@ -2148,18 +3478,18 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 16),
 
-        _buildInputLabel("Guardian / Parent Full Name"),
+        _buildInputLabel("Guardian / Parent Full Name *"),
         const SizedBox(height: 6),
         TextField(
           controller: _guardianNameController,
           decoration: _buildInputDecoration(
-            hintText: "Enter guardian name",
+            hintText: "Enter guardian name (Mandatory)",
             prefixIcon: Icons.badge_outlined,
           ),
         ),
         const SizedBox(height: 18),
 
-        _buildInputLabel("Relationship"),
+        _buildInputLabel("Relationship *"),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2198,7 +3528,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 18),
 
-        _buildInputLabel("Emergency Contact Phone (India +91)"),
+        _buildInputLabel("Emergency Contact Phone (India +91) *"),
         const SizedBox(height: 6),
         Row(
           children: [
@@ -2231,7 +3561,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 controller: _guardianPhoneController,
                 keyboardType: TextInputType.phone,
                 decoration: _buildInputDecoration(
-                  hintText: "98765 43210",
+                  hintText: "10-digit guardian number",
                 ),
               ),
             ),
@@ -2240,7 +3570,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         const SizedBox(height: 20),
 
         Text(
-          "Dietary Preference",
+          "Dietary Preference *",
           style: GoogleFonts.plusJakartaSans(
             fontSize: 15,
             fontWeight: FontWeight.w700,
@@ -2358,6 +3688,15 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
+                    if (_guardianNameController.text.trim().isEmpty) {
+                      _showSnackbar("Please enter Guardian / Emergency Contact Name", isSuccess: false);
+                      return;
+                    }
+                    final gPhone = _guardianPhoneController.text.trim().replaceAll(RegExp(r'\D'), '');
+                    if (gPhone.length < 10) {
+                      _showSnackbar("Please enter a valid 10-digit Guardian Contact Number", isSuccess: false);
+                      return;
+                    }
                     setState(() {
                       _currentStep = 5;
                     });
@@ -2394,7 +3733,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   }
 
   // ==========================================
-  // STEP 5 OF 5: INVENTORY & FINAL NOTES (IMAGES 3 & 4)
+  // STEP 5 OF 5: INVENTORY & FINAL NOTES
   // ==========================================
   Widget _buildStep5View() {
     return Column(
@@ -2414,7 +3753,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               ),
             ),
             Text(
-              "FINAL REVIEW & INVENTORY",
+              "INVENTORY & SUMMARY",
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -2426,7 +3765,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          "Inventory & Final Notes",
+          "Inventory & Profile Notes",
           style: GoogleFonts.plusJakartaSans(
             fontSize: 22,
             fontWeight: FontWeight.w800,
@@ -2444,26 +3783,6 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           ),
         ),
         const SizedBox(height: 20),
-
-        // Intro Box
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Text(
-            "Document the condition of provided amenities and record any final negotiation details before completing enrollment.",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w400,
-              color: const Color(0xFF475569),
-              height: 1.45,
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
 
         // Student Inventory Checklist Container
         Container(
@@ -2487,25 +3806,19 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     child: const Icon(Icons.assignment_outlined, color: Color(0xFF0056D2), size: 22),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    "Student Inventory Checklist",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
+                  Expanded(
+                    child: Text(
+                      "Student Room Inventory",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                "Select items provided to the student in their room.",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  color: const Color(0xFF64748B),
-                ),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               // Add Custom Item Input Row
               Row(
@@ -2514,7 +3827,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     child: TextField(
                       controller: _customInventoryController,
                       decoration: InputDecoration(
-                        hintText: "Add custom item (...)",
+                        hintText: "Add room amenity (e.g. Mattress, Lamp)...",
                         hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: const Color(0xFF94A3B8)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         enabledBorder: OutlineInputBorder(
@@ -2532,7 +3845,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   ),
                   const SizedBox(width: 8),
                   SizedBox(
-                    height: 46,
+                    height: 48,
                     child: ElevatedButton.icon(
                       onPressed: () {
                         if (_customInventoryController.text.trim().isNotEmpty) {
@@ -2540,7 +3853,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                             _inventoryItems.add(_customInventoryController.text.trim());
                             _customInventoryController.clear();
                           });
-                          _showSnackbar("Added item to checklist!");
+                          _showSnackbar("Added amenity to inventory!");
                         }
                       },
                       icon: const Icon(Icons.add_rounded, size: 18),
@@ -2609,7 +3922,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 24),
 
-        // Negotiations & Student Notes Container
+        // Negotiations & Student Notes Container (Profile Notes)
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -2628,47 +3941,180 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                       color: const Color(0xFFEFF6FF),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.local_offer_outlined, color: Color(0xFF0056D2), size: 22),
+                    child: const Icon(Icons.note_alt_outlined, color: Color(0xFF0056D2), size: 22),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    "Negotiations & Student\nNotes",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
-                      height: 1.25,
+                  Expanded(
+                    child: Text(
+                      "Student Profile Notes",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                "Capture rent negotiations, special requests, dietary preferences, or behavioral observations.",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  color: const Color(0xFF64748B),
-                  height: 1.4,
+              const SizedBox(height: 14),
+
+              // Attached Notes List
+              if (_attachedNotes.isNotEmpty) ...[
+                Text(
+                  "Attached Notes (${_attachedNotes.length})",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF334155),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _finalNotesController,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  hintText: "Enter final notes, agreed rent discounts, or special requirements here...",
-                  hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: const Color(0xFF94A3B8)),
-                  contentPadding: const EdgeInsets.all(14),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: Color(0xFF0056D2), width: 1.8),
-                  ),
-                  fillColor: const Color(0xFFF8FAFC),
-                  filled: true,
+                const SizedBox(height: 8),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _attachedNotes.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final note = _attachedNotes[index];
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.sticky_note_2_outlined, size: 18, color: Color(0xFF0056D2)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  note,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13.5,
+                                    color: const Color(0xFF0F172A),
+                                    height: 1.35,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        "Admin Note",
+                                        style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF0056D2)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF94A3B8)),
+                            onPressed: () {
+                              setState(() {
+                                _attachedNotes.removeAt(index);
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Unified Modern Note Composer
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _finalNotesController,
+                      maxLines: 3,
+                      minLines: 2,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13.5,
+                        color: const Color(0xFF0F172A),
+                        height: 1.4,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: "Add note regarding room preferences, negotiations, fee concessions, etc...",
+                        hintStyle: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: const Color(0xFF94A3B8),
+                          height: 1.4,
+                        ),
+                        contentPadding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+                        border: InputBorder.none,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.remove_red_eye_outlined, size: 14, color: Color(0xFF64748B)),
+                              const SizedBox(width: 5),
+                              Text(
+                                "Visible on Profile",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              if (_finalNotesController.text.trim().isNotEmpty) {
+                                setState(() {
+                                  _attachedNotes.add(_finalNotesController.text.trim());
+                                  _finalNotesController.clear();
+                                });
+                                _showSnackbar("Note attached to student profile!");
+                              }
+                            },
+                            icon: const Icon(Icons.add_rounded, size: 16),
+                            label: Text(
+                              "Attach Note",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0056D2),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -2676,97 +4122,728 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 32),
 
-        // Step 5 Actions (Back & View Summary)
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 52,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _currentStep = 4;
-                    });
-                  },
-                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                  label: Text(
-                    "Back",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0056D2),
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF0056D2), width: 1.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
+        // Step 5 Actions (Full Width Stacked Action Buttons)
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: _showSummaryReviewModal,
+            icon: const Icon(Icons.rate_review_outlined, size: 20),
+            label: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                "Review Summary & Confirm",
+                maxLines: 1,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        title: Row(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0056D2),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              setState(() {
+                _currentStep = 4;
+              });
+            },
+            icon: const Icon(Icons.arrow_back_rounded, size: 18),
+            label: Text(
+              "Back",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0056D2),
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFF0056D2), width: 1.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- Helper Dialogs for Installments and Summary ---
+
+  Future<void> _pickDueDate(int index) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(Duration(days: (index + 1) * 30)),
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) {
+      final formatted = "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
+      setState(() {
+        _installments[index]["dueDate"] = formatted;
+      });
+    }
+  }
+
+  void _showEditInstallmentNameDialog(int index) {
+    final nameCtrl = TextEditingController(text: _installments[index]["title"]);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Edit Installment Title", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16)),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: _buildInputDecoration(hintText: "e.g. Semester 1 Tuition / Term 1"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameCtrl.text.trim().isNotEmpty) {
+                setState(() {
+                  _installments[index]["title"] = nameCtrl.text.trim();
+                });
+              }
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0056D2), foregroundColor: Colors.white),
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddInstallmentDialog() {
+    final titleCtrl = TextEditingController(text: "Installment ${_installments.length + 1}");
+    final amtCtrl = TextEditingController(text: "25000");
+    String dueDate = "24/08/2024";
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text("Add Custom Installment", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 17)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                decoration: _buildInputDecoration(hintText: "Installment Name"),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amtCtrl,
+                keyboardType: TextInputType.number,
+                decoration: _buildInputDecoration(hintText: "Amount (₹)"),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now().add(const Duration(days: 30)),
+                    firstDate: DateTime(2024),
+                    lastDate: DateTime(2030),
+                  );
+                  if (picked != null) {
+                    setDialogState(() {
+                      dueDate = "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
+                    });
+                  }
+                },
+                child: Container(
+                  height: 48,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Due: $dueDate", style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700)),
+                      const Icon(Icons.calendar_month_rounded, size: 18, color: Color(0xFF0056D2)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (titleCtrl.text.trim().isNotEmpty) {
+                  setState(() {
+                    _installments.add(<String, String>{
+                      "title": titleCtrl.text.trim(),
+                      "amount": amtCtrl.text.trim(),
+                      "dueDate": dueDate,
+                    });
+                  });
+                  _showSnackbar("Added new installment!");
+                  Navigator.pop(ctx);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0056D2), foregroundColor: Colors.white),
+              child: const Text("Add"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSummaryReviewModal() {
+    final fullName = _fullNameController.text.trim().isNotEmpty ? _fullNameController.text.trim() : "Resident";
+    final regNo = _regNoController.text.trim().isNotEmpty ? _regNoController.text.trim() : "REG101";
+    final building = _selectedBuilding ?? "Lakshya";
+    final room = _roomNumberController.text.trim().isNotEmpty ? _roomNumberController.text.trim() : "Room 101";
+    final bed = _bedNumberController.text.trim();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalCtx) => StatefulBuilder(
+        builder: (modalCtx, setModalState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.88,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      "Onboarding Application Summary",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => Navigator.pop(modalCtx),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Building Image Card
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Stack(
                           children: [
-                            const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 28),
-                            const SizedBox(width: 10),
-                            Text(
-                              "Onboarding Complete!",
-                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 18),
+                            Image.asset(
+                              _getBuildingAsset(_selectedBuilding),
+                              height: 150,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (ctx, err, st) => Container(
+                                height: 150,
+                                color: const Color(0xFFCBD5E1),
+                                child: const Icon(Icons.business_rounded, color: Colors.white, size: 40),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 12,
+                              left: 12,
+                              right: 12,
+                              child: Align(
+                                alignment: Alignment.bottomLeft,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.75),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    "$building — $room${bed.isNotEmpty ? ' • Bed $bed' : ''}",
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
                         ),
-                        content: Text(
-                          "Student profile for '${_fullNameController.text.isNotEmpty ? _fullNameController.text : 'Resident'}' has been created and saved to cloud successfully.",
-                          style: GoogleFonts.plusJakartaSans(fontSize: 14, color: const Color(0xFF475569)),
-                        ),
-                        actions: [
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              Navigator.pop(context);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0056D2),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            child: const Text("Done"),
-                          ),
-                        ],
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0056D2),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: Text(
-                    "View Summary",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                      const SizedBox(height: 16),
+
+                      // Personal & Academic Card
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildSummaryRow("Student Name", fullName),
+                            const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Registration No.", regNo),
+                            const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Course", _courseController.text),
+                            const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Branch / Specialization", _branchController.text),
+                            const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Mobile", "+91 ${_mobileController.text}"),
+                            const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Email", _emailController.text),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Documents & Verification Status (With Live Image Previews)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    "Attached Documents & Photos",
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF334155)),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEFF6FF),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    "3 Documents",
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF0056D2)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            _buildSummaryDocItem(
+                              "Student Profile Photo",
+                              _profilePhotoBytes,
+                              _profilePhotoUrl,
+                              _profilePhotoAddLater,
+                              Icons.face_rounded,
+                            ),
+                            _buildSummaryDocItem(
+                              "College ID Card",
+                              _collegeIdBytes,
+                              _collegeIdUrl,
+                              _collegeIdAddLater,
+                              Icons.badge_outlined,
+                            ),
+                            _buildSummaryDocItem(
+                              "Government Authorized ID",
+                              _govtIdBytes,
+                              _govtIdUrl,
+                              _govtIdAddLater,
+                              Icons.verified_user_outlined,
+                              isLast: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Plan & Financial Breakdown
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Lease Plan & Installments",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF334155)),
+                            ),
+                            const SizedBox(height: 8),
+                            _buildSummaryRow("Plan", _selectedPlan),
+                            const Divider(height: 14, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Monthly Rent", "₹ ${_monthlyRentController.text}"),
+                            const Divider(height: 14, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Security Deposit", "₹ ${_securityDepositController.text}"),
+                            const Divider(height: 14, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Installments Count", "${_installments.length} Installments"),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Guardian & Emergency Contact
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildSummaryRow("Guardian", _guardianNameController.text),
+                            const Divider(height: 14, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Relationship", _guardianRelationship),
+                            const Divider(height: 14, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Guardian Contact", "+91 ${_guardianPhoneController.text}"),
+                            const Divider(height: 14, color: Color(0xFFE2E8F0)),
+                            _buildSummaryRow("Dietary Preference", _dietaryPreference),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Room Inventory List
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Room Inventory Checklist (${_inventoryItems.length} items)",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF334155)),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: _inventoryItems.map((item) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  "✓ $item",
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0056D2)),
+                                ),
+                              )).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Attached Notes
+                      if (_attachedNotes.isNotEmpty) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Attached Notes (${_attachedNotes.length})",
+                                style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF334155)),
+                              ),
+                              const SizedBox(height: 8),
+                              ..._attachedNotes.map((note) => Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(Icons.circle, size: 6, color: Color(0xFF0056D2)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        note,
+                                        style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF334155)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Password Email Notice Banner
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.mark_email_read_outlined, color: Color(0xFF0056D2), size: 22),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                "Password will be sent to student's mail",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF003896),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
                   ),
                 ),
               ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _isSavingStudent
+                      ? null
+                      : () {
+                          Navigator.pop(modalCtx);
+                          _handleCompleteOnboarding();
+                        },
+                  icon: const Icon(Icons.check_circle_rounded, size: 20),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      "Confirm & Create Student Account",
+                      maxLines: 1,
+                      style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0056D2),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryDocItem(
+    String title,
+    Uint8List? bytes,
+    String? url,
+    bool isAddLater,
+    IconData defaultIcon, {
+    bool isLast = false,
+  }) {
+    final bool hasImage = bytes != null || (url != null && url.isNotEmpty);
+
+    return Container(
+      margin: EdgeInsets.only(bottom: isLast ? 0 : 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: hasImage ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
+          width: hasImage ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Image Preview Thumbnail
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: 58,
+              height: 58,
+              color: const Color(0xFFF1F5F9),
+              child: hasImage
+                  ? (bytes != null
+                      ? Image.memory(
+                          bytes,
+                          width: 58,
+                          height: 58,
+                          fit: BoxFit.cover,
+                        )
+                      : Image.network(
+                          url!,
+                          width: 58,
+                          height: 58,
+                          fit: BoxFit.cover,
+                          errorBuilder: (ctx, err, st) => const Center(
+                            child: Icon(Icons.image_outlined, color: Color(0xFF94A3B8)),
+                          ),
+                        ))
+                  : Center(
+                      child: Icon(
+                        isAddLater ? Icons.access_time_rounded : defaultIcon,
+                        color: isAddLater ? const Color(0xFFD97706) : const Color(0xFF94A3B8),
+                        size: 24,
+                      ),
+                    ),
             ),
-          ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: hasImage
+                        ? const Color(0xFFDCFCE7)
+                        : (isAddLater ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9)),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        hasImage
+                            ? Icons.check_circle_rounded
+                            : (isAddLater ? Icons.access_time_rounded : Icons.info_outline_rounded),
+                        size: 13,
+                        color: hasImage
+                            ? const Color(0xFF16A34A)
+                            : (isAddLater ? const Color(0xFFB45309) : const Color(0xFF64748B)),
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          hasImage ? "Image Attached" : (isAddLater ? "Marked: Add Later" : "Not Provided"),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: hasImage
+                                ? const Color(0xFF16A34A)
+                                : (isAddLater ? const Color(0xFFB45309) : const Color(0xFF64748B)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, {bool isHighlighted = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          flex: 4,
+          child: Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF64748B)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 5,
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: isHighlighted ? const Color(0xFF16A34A) : const Color(0xFF0F172A),
+            ),
+          ),
         ),
       ],
     );
@@ -2821,90 +4898,110 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     required Color iconBg,
     required Color iconColor,
     required bool isUploaded,
+    bool isUploading = false,
+    Uint8List? previewBytes,
     required VoidCallback onTap,
+    VoidCallback? onRemove,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: isUploading ? null : onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         decoration: BoxDecoration(
           color: isUploaded ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isUploaded ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
-            width: 1.5,
+            color: isUploaded ? const Color(0xFF86EFAC) : (isUploading ? const Color(0xFF0056D2) : const Color(0xFFE2E8F0)),
+            width: isUploaded || isUploading ? 1.5 : 1,
           ),
         ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isUploaded ? const Color(0xFFDCFCE7) : iconBg,
-                shape: BoxShape.circle,
+        child: isUploading
+            ? const Column(
+                children: [
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFF0056D2)),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    "Uploading document to cloud...",
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: Color(0xFF0056D2)),
+                  ),
+                ],
+              )
+            : Column(
+                children: [
+                  if (previewBytes != null) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        previewBytes,
+                        height: 120,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: isUploaded ? const Color(0xFFDCFCE7) : iconBg,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isUploaded ? Icons.check_circle_rounded : icon,
+                        color: isUploaded ? const Color(0xFF16A34A) : iconColor,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isUploaded) ...[
+                        const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 18),
+                        const SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: Text(
+                          isUploaded ? "Uploaded Successfully! (Tap to change)" : title,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w800,
+                            color: isUploaded ? const Color(0xFF166534) : const Color(0xFF0056D2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                  if (isUploaded && onRemove != null) ...[
+                    const SizedBox(height: 6),
+                    TextButton.icon(
+                      onPressed: onRemove,
+                      icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
+                      label: Text(
+                        "Remove Document",
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.redAccent),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              child: Icon(
-                isUploaded ? Icons.check_circle_rounded : icon,
-                color: isUploaded ? const Color(0xFF16A34A) : iconColor,
-                size: 28,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              isUploaded ? "Uploaded Successfully! (Tap to change)" : title,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w800,
-                color: isUploaded ? const Color(0xFF166534) : const Color(0xFF0056D2),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF64748B),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInstallmentSegment(String title) {
-    final bool isSelected = _packageInstallmentType == title;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _packageInstallmentType = title;
-          });
-        },
-        child: Container(
-          height: 48,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFEFF6FF) : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? const Color(0xFF0056D2) : const Color(0xFFE2E8F0),
-              width: isSelected ? 1.8 : 1,
-            ),
-          ),
-          child: Text(
-            title,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              color: isSelected ? const Color(0xFF0056D2) : const Color(0xFF0F172A),
-            ),
-          ),
-        ),
       ),
     );
   }

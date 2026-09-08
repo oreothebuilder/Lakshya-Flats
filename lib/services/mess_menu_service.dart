@@ -15,8 +15,64 @@ class MessMenuService extends ChangeNotifier {
 
   List<String> get availableMesses => ["Univ Homes", "Rameshwaram", "Shivalay"];
 
+  String getCurrentDayShort() {
+    final now = DateTime.now();
+    switch (now.weekday) {
+      case DateTime.monday:
+        return "Mon";
+      case DateTime.tuesday:
+        return "Tue";
+      case DateTime.wednesday:
+        return "Wed";
+      case DateTime.thursday:
+        return "Thu";
+      case DateTime.friday:
+        return "Fri";
+      case DateTime.saturday:
+        return "Sat";
+      case DateTime.sunday:
+        return "Sun";
+      default:
+        return "Mon";
+    }
+  }
+
+  String getCurrentDayName() {
+    final now = DateTime.now();
+    switch (now.weekday) {
+      case DateTime.monday:
+        return "Monday";
+      case DateTime.tuesday:
+        return "Tuesday";
+      case DateTime.wednesday:
+        return "Wednesday";
+      case DateTime.thursday:
+        return "Thursday";
+      case DateTime.friday:
+        return "Friday";
+      case DateTime.saturday:
+        return "Saturday";
+      case DateTime.sunday:
+        return "Sunday";
+      default:
+        return "Monday";
+    }
+  }
+
+  String resolveMessForBuilding(String? building) {
+    if (building == null || building.trim().isEmpty) return "Univ Homes";
+    final b = building.toLowerCase();
+    if (b.contains("rameshwaram")) return "Rameshwaram";
+    if (b.contains("shivalay")) return "Shivalay";
+    return "Univ Homes";
+  }
+
   MessSchedule? getSchedule(String messName) {
     return _schedules[messName];
+  }
+
+  DayMenu? getTodayMenu(String messName) {
+    return getDayMenu(messName, getCurrentDayShort());
   }
 
   DayMenu? getDayMenu(String messName, String shortDay) {
@@ -24,6 +80,17 @@ class MessMenuService extends ChangeNotifier {
     if (schedule == null) return null;
     return schedule.days.firstWhere(
       (d) => d.shortDay.toLowerCase() == shortDay.toLowerCase(),
+      orElse: () => schedule.days.first,
+    );
+  }
+
+  DayMenu? getDayMenuByName(String messName, String dayNameOrShort) {
+    final schedule = _schedules[messName];
+    if (schedule == null) return null;
+    return schedule.days.firstWhere(
+      (d) =>
+          d.dayName.toLowerCase() == dayNameOrShort.toLowerCase() ||
+          d.shortDay.toLowerCase() == dayNameOrShort.toLowerCase(),
       orElse: () => schedule.days.first,
     );
   }
@@ -67,143 +134,227 @@ class MessMenuService extends ChangeNotifier {
   }
 
   void _initDefaultSchedules() {
-    final daysList = [
-      {"name": "Monday", "short": "Mon"},
-      {"name": "Tuesday", "short": "Tue"},
-      {"name": "Wednesday", "short": "Wed"},
-      {"name": "Thursday", "short": "Thu"},
-      {"name": "Friday", "short": "Fri"},
-      {"name": "Saturday", "short": "Sat"},
-      {"name": "Sunday", "short": "Sun"},
+    // 7 Days Menu for Univ Homes
+    final univHomesDays = [
+      DayMenu(
+        dayName: "Monday",
+        shortDay: "Mon",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Indori Poha", "Sev", "Jalebi", "Masala Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Paneer Butter Masala", "Dal Fry", "Phulka", "Rice", "Salad"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Veg Sandwich", "Tea"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Aloo Matar", "Yellow Dal", "Chapati", "Rice", "Kheer"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Tuesday",
+        shortDay: "Tue",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Idli Sambhar", "Coconut Chutney", "Filter Coffee"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Chole", "Bhature", "Onion Salad", "Boondi Raita"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Samosa", "Mint Chutney", "Masala Chai"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Paneer Butter Masala", "Dal Fry", "Roti", "Jeera Rice", "Gulab Jamun"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Wednesday",
+        shortDay: "Wed",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Methi Paratha", "White Butter", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Dal Tadka", "Mix Veg Sabzi", "Rice", "Roti", "Salad"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Bhel Puri", "Mint Lemonade"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Aloo Gobi", "Moong Dal", "Phulka", "Rice", "Kheer"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Thursday",
+        shortDay: "Thu",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Aloo Paratha", "Curd", "Pickle", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Rajma Masala", "Steamed Rice", "Roti", "Curd", "Papad"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Kachori", "Tea"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Kadai Paneer", "Butter Naan", "Rice", "Custard"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Friday",
+        shortDay: "Fri",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Bread Pakoda", "Green Chutney", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Veg Pulao", "Kadhi Pakoda", "Roti", "Aloo Jeera"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Pav Bhaji", "Tea"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Dal Makhani", "Mix Veg", "Phulka", "Rice", "Ice Cream"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Saturday",
+        shortDay: "Sat",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Upma", "Coconut Chutney", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Alu Shimla Mirch", "Yellow Dal", "Roti", "Rice", "Curd"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Aloo Tikki Chaat", "Tea"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Matar Paneer", "Tandoori Roti", "Rice", "Gulab Jamun"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Sunday",
+        shortDay: "Sun",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Puri Bhaji", "Halwa", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Special Veg Biryani", "Mirchi Ka Salan", "Raita"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["French Fries", "Cold Drink"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Paneer Lababdar", "Dal Tadka", "Missi Roti", "Rice", "Rabdi"]),
+        ],
+      ),
     ];
 
-    // Default menus for Univ Homes
-    final univHomesDays = daysList.map((d) {
-      final isMon = d["short"] == "Mon";
-      final isSun = d["short"] == "Sun";
-      return DayMenu(
-        dayName: d["name"]!,
-        shortDay: d["short"]!,
+    // 7 Days Menu for Rameshwaram
+    final rameshwaramDays = [
+      DayMenu(
+        dayName: "Monday",
+        shortDay: "Mon",
         meals: [
-          MealInfo(
-            type: MealType.breakfast,
-            title: "Breakfast",
-            timeSlot: "07:30 AM - 09:30 AM",
-            icon: "🌅",
-            items: isMon
-                ? ["Indori Poha", "Sev", "Jalebi", "Masala Tea"]
-                : isSun
-                    ? ["Chole Bhature", "Lassi", "Sweet Chutney"]
-                    : ["Alo Paratha", "Curd", "Pickle", "Tea"],
-          ),
-          MealInfo(
-            type: MealType.lunch,
-            title: "Lunch",
-            timeSlot: "12:30 PM - 02:30 PM",
-            icon: "☀️",
-            items: isMon
-                ? ["Paneer Butter Masala", "Dal Fry", "Phulka", "Rice", "Salad"]
-                : isSun
-                    ? ["Special Veg Biryani", "Mirchi Ka Salan", "Raita", "Gulab Jamun"]
-                    : ["Rajma Masala", "Jeera Rice", "Roti", "Salad", "Papad"],
-          ),
-          MealInfo(
-            type: MealType.snacks,
-            title: "Evening Snacks",
-            timeSlot: "05:00 PM - 06:00 PM",
-            icon: "☕",
-            items: isMon
-                ? ["Veg Sandwich", "Tea"]
-                : ["Samosa", "Mint Chutney", "Coffee"],
-          ),
-          MealInfo(
-            type: MealType.dinner,
-            title: "Dinner",
-            timeSlot: "07:30 PM - 09:30 PM",
-            icon: "🌙",
-            items: isMon
-                ? ["Aloo Matar", "Yellow Dal", "Chapati", "Rice", "Kheer"]
-                : ["Kadai Paneer", "Dal Makhani", "Butter Naan", "Rice", "Ice Cream"],
-          ),
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Idli Sambhar", "Coconut Chutney", "Filter Coffee"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Chole", "Bhature", "Onion Salad", "Boondi Raita"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Samosa", "Mint Chutney", "Masala Chai"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Paneer Butter Masala", "Dal Fry", "Roti", "Jeera Rice", "Gulab Jamun"]),
         ],
-      );
-    }).toList();
+      ),
+      DayMenu(
+        dayName: "Tuesday",
+        shortDay: "Tue",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Masala Dosa", "Tomato Chutney", "Sambhar", "Filter Coffee"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Rajma Masala", "Jeera Rice", "Phulka", "Cucumber Salad"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Medu Vada", "Coconut Chutney", "Tea"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Mix Veg Curry", "Dal Tadka", "Roti", "Rice", "Fruit Custard"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Wednesday",
+        shortDay: "Wed",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Poha", "Sev", "Roasted Peanuts", "Adrak Chai"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Paneer Do Pyaza", "Dal Makhani", "Tandoori Roti", "Rice"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Veg Cutlet", "Tomato Ketchup", "Coffee"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Aloo Gobi", "Yellow Dal", "Phulka", "Rice", "Halwa"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Thursday",
+        shortDay: "Thu",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Uttapam", "Coconut & Mint Chutney", "Sambhar"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Kadi Pakoda", "Steamed Rice", "Aloo Bhindi", "Phulka"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Mirchi Bajji", "Masala Tea"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Shahi Paneer", "Butter Roti", "Jeera Rice", "Rasgulla"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Friday",
+        shortDay: "Fri",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Mysore Bonda", "Coconut Chutney", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Veg Biryani", "Mirchi Ka Salan", "Onion Raita", "Papad"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Onion Pakoda", "Green Chutney", "Coffee"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Dum Aloo Kashmiri", "Dal Fry", "Phulka", "Rice", "Kheer"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Saturday",
+        shortDay: "Sat",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Rava Upma", "Podi", "Coconut Chutney", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Chana Masala", "Poori", "Boondi Raita", "Salad"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Pani Puri", "Sweet Chutney"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Kadai Veg", "Dal Tadka", "Naan", "Rice", "Ice Cream"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Sunday",
+        shortDay: "Sun",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Puri Saagu", "Sheera (Kesari Bath)", "Filter Coffee"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Special Hyderabadi Veg Biryani", "Salan", "Raita", "Gulab Jamun"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Paneer Bread Roll", "Chai"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Paneer Makhani", "Butter Naan", "Veg Pulao", "Moong Dal Halwa"]),
+        ],
+      ),
+    ];
 
-    // Default menus for Rameshwaram
-    final rameshwaramDays = daysList.map((d) {
-      return DayMenu(
-        dayName: d["name"]!,
-        shortDay: d["short"]!,
+    // 7 Days Menu for Shivalay
+    final shivalayDays = [
+      DayMenu(
+        dayName: "Monday",
+        shortDay: "Mon",
         meals: [
-          MealInfo(
-            type: MealType.breakfast,
-            title: "Breakfast",
-            timeSlot: "07:30 AM - 09:30 AM",
-            icon: "🌅",
-            items: ["Idli Sambhar", "Coconut Chutney", "Filter Coffee"],
-          ),
-          MealInfo(
-            type: MealType.lunch,
-            title: "Lunch",
-            timeSlot: "12:30 PM - 02:30 PM",
-            icon: "☀️",
-            items: ["Chole", "Bhature", "Onion Salad", "Boondi Raita"],
-          ),
-          MealInfo(
-            type: MealType.snacks,
-            title: "Evening Snacks",
-            timeSlot: "05:00 PM - 06:00 PM",
-            icon: "☕",
-            items: ["Samosa", "Mint Chutney", "Masala Chai"],
-          ),
-          MealInfo(
-            type: MealType.dinner,
-            title: "Dinner",
-            timeSlot: "07:30 PM - 09:30 PM",
-            icon: "🌙",
-            items: ["Paneer Butter Masala", "Dal Fry", "Roti", "Jeera Rice", "Gulab Jamun"],
-          ),
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Methi Paratha", "White Butter", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Dal Tadka", "Mix Veg Sabzi", "Rice", "Roti", "Salad"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Bhel Puri", "Mint Lemonade"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Aloo Gobi", "Moong Dal", "Phulka", "Rice", "Kheer"]),
         ],
-      );
-    }).toList();
-
-    // Default menus for Shivalay
-    final shivalayDays = daysList.map((d) {
-      return DayMenu(
-        dayName: d["name"]!,
-        shortDay: d["short"]!,
+      ),
+      DayMenu(
+        dayName: "Tuesday",
+        shortDay: "Tue",
         meals: [
-          MealInfo(
-            type: MealType.breakfast,
-            title: "Breakfast",
-            timeSlot: "07:30 AM - 09:30 AM",
-            icon: "🌅",
-            items: ["Methi Paratha", "White Butter", "Tea"],
-          ),
-          MealInfo(
-            type: MealType.lunch,
-            title: "Lunch",
-            timeSlot: "12:30 PM - 02:30 PM",
-            icon: "☀️",
-            items: ["Dal Tadka", "Mix Veg Sabzi", "Rice", "Roti", "Salad"],
-          ),
-          MealInfo(
-            type: MealType.snacks,
-            title: "Evening Snacks",
-            timeSlot: "05:00 PM - 06:00 PM",
-            icon: "☕",
-            items: ["Bhel Puri", "Mint Lemonade"],
-          ),
-          MealInfo(
-            type: MealType.dinner,
-            title: "Dinner",
-            timeSlot: "07:30 PM - 09:30 PM",
-            icon: "🌙",
-            items: ["Aloo Gobi", "Moong Dal", "Phulka", "Rice", "Kheer"],
-          ),
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Poha Jalebi", "Sev", "Masala Chai"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Paneer Bhurji", "Dal Fry", "Phulka", "Rice", "Papad"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Veg Puff", "Tea"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Baingan Bharta", "Tawa Roti", "Dal Tadka", "Rice", "Fruit Cream"]),
         ],
-      );
-    }).toList();
+      ),
+      DayMenu(
+        dayName: "Wednesday",
+        shortDay: "Wed",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Gobi Paratha", "Curd", "Mixed Pickle", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Rajma Chawal", "Boondi Raita", "Onion Salad", "Roti"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Sev Puri", "Mint Chai"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Matar Paneer", "Dal Makhani", "Phulka", "Jeera Rice", "Gulab Jamun"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Thursday",
+        shortDay: "Thu",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Bedmi Puri", "Aloo Sabzi", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Malai Kofta", "Butter Roti", "Rice", "Cucumber Raita"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Samosa Chaat", "Green Tea"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Bhindi Masala", "Yellow Moong Dal", "Phulka", "Rice", "Seviyan Kheer"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Friday",
+        shortDay: "Fri",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Moong Dal Chilla", "Mint Chutney", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Chole Kulche", "Pickled Onions", "Chaas"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Dhokla", "Sweet Tamarind Chutney", "Tea"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Paneer Pasanda", "Dal Fry", "Phulka", "Peas Pulao", "Rasmalai"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Saturday",
+        shortDay: "Sat",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Aloo Paratha", "Curd", "Homemade White Butter", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Kadhi Khichdi", "Gujarati Aloo", "Papad", "Curd"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["French Fries", "Hot Coffee"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Mix Veg Korma", "Dal Tadka", "Tandoori Roti", "Rice", "Shahi Tukda"]),
+        ],
+      ),
+      DayMenu(
+        dayName: "Sunday",
+        shortDay: "Sun",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "07:30 AM - 09:30 AM", icon: "🌅", items: ["Chole Bhature", "Sweet Lassi", "Pickle"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "12:30 PM - 02:30 PM", icon: "☀️", items: ["Kashmiri Pulao", "Paneer Tikka Masala", "Butter Naan", "Raita"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM - 06:00 PM", icon: "☕", items: ["Cheese Grilled Sandwich", "Cold Coffee"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "07:30 PM - 09:30 PM", icon: "🌙", items: ["Palak Paneer", "Dal Makhani", "Missi Roti", "Rice", "Gajar Ka Halwa"]),
+        ],
+      ),
+    ];
 
     _schedules = {
       "Univ Homes": MessSchedule(messName: "Univ Homes", days: univHomesDays),

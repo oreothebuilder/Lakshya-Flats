@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/user_drawer.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
+import 'user_home_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -229,58 +230,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _handleBackToHome() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const UserHomeScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      drawer: UserDrawer(activeItem: "Settings"),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        leading: Builder(
-          builder: (context) {
-            return IconButton(
-              icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A)),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            );
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-              );
-            },
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackToHome();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        drawer: UserDrawer(activeItem: "Settings"),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+            tooltip: "Back to Home",
+            onPressed: _handleBackToHome,
           ),
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(right: 16, left: 4),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: const Color(0xFF2563EB),
-                child: Text(
-                  "SU",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+          title: Text(
+            "Settings",
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF0F172A),
+            ),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                );
+              },
+            ),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8, left: 4),
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: const Color(0xFF2563EB),
+                  child: Text(
+                    "SU",
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+            Builder(
+              builder: (drawerCtx) => IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Color(0xFF475569)),
+                tooltip: "Open Menu",
+                onPressed: () => Scaffold.of(drawerCtx).openDrawer(),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
@@ -691,6 +718,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

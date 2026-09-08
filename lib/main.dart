@@ -1,11 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'screens/onboarding_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'config/cloudinary_config.dart';
+import 'screens/auth_gate.dart';
 import 'theme/app_colors.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Cloudinary storage configuration
+  CloudinaryConfig.init();
+
+  // Initialize Firebase with configured platform options
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    debugPrint("Firebase successfully initialized with lakshya-flats.");
+  } catch (e) {
+    debugPrint("Firebase initialization note: $e");
+  }
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -33,7 +50,7 @@ class LakshyaResidencyApp extends StatelessWidget {
         ),
         textTheme: GoogleFonts.plusJakartaSansTextTheme(),
       ),
-      home: const OnboardingScreen(),
+      home: const AuthGate(),
     );
   }
 }
