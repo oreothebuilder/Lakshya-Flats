@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/admin_drawer.dart';
+import '../../widgets/document_viewer_modal.dart';
 import '../../services/firestore_service.dart';
 import '../../services/email_service.dart';
 import '../../models/bill_model.dart';
@@ -148,13 +149,14 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
       // 3. Tab filter:
       // Tab 0: Recent (All payments)
       // Tab 1: Defaulters (Overdue unpaid payments)
-      // Tab 2: Pending (Pending non-defaulter payments)
+      // Tab 2: Pending (Pending non-defaulter payments OR any bill pending verification)
       // Tab 3: Paid (Completed payments)
       final tabIndex = _tabController.index;
       if (tabIndex == 1) {
         if (!p.isDefaulter) return false;
       } else if (tabIndex == 2) {
-        if (p.isPaid || p.isDefaulter) return false;
+        if (p.isPaid) return false;
+        if (p.isDefaulter && !p.isPendingVerification) return false;
       } else if (tabIndex == 3) {
         if (!p.isPaid) return false;
       }
@@ -175,14 +177,29 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
     // 5. Apply Tab-Specific Sorting Rules:
     final tabIndex = _tabController.index;
     if (tabIndex == 0) {
-      // Recent: Most recent activity (createdAt / paidDate) first
-      filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      // Recent: Pending verification first, then most recent activity (createdAt / paidDate)
+      filtered.sort((a, b) {
+        if (a.isPendingVerification != b.isPendingVerification) {
+          return a.isPendingVerification ? -1 : 1;
+        }
+        return b.createdAt.compareTo(a.createdAt);
+      });
     } else if (tabIndex == 1) {
-      // Defaulters: Latest defaulters on top (dueDate descending)
-      filtered.sort((a, b) => b.dueDate.compareTo(a.dueDate));
+      // Defaulters: Pending verification first, then latest defaulters on top (dueDate descending)
+      filtered.sort((a, b) {
+        if (a.isPendingVerification != b.isPendingVerification) {
+          return a.isPendingVerification ? -1 : 1;
+        }
+        return b.dueDate.compareTo(a.dueDate);
+      });
     } else if (tabIndex == 2) {
-      // Pending: Earliest upcoming payment on top (dueDate ascending)
-      filtered.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      // Pending: Pending verification first, then earliest upcoming payment on top (dueDate ascending)
+      filtered.sort((a, b) {
+        if (a.isPendingVerification != b.isPendingVerification) {
+          return a.isPendingVerification ? -1 : 1;
+        }
+        return a.dueDate.compareTo(b.dueDate);
+      });
     } else if (tabIndex == 3) {
       // Paid: Most recent paid transaction on top (paidDate / createdAt descending)
       filtered.sort((a, b) {
@@ -220,6 +237,14 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 3),
       ),
+    );
+  }
+
+  void _viewFullScreenImage(String imageUrl) {
+    DocumentViewerModal.show(
+      context,
+      url: imageUrl,
+      title: "Attached Payment Proof",
     );
   }
 
@@ -300,6 +325,26 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
                   ],
                 ),
               ),
+              if (item.proofUrl != null && item.proofUrl!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _viewFullScreenImage(item.proofUrl!),
+                    icon: const Icon(Icons.image_outlined, size: 16),
+                    label: Text(
+                      "View Attached Payment Proof",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF003896),
+                      side: const BorderSide(color: Color(0xFF93C5FD)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
 
               // Action Buttons
@@ -399,8 +444,10 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
   // Record payment modal
   void _openRecordPaymentModal(BillModel item) {
     final amountController = TextEditingController(text: item.balance.toStringAsFixed(0));
-    final refController = TextEditingController();
-    String selectedMode = "UPI / QR Code";
+    final refController = TextEditingController(text: item.transactionRef ?? '');
+    String selectedMode = (item.paymentMethod != null && item.paymentMethod!.isNotEmpty)
+        ? item.paymentMethod!
+        : "UPI / QR Code";
     final List<String> modes = [
       "UPI / QR Code",
       "Cash",
@@ -408,6 +455,9 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
       "Debit/Credit Card",
       "Cheque",
     ];
+    if (!modes.contains(selectedMode)) {
+      selectedMode = "UPI / QR Code";
+    }
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -461,7 +511,7 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              "Invoice: ${item.invoiceNo}",
+                              item.billingMonth.isNotEmpty ? "${item.billType} • ${item.billingMonth}" : item.billType,
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 13,
                                 color: const Color(0xFF64748B),
@@ -1694,7 +1744,8 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
             final defaulterPendingSum = allBills
                 .where((p) => p.isDefaulter)
                 .fold(0.0, (acc, p) => acc + p.balance);
-            final pendingCount = allBills.where((p) => !p.isPaid && !p.isDefaulter).length;
+            final pendingVerificationCount = allBills.where((p) => p.isPendingVerification).length;
+            final pendingCount = allBills.where((p) => !p.isPaid && (!p.isDefaulter || p.isPendingVerification)).length;
             final collectedCount = allBills.where((p) => p.isPaid).length;
 
             final filteredList = _applyFilters(allBills);
@@ -2012,7 +2063,14 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
                         child: Row(
                           children: [
                             const Text("Pending"),
-                            _buildTabBadge("$pendingCount", const Color(0xFFD97706)),
+                            _buildTabBadge(
+                              pendingVerificationCount > 0
+                                  ? "$pendingCount ($pendingVerificationCount)"
+                                  : "$pendingCount",
+                              pendingVerificationCount > 0
+                                  ? const Color(0xFFB45309)
+                                  : const Color(0xFFD97706),
+                            ),
                           ],
                         ),
                       ),
@@ -2225,6 +2283,10 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
       statusBg = const Color(0xFFDCFCE7);
       statusTextColor = const Color(0xFF16A34A);
       statusLabel = "Paid";
+    } else if (item.isPendingVerification) {
+      statusBg = const Color(0xFFFEF3C7);
+      statusTextColor = const Color(0xFFB45309);
+      statusLabel = "Verify UTR";
     } else if (item.isDefaulter) {
       statusBg = const Color(0xFFFEE2E2);
       statusTextColor = const Color(0xFFDC2626);
@@ -2365,19 +2427,19 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.isPaid
-                            ? "Via ${item.paymentMethod ?? 'Online'} (${item.paidDate ?? 'Paid'})"
-                            : "Invoice: ${item.invoiceNo}",
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          color: const Color(0xFF94A3B8),
-                          fontWeight: FontWeight.w500,
+                      if (item.isPaid && (item.paymentMethod != null || item.paidDate != null)) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          "Via ${item.paymentMethod ?? 'Online'} (${item.paidDate ?? 'Paid'})",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            color: const Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -2407,7 +2469,66 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+
+            // Proof Banner if student submitted UTR or cash handover
+            if (item.isPendingVerification) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: item.isCash ? const Color(0xFFF0FDF4) : const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: item.isCash ? const Color(0xFFBBF7D0) : const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: item.isCash ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        item.isCash ? Icons.payments_rounded : Icons.verified_user_outlined,
+                        size: 18,
+                        color: item.isCash ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.isCash ? "Cash Handover Reported by Student" : "Student Submitted Payment Proof",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: item.isCash ? const Color(0xFF14532D) : const Color(0xFF92400E),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            item.isCash
+                                ? (item.paymentRemarks?.isNotEmpty == true
+                                    ? "Note: ${item.paymentRemarks}"
+                                    : "Verify ₹${item.balance.toStringAsFixed(0)} physical cash received at office")
+                                : "UTR / Ref: ${item.transactionRef ?? 'Submitted'}${item.paymentMethod != null && item.paymentMethod!.isNotEmpty ? ' via ${item.paymentMethod}' : ''}${item.hasProofScreenshot ? ' • Screenshot Attached 📸' : ''}",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: item.isCash ? const Color(0xFF166534) : const Color(0xFFB45309),
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             // Action buttons per item
             Row(
@@ -2427,6 +2548,50 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
                         foregroundColor: Colors.white,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ] else if (item.isPendingVerification) ...[
+                  // Pending Verification Actions: Verify & Confirm + Adjust / Edit
+                  Expanded(
+                    flex: 6,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _openVerifyPaymentDialog(item),
+                      icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          "Verify & Confirm",
+                          style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 5,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openRecordPaymentModal(item),
+                      icon: const Icon(Icons.edit_note_rounded, size: 16),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          "Adjust / Edit",
+                          style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF003896),
+                        side: const BorderSide(color: Color(0xFF003896), width: 1.2),
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
@@ -2577,6 +2742,427 @@ Status: ${item.isPaid ? 'PAID & VERIFIED' : 'PENDING'}
           ),
         ],
       ),
+    );
+  }
+
+  void _openVerifyPaymentDialog(BillModel item) {
+    bool isVerifying = false;
+    final remarksController = TextEditingController(
+      text: item.isCash
+          ? "Cash payment verified and registered by administration"
+          : "Verified payment via UTR ${item.transactionRef ?? ''}".trim(),
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(22.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: item.isCash ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        item.isCash ? Icons.payments_rounded : Icons.verified_user_rounded,
+                        color: item.isCash ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.isCash ? "Verify Cash Payment" : "Verify Payment Proof",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            item.isCash
+                                ? "Confirm physical cash receipt"
+                                : "Inspect student's payment screenshot / UTR",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildVerifyRow("Student", item.studentName),
+                      const SizedBox(height: 8),
+                      _buildVerifyRow("Room / Bldg", "${item.room} • ${item.building}"),
+                      const SizedBox(height: 8),
+                      _buildVerifyRow("Invoice", item.invoiceNo),
+                      const SizedBox(height: 8),
+                      _buildVerifyRow("Bill Type", item.billType),
+                      const SizedBox(height: 8),
+                      _buildVerifyRow("Amount Due", "₹${item.balance.toStringAsFixed(0)}", isBold: true),
+                      const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                      _buildVerifyRow(
+                        "Payment Method",
+                        item.paymentMethod ?? (item.isCash ? "Cash" : "Online"),
+                        isBold: true,
+                        textColor: item.isCash ? const Color(0xFF16A34A) : const Color(0xFF003896),
+                      ),
+                      if (!item.isCash) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Submitted UTR",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF64748B)),
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  item.transactionRef ?? "Not Provided",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF003896),
+                                  ),
+                                ),
+                                if (item.transactionRef != null && item.transactionRef!.isNotEmpty) ...[
+                                  const SizedBox(width: 6),
+                                  InkWell(
+                                    onTap: () {
+                                      Clipboard.setData(ClipboardData(text: item.transactionRef!));
+                                      _showSnackbar("UTR copied to clipboard!");
+                                    },
+                                    child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF003896)),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (item.paymentRemarks != null && item.paymentRemarks!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _buildVerifyRow("Student Note", item.paymentRemarks!),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Screenshot Proof Preview Section (for Bank / UPI or paper slips)
+                if (item.proofUrl != null && item.proofUrl!.isNotEmpty) ...[
+                  Text(
+                    "Student's Payment Proof Screenshot",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () => _viewFullScreenImage(item.proofUrl!),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              item.proofUrl!,
+                              width: 54,
+                              height: 54,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Screenshot Proof Attached",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.zoom_in_rounded, size: 14, color: Color(0xFF003896)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "Tap to inspect in full screen",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF003896),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.open_in_new_rounded, size: 18, color: Color(0xFF64748B)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ] else if (!item.isCash) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "No screenshot image was uploaded by student.",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ] else ...[
+                  // Cash Handover Notice
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, color: Color(0xFF16A34A), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "Physical Cash: Ensure ₹${item.balance.toStringAsFixed(0)} cash has been handed over at the hostel office before approving.",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF166534),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
+                Text(
+                  "Admin Remarks (Optional)",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: remarksController,
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: item.isCash ? "E.g. Cash received & entered in register" : "E.g. Bank credit confirmed",
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    // Reject / Re-submit button
+                    OutlinedButton(
+                      onPressed: isVerifying
+                          ? null
+                          : () {
+                              final rejectReasonController = TextEditingController(
+                                text: item.isCash ? "Physical cash not yet received at office" : "Payment proof unreadable or invalid",
+                              );
+                              showDialog(
+                                context: context,
+                                builder: (rCtx) => AlertDialog(
+                                  title: Text("Request Re-submission", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16)),
+                                  content: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        "Please provide a reason so the student knows how to correct their submission:",
+                                        style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF64748B)),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      TextField(
+                                        controller: rejectReasonController,
+                                        style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                          contentPadding: const EdgeInsets.all(10),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(rCtx), child: const Text("Cancel")),
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        Navigator.pop(rCtx);
+                                        Navigator.pop(ctx);
+                                        try {
+                                          await FirestoreService().rejectBillPaymentProof(
+                                            item.id,
+                                            rejectionReason: rejectReasonController.text.trim(),
+                                          );
+                                          _showSnackbar("Bill set back to Pending. Student notified.");
+                                        } catch (e) {
+                                          _showSnackbar("Action failed: $e", isSuccess: false);
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+                                      child: const Text("Reject & Notify"),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFDC2626),
+                        side: const BorderSide(color: Color(0xFFFCA5A5)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                      ),
+                      child: Text("Reject", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: isVerifying ? null : () => Navigator.pop(ctx),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        child: Text("Cancel", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 12.5)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: isVerifying
+                            ? null
+                            : () async {
+                                setDialogState(() => isVerifying = true);
+                                try {
+                                  await FirestoreService().verifyAndMarkBillPaid(
+                                    item.id,
+                                    paidAmount: item.balance,
+                                    adminRemarks: remarksController.text.trim(),
+                                  );
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (mounted) {
+                                    _showSnackbar(
+                                      item.isCash
+                                          ? "Cash verified! Bill marked as Paid & fee clearance receipt issued."
+                                          : "Payment verified and invoice marked as Paid!",
+                                      isSuccess: true,
+                                    );
+                                  }
+                                } catch (e) {
+                                  setDialogState(() => isVerifying = false);
+                                  _showSnackbar("Verification failed: $e", isSuccess: false);
+                                }
+                              },
+                        icon: isVerifying
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.check_circle_rounded, size: 16),
+                        label: Text(
+                          isVerifying ? "Verifying..." : "Confirm Paid",
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF16A34A),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVerifyRow(String label, String value, {bool isBold = false, Color? textColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12.5,
+            color: const Color(0xFF64748B),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12.5,
+              color: textColor ?? const Color(0xFF0F172A),
+              fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

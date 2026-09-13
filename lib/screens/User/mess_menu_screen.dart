@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../models/user_role_model.dart';
+import '../../services/firebase_auth_service.dart';
+import '../../services/firestore_service.dart';
 import '../../widgets/user_drawer.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
@@ -7,7 +10,12 @@ import 'user_home_screen.dart';
 import '../../services/mess_menu_service.dart';
 
 class MessMenuScreen extends StatefulWidget {
-  const MessMenuScreen({super.key});
+  final AppUser? currentUser;
+
+  const MessMenuScreen({
+    super.key,
+    this.currentUser,
+  });
 
   @override
   State<MessMenuScreen> createState() => _MessMenuScreenState();
@@ -34,7 +42,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
 
   void _handleBackToHome() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const UserHomeScreen()),
+      MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: widget.currentUser)),
       (route) => false,
     );
   }
@@ -44,7 +52,9 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
     return ListenableBuilder(
       listenable: MessMenuService(),
       builder: (context, _) {
-        final dayMenu = MessMenuService().getDayMenuByName("Univ Homes", _selectedDay);
+        final messService = MessMenuService();
+        final messName = messService.resolveMessForBuilding(widget.currentUser?.building);
+        final dayMenu = messService.getDayMenuByName(messName, _selectedDay);
         final selectedMeals = dayMenu != null
             ? dayMenu.meals.map((m) => {
                 "emoji": m.icon,
@@ -64,7 +74,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        drawer: const UserDrawer(activeItem: "Mess Menu"),
+        drawer: UserDrawer(activeItem: "Mess Menu", currentUser: widget.currentUser),
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
@@ -83,7 +93,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
-                  Icons.home_outlined,
+                  Icons.restaurant_menu_rounded,
                   color: Color(0xFF1A65D6),
                   size: 20,
                 ),
@@ -101,7 +111,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                     ),
                   ),
                   Text(
-                    "Lakshya • Rm 304",
+                    "$messName • ${widget.currentUser?.building ?? 'Lakshya'}",
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -113,45 +123,60 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
             ],
           ),
           actions: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                    );
-                  },
-                ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.redAccent,
-                      shape: BoxShape.circle,
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: FirestoreService().getStudentNotificationsStream(
+                widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
+                building: widget.currentUser?.building,
+                regNo: widget.currentUser?.registrationNumber,
+              ),
+              builder: (context, notifSnapshot) {
+                final notifs = notifSnapshot.data ?? [];
+                final unreadCount = notifs.where((n) => n['isRead'] != true).length;
+
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NotificationsScreen(currentUser: widget.currentUser),
+                          ),
+                        );
+                      },
                     ),
-                    child: const Text(
-                      "2",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            unreadCount > 9 ? "9+" : "$unreadCount",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
             GestureDetector(
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const ProfileScreen(),
+                    builder: (context) => ProfileScreen(currentUser: widget.currentUser),
                   ),
                 );
               },
@@ -161,7 +186,9 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                   radius: 18,
                   backgroundColor: const Color(0xFF2563EB),
                   child: Text(
-                    "SU",
+                    (widget.currentUser?.fullName.isNotEmpty ?? false)
+                        ? widget.currentUser!.fullName.substring(0, 1).toUpperCase()
+                        : "R",
                     style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
                       fontSize: 12,

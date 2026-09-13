@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../models/bill_model.dart';
 import '../../models/user_role_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/firebase_auth_service.dart';
+import '../../services/cloudinary_service.dart';
+import '../../config/cloudinary_config.dart';
+import '../../widgets/document_viewer_modal.dart';
 import '../../widgets/user_drawer.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
@@ -92,109 +97,221 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
     return Icons.home_rounded;
   }
 
+  void _viewFullScreenImage(String imageUrl, {Uint8List? memoryBytes, String? fileName}) {
+    DocumentViewerModal.show(
+      context,
+      url: imageUrl,
+      title: "Payment Receipt / Proof",
+      memoryBytes: memoryBytes,
+      fileName: fileName,
+    );
+  }
+
   void _openPaymentModal(BillModel bill) {
+    // 3 Options: "Bank transfer", "UPI", "Cash"
+    String selectedMethod = "UPI";
+    if (bill.paymentMethod != null && bill.paymentMethod!.isNotEmpty) {
+      final pm = bill.paymentMethod!.toLowerCase();
+      if (pm.contains('bank')) {
+        selectedMethod = "Bank transfer";
+      } else if (pm.contains('cash')) {
+        selectedMethod = "Cash";
+      } else {
+        selectedMethod = "UPI";
+      }
+    }
+
+    final utrController = TextEditingController(text: bill.utrNumber ?? bill.transactionRef ?? '');
+    final remarksController = TextEditingController(text: bill.paymentRemarks ?? '');
+    Uint8List? pickedProofBytes;
+    bool pickedProofIsPdf = false;
+    String? pickedProofFileName;
+    String? currentProofUrl = bill.proofUrl;
+    bool isSubmitting = false;
+    String submittingText = "Submitting...";
+
+    final picker = ImagePicker();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFCBD5E1),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        bill.billingMonth.isNotEmpty ? bill.billingMonth : bill.billType,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        "Invoice: ${bill.invoiceNo}",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12.5,
-                          color: const Color(0xFF64748B),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          Future<void> pickImage(ImageSource source) async {
+            try {
+              final file = await picker.pickImage(
+                source: source,
+                maxWidth: 1600,
+                maxHeight: 1600,
+                imageQuality: 85,
+              );
+              if (file != null) {
+                final bytes = await file.readAsBytes();
+                setModalState(() {
+                  pickedProofBytes = bytes;
+                  pickedProofIsPdf = false;
+                  pickedProofFileName = file.name;
+                });
+              }
+            } catch (e) {
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text("Error picking image: $e"),
+                    backgroundColor: Colors.redAccent,
                   ),
-                ),
-                Text(
-                  _formatIndianCurrency(bill.balance),
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: const Color(0xFF2563EB),
+                );
+              }
+            }
+          }
+
+          Future<void> pickPdf() async {
+            try {
+              final file = await FilePicker.pickFile(
+                type: FileType.custom,
+                allowedExtensions: ['pdf'],
+              );
+              if (file != null) {
+                final bytes = await file.readAsBytes();
+                setModalState(() {
+                  pickedProofBytes = bytes;
+                  pickedProofIsPdf = true;
+                  pickedProofFileName = file.name;
+                });
+              }
+            } catch (e) {
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text("Error picking PDF: $e"),
+                    backgroundColor: Colors.redAccent,
                   ),
-                ),
-              ],
+                );
+              }
+            }
+          }
+
+          return Container(
+            padding: EdgeInsets.only(
+              top: 20,
+              left: 20,
+              right: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
             ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: SingleChildScrollView(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "Official Hostel Bank & UPI Details",
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
-                          ),
-                        ),
+                  // Handle Bar
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  _buildPaymentInfoRow("Account Name", "Lakshya Student Residences"),
-                  const SizedBox(height: 6),
-                  _buildPaymentInfoRow("Bank Name", "ICICI Bank"),
-                  const SizedBox(height: 6),
-                  _buildPaymentInfoRow("A/C Number", "002105018921"),
-                  const SizedBox(height: 6),
-                  _buildPaymentInfoRow("IFSC Code", "ICIC0000021"),
-                  const SizedBox(height: 10),
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 18),
+
+                  // Verification In Progress Banner (if already submitted)
+                  if (bill.isPendingVerification) ...[
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.hourglass_top_rounded, color: Color(0xFFD97706), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Verification In Progress (${bill.paymentMethod ?? 'Submitted'})",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: const Color(0xFF92400E),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  bill.isCash
+                                      ? "Cash handover reported. Administration will verify physical cash and approve."
+                                      : "Proof submitted (Ref: ${bill.utrNumber ?? bill.transactionRef ?? 'Uploaded'}). Administration is reviewing.",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    color: const Color(0xFFB45309),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // Previous Admin Rejection Note (if any)
+                  if (bill.status == 'Pending' && bill.adminRemarks != null && bill.adminRemarks!.isNotEmpty) ...[
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Administration Note",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12.5,
+                                    color: const Color(0xFF991B1B),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  bill.adminRemarks!,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    color: const Color(0xFFB91C1C),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // Bill Header & Amount
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -203,78 +320,853 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "Hostel UPI ID",
-                              style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
-                            ),
-                            Text(
-                              "lakshyastays@icici",
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              bill.billingMonth.isNotEmpty ? bill.billingMonth : bill.billType,
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 14,
+                                fontSize: 18,
                                 fontWeight: FontWeight.w800,
                                 color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "Due: ${_formatDate(bill.dueDate)} • Invoice: ${bill.invoiceNo}",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: const Color(0xFF64748B),
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      TextButton.icon(
-                        onPressed: () {
-                          Clipboard.setData(const ClipboardData(text: "lakshyastays@icici"));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("UPI ID copied to clipboard!"),
-                              duration: Duration(seconds: 2),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.copy_rounded, size: 15, color: Color(0xFF2563EB)),
-                        label: Text(
-                          "Copy UPI",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF2563EB),
-                          ),
+                      Text(
+                        _formatIndianCurrency(bill.balance),
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF2563EB),
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 18),
+
+                  // 1. Official Hostel Bank & UPI Details Card
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB), size: 18),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "Official Hostel Bank & UPI Details",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _buildPaymentInfoRow("Account Name", "Lakshya Student Residences"),
+                        const SizedBox(height: 6),
+                        _buildPaymentInfoRow("Bank Name", "ICICI Bank"),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Account Number",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  "002105018921",
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF0F172A), fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: () {
+                                    Clipboard.setData(const ClipboardData(text: "002105018921"));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Account number copied!"), duration: Duration(seconds: 2), behavior: SnackBarBehavior.floating),
+                                    );
+                                  },
+                                  child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "IFSC Code",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  "ICIC0000021",
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF0F172A), fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: () {
+                                    Clipboard.setData(const ClipboardData(text: "ICIC0000021"));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("IFSC code copied!"), duration: Duration(seconds: 2), behavior: SnackBarBehavior.floating),
+                                    );
+                                  },
+                                  child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Hostel UPI ID",
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                  ),
+                                  Text(
+                                    "lakshyastays@icici",
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () {
+                                Clipboard.setData(const ClipboardData(text: "lakshyastays@icici"));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text("UPI ID copied to clipboard!"),
+                                    duration: Duration(seconds: 2),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
+                              label: Text(
+                                "Copy UPI",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF2563EB),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // 2. Instructions Notice
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFDBEAFE)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline_rounded, color: Color(0xFF2563EB), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "Please transfer or hand over the exact fee amount through your preferred method, then select the method below and submit proof to notify administration.",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.5,
+                              color: const Color(0xFF1E40AF),
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // 3. Payment Method: Three Radio Buttons
+                  Text(
+                    "Select Payment Method",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  RadioGroup<String>(
+                    groupValue: selectedMethod,
+                    onChanged: (val) {
+                      if (val != null) setModalState(() => selectedMethod = val);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        children: [
+                          // Radio 1: Bank transfer
+                          InkWell(
+                            onTap: () => setModalState(() => selectedMethod = "Bank transfer"),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              child: Row(
+                                children: [
+                                  const Radio<String>(
+                                    value: "Bank transfer",
+                                    activeColor: Color(0xFF2563EB),
+                                  ),
+                                  const Icon(Icons.account_balance_rounded, size: 18, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      "Bank transfer",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 13.5,
+                                        fontWeight: selectedMethod == "Bank transfer" ? FontWeight.w800 : FontWeight.w600,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ),
+                                  if (selectedMethod == "Bank transfer")
+                                    const Icon(Icons.check_circle_rounded, color: Color(0xFF2563EB), size: 18),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                          // Radio 2: UPI
+                          InkWell(
+                            onTap: () => setModalState(() => selectedMethod = "UPI"),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              child: Row(
+                                children: [
+                                  const Radio<String>(
+                                    value: "UPI",
+                                    activeColor: Color(0xFF2563EB),
+                                  ),
+                                  const Icon(Icons.qr_code_2_rounded, size: 18, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      "UPI",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 13.5,
+                                        fontWeight: selectedMethod == "UPI" ? FontWeight.w800 : FontWeight.w600,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ),
+                                  if (selectedMethod == "UPI")
+                                    const Icon(Icons.check_circle_rounded, color: Color(0xFF2563EB), size: 18),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                          // Radio 3: Cash
+                          InkWell(
+                            onTap: () => setModalState(() => selectedMethod = "Cash"),
+                            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              child: Row(
+                                children: [
+                                  const Radio<String>(
+                                    value: "Cash",
+                                    activeColor: Color(0xFF16A34A),
+                                  ),
+                                  const Icon(Icons.payments_rounded, size: 18, color: Color(0xFF16A34A)),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      "Cash",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 13.5,
+                                        fontWeight: selectedMethod == "Cash" ? FontWeight.w800 : FontWeight.w600,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ),
+                                  if (selectedMethod == "Cash")
+                                    const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 18),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // 4. Dynamic Fields based on selection
+                  if (selectedMethod == "UPI") ...[
+                    // UPI Transaction ID / UTR (Optional)
+                    Text(
+                      "UPI Transaction ID / UTR Number (Optional)",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: utrController,
+                      decoration: InputDecoration(
+                        hintText: "e.g. 423489123456 (12-digit UPI UTR)",
+                        hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF94A3B8)),
+                        prefixIcon: const Icon(Icons.confirmation_number_outlined, color: Color(0xFF2563EB), size: 18),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  if (selectedMethod == "Bank transfer" || selectedMethod == "UPI") ...[
+                    // Screenshot Upload Section
+                    Text(
+                      "Attach Payment Proof Screenshot",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      selectedMethod == "Bank transfer"
+                          ? "Upload a screenshot of your bank transfer receipt for admin verification."
+                          : "Upload a screenshot of your UPI payment receipt for admin verification.",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Screenshot Preview or Picker Buttons
+                    if (pickedProofBytes != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => _viewFullScreenImage(
+                                "",
+                                memoryBytes: pickedProofBytes,
+                                fileName: pickedProofFileName,
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: pickedProofIsPdf
+                                    ? Container(
+                                        width: 60,
+                                        height: 60,
+                                        color: const Color(0xFFFEF2F2),
+                                        child: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 28),
+                                      )
+                                    : Image.memory(
+                                        pickedProofBytes!,
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    pickedProofFileName ?? (pickedProofIsPdf ? "payment_receipt.pdf" : "receipt.jpg"),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "Tap thumbnail to preview full screen",
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF2563EB)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                              tooltip: "Remove proof",
+                              onPressed: () {
+                                setModalState(() {
+                                  pickedProofBytes = null;
+                                  pickedProofIsPdf = false;
+                                  pickedProofFileName = null;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else if (currentProofUrl != null && currentProofUrl.isNotEmpty) ...[
+                      Builder(builder: (context) {
+                        final bool isCurrentPdf = CloudinaryService.isPdf(currentProofUrl);
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                          ),
+                          child: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () => _viewFullScreenImage(currentProofUrl),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: isCurrentPdf
+                                      ? Container(
+                                          width: 60,
+                                          height: 60,
+                                          color: const Color(0xFFFEF2F2),
+                                          child: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 28),
+                                        )
+                                      : Image.network(
+                                          currentProofUrl,
+                                          width: 60,
+                                          height: 60,
+                                          fit: BoxFit.cover,
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isCurrentPdf ? "Previously Uploaded PDF Receipt" : "Previously Uploaded Proof",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      "Tap thumbnail to preview",
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF2563EB)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => pickImage(ImageSource.gallery),
+                                child: Text(
+                                  "Replace",
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => pickImage(ImageSource.gallery),
+                              icon: const Icon(Icons.photo_library_outlined, size: 16),
+                              label: Text(
+                                "Gallery",
+                                style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF2563EB),
+                                side: const BorderSide(color: Color(0xFF93C5FD)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => pickImage(ImageSource.camera),
+                              icon: const Icon(Icons.camera_alt_outlined, size: 16),
+                              label: Text(
+                                "Camera",
+                                style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF475569),
+                                side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: pickPdf,
+                              icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                              label: Text(
+                                "PDF File",
+                                style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFDC2626),
+                                side: const BorderSide(color: Color(0xFFFECACA)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ] else ...[
+                    // CASH PAYMENT SECTION
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFBBF7D0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.payments_rounded, color: Color(0xFF16A34A), size: 22),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  "Cash Handover Process",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF14532D),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "1. Hand over ${_formatIndianCurrency(bill.balance)} directly to the Lakshya Hostel Administration / Warden Office.\n2. Update your payment status here.\n3. The administrator will inspect the cash and approve your payment in the system.",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: const Color(0xFF166534),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    Text(
+                      "Cash Handover Details / Note",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: remarksController,
+                      decoration: InputDecoration(
+                        hintText: "e.g. Handed cash to Warden / Manager on ${DateTime.now().day}/${DateTime.now().month}",
+                        hintStyle: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF94A3B8)),
+                        prefixIcon: const Icon(Icons.receipt_outlined, color: Color(0xFF16A34A), size: 18),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF16A34A), width: 1.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Optional cash receipt photo
+                    if (pickedProofBytes != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Image.memory(pickedProofBytes!, width: 44, height: 44, fit: BoxFit.cover),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                "Optional paper slip attached",
+                                style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              onPressed: () => setModalState(() {
+                                pickedProofBytes = null;
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      TextButton.icon(
+                        onPressed: () => pickImage(ImageSource.gallery),
+                        icon: const Icon(Icons.add_a_photo_outlined, size: 16),
+                        label: Text(
+                          "Attach physical receipt slip (Optional)",
+                          style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF16A34A),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ],
+
+                  const SizedBox(height: 22),
+
+                  // SUBMIT BUTTON
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              final utr = utrController.text.trim();
+                              final remarks = remarksController.text.trim();
+
+                              // Validation
+                              if (selectedMethod == "Bank transfer") {
+                                if (pickedProofBytes == null && (currentProofUrl == null || currentProofUrl.isEmpty)) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        "Please attach a screenshot or PDF of your bank transfer receipt.",
+                                        style: GoogleFonts.plusJakartaSans(),
+                                      ),
+                                      backgroundColor: Colors.redAccent,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                  return;
+                                }
+                              } else if (selectedMethod == "UPI") {
+                                if (utr.isEmpty && pickedProofBytes == null && (currentProofUrl == null || currentProofUrl.isEmpty)) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        "Please upload a screenshot or PDF of your payment receipt.",
+                                        style: GoogleFonts.plusJakartaSans(),
+                                      ),
+                                      backgroundColor: Colors.redAccent,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                  return;
+                                }
+                              } else {
+                                if (remarks.isEmpty) {
+                                  remarksController.text = "Handed cash to hostel office";
+                                }
+                              }
+
+                              setModalState(() {
+                                isSubmitting = true;
+                                submittingText = pickedProofBytes != null ? "Uploading proof to cloud..." : "Submitting...";
+                              });
+
+                              try {
+                                String? finalProofUrl = currentProofUrl;
+                                if (pickedProofBytes != null) {
+                                  final uploaded = await CloudinaryService.uploadBytes(
+                                    pickedProofBytes!,
+                                    fileName: pickedProofFileName ?? (pickedProofIsPdf ? "payment_receipt.pdf" : "receipt.jpg"),
+                                    folder: CloudinaryConfig.folderPaymentReceipts,
+                                  );
+                                  if (uploaded != null) {
+                                    finalProofUrl = uploaded;
+                                  }
+                                }
+
+                                setModalState(() => submittingText = "Updating bill status...");
+
+                                await FirestoreService().submitBillPaymentProof(
+                                  billId: bill.id,
+                                  paymentMode: selectedMethod,
+                                  utrNumber: utr.isNotEmpty ? utr : (selectedMethod == "Cash" ? "CASH-HANDOVER" : null),
+                                  proofUrl: finalProofUrl,
+                                  remarks: remarksController.text.trim(),
+                                );
+
+                                if (!context.mounted) return;
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      selectedMethod == "Cash"
+                                          ? "Cash handover updated! Administration will verify physical cash and approve."
+                                          : "Payment proof submitted successfully! Administration will verify shortly.",
+                                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+                                    ),
+                                    backgroundColor: const Color(0xFF10B981),
+                                    behavior: SnackBarBehavior.floating,
+                                    duration: const Duration(seconds: 4),
+                                  ),
+                                );
+                              } catch (e) {
+                                setModalState(() => isSubmitting = false);
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text("Submission failed: $e", style: GoogleFonts.plusJakartaSans()),
+                                    backgroundColor: Colors.redAccent,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                      icon: isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_circle_rounded, size: 18),
+                      label: Text(
+                        isSubmitting
+                            ? submittingText
+                            : (selectedMethod == "Cash"
+                                ? (bill.isPendingVerification ? "Update Cash Handover" : "Submit Cash Payment")
+                                : (bill.isPendingVerification ? "Update Payment Proof" : "Submit Payment Proof")),
+                        style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: selectedMethod == "Cash" ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text(
+                        "Close",
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              "After completing payment via UPI/Bank transfer, please share transaction reference with hostel reception or admin for instant digital receipt confirmation.",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: const Color(0xFF64748B),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                child: Text(
-                  "Done",
-                  style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800),
-                ),
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -313,22 +1205,23 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
       builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: Colors.white,
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(22.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Official Stamp Badge
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: const BoxDecoration(
-                  color: Color(0xFFEFF6FF),
+                  color: Color(0xFFDCFCE7),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF2563EB), size: 30),
+                child: const Icon(Icons.verified_rounded, color: Color(0xFF16A34A), size: 36),
               ),
               const SizedBox(height: 12),
               Text(
-                "Payment Receipt",
+                "Fee Cleared Reward Voucher",
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -343,7 +1236,39 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
+
+              // Reward Banner
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF86EFAC)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.stars_rounded, color: Color(0xFF16A34A), size: 16),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        "Resident In Good Standing • Zero Outstanding Dues",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF15803D),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
@@ -357,7 +1282,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                     const SizedBox(height: 8),
                     _buildPaymentInfoRow("Invoice No", item.invoiceNo),
                     const SizedBox(height: 8),
-                    _buildPaymentInfoRow("Date", dateStr),
+                    _buildPaymentInfoRow("Date Paid", dateStr),
                     const SizedBox(height: 8),
                     _buildPaymentInfoRow("Bill Type", item.billType),
                     if (item.billingMonth.isNotEmpty) ...[
@@ -367,6 +1292,10 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                     if (item.paymentMethod != null && item.paymentMethod!.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       _buildPaymentInfoRow("Payment Mode", item.paymentMethod!),
+                    ],
+                    if (item.adminRemarks != null && item.adminRemarks!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _buildPaymentInfoRow("Verification Note", item.adminRemarks!),
                     ],
                     const SizedBox(height: 10),
                     const Divider(height: 1, color: Color(0xFFCBD5E1)),
@@ -395,7 +1324,27 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              if (item.proofUrl != null && item.proofUrl!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _viewFullScreenImage(item.proofUrl!),
+                    icon: const Icon(Icons.image_outlined, size: 16),
+                    label: Text(
+                      "View Attached Payment Proof",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2563EB),
+                      side: const BorderSide(color: Color(0xFF93C5FD)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -435,6 +1384,8 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
         '';
 
     final effectivePhone = _user?.phone;
+    final effectiveEmail = _user?.email ?? widget.currentUser?.email;
+    final effectiveRegNo = _user?.registrationNumber ?? widget.currentUser?.registrationNumber;
 
     return PopScope(
       canPop: false,
@@ -444,7 +1395,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        drawer: const UserDrawer(activeItem: "Payments & Bills"),
+        drawer: UserDrawer(activeItem: "Payments & Bills", currentUser: _user ?? widget.currentUser),
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
@@ -495,12 +1446,51 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
             ],
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: FirestoreService().getStudentNotificationsStream(
+                effectiveStudentId,
+                building: _user?.building ?? widget.currentUser?.building,
+                regNo: effectiveRegNo,
+              ),
+              builder: (context, notifSnapshot) {
+                final notifs = notifSnapshot.data ?? [];
+                final unreadCount = notifs.where((n) => n['isRead'] != true).length;
+
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NotificationsScreen(currentUser: _user ?? widget.currentUser),
+                          ),
+                        );
+                      },
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            unreadCount > 9 ? "9+" : "$unreadCount",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
@@ -508,7 +1498,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                  MaterialPageRoute(builder: (context) => ProfileScreen(currentUser: _user ?? widget.currentUser)),
                 );
               },
               child: Padding(
@@ -541,7 +1531,12 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
         ),
         body: SafeArea(
           child: StreamBuilder<List<BillModel>>(
-            stream: FirestoreService().getStudentBillsStream(effectiveStudentId, phone: effectivePhone),
+            stream: FirestoreService().getStudentBillsStream(
+              effectiveStudentId,
+              phone: effectivePhone,
+              email: effectiveEmail,
+              regNo: effectiveRegNo,
+            ),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                 return const Center(
@@ -1049,13 +2044,19 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: isOverdue ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
+                            color: bill.isPendingVerification
+                                ? const Color(0xFFFEF3C7)
+                                : (isOverdue ? const Color(0xFFFEE2E2) : const Color(0xFFEFF6FF)),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            isOverdue ? "Overdue" : "Upcoming",
+                            bill.isPendingVerification
+                                ? "Pending Verification"
+                                : (isOverdue ? "Overdue" : "Upcoming"),
                             style: GoogleFonts.plusJakartaSans(
-                              color: isOverdue ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+                              color: bill.isPendingVerification
+                                  ? const Color(0xFFD97706)
+                                  : (isOverdue ? const Color(0xFFDC2626) : const Color(0xFF2563EB)),
                               fontSize: 10.5,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1074,11 +2075,15 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        isOverdue ? "Immediate Action" : "To Be Paid",
+                        bill.isPendingVerification
+                            ? "UTR: ${bill.utrNumber ?? bill.transactionRef ?? 'Submitted'}"
+                            : (isOverdue ? "Immediate Action" : "To Be Paid"),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.plusJakartaSans(
-                          color: isOverdue ? const Color(0xFFDC2626) : const Color(0xFFEF4444),
+                          color: bill.isPendingVerification
+                              ? const Color(0xFFD97706)
+                              : (isOverdue ? const Color(0xFFDC2626) : const Color(0xFFEF4444)),
                           fontWeight: FontWeight.w800,
                           fontSize: 12.5,
                         ),
@@ -1087,16 +2092,22 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () => _openPaymentModal(bill),
-                      icon: const Icon(Icons.credit_card_rounded, size: 14, color: Colors.white),
+                      icon: Icon(
+                        bill.isPendingVerification ? Icons.edit_note_rounded : Icons.credit_card_rounded,
+                        size: 14,
+                        color: Colors.white,
+                      ),
                       label: Text(
-                        "Pay / Submit Bill",
+                        bill.isPendingVerification ? "Update UTR / Proof" : "Pay / Submit Proof",
                         style: GoogleFonts.plusJakartaSans(
                           fontWeight: FontWeight.w800,
                           fontSize: 11.5,
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1D4ED8),
+                        backgroundColor: bill.isPendingVerification
+                            ? const Color(0xFFD97706)
+                            : const Color(0xFF1D4ED8),
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

@@ -477,11 +477,18 @@ class _TicketsScreenState extends State<TicketsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final uid = _user?.uid;
-    final studentName = _user?.fullName;
+    final uid = _user?.uid ?? widget.currentUser?.uid;
+    final studentName = _user?.fullName ?? widget.currentUser?.fullName;
+    final studentEmail = _user?.email ?? widget.currentUser?.email;
+    final studentPhone = _user?.phone ?? widget.currentUser?.phone;
 
     final complaintsStream = uid != null && uid.isNotEmpty
-        ? FirestoreService().getStudentComplaintsStream(uid, studentName: studentName)
+        ? FirestoreService().getStudentComplaintsStream(
+            uid,
+            studentName: studentName,
+            studentEmail: studentEmail,
+            studentPhone: studentPhone,
+          )
         : FirestoreService().getComplaintsStream();
 
     return PopScope(
@@ -492,7 +499,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        drawer: const UserDrawer(activeItem: "Tickets"),
+        drawer: UserDrawer(activeItem: "Tickets", currentUser: _user ?? widget.currentUser),
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
@@ -541,12 +548,51 @@ class _TicketsScreenState extends State<TicketsScreen> {
             ],
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: FirestoreService().getStudentNotificationsStream(
+                uid ?? FirebaseAuthService().currentUser?.uid ?? '',
+                building: _user?.building ?? widget.currentUser?.building,
+                regNo: _user?.registrationNumber ?? widget.currentUser?.registrationNumber,
+              ),
+              builder: (context, notifSnapshot) {
+                final notifs = notifSnapshot.data ?? [];
+                final unreadCount = notifs.where((n) => n['isRead'] != true).length;
+
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NotificationsScreen(currentUser: _user ?? widget.currentUser),
+                          ),
+                        );
+                      },
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            unreadCount > 9 ? "9+" : "$unreadCount",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
@@ -555,7 +601,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const ProfileScreen(),
+                    builder: (context) => ProfileScreen(currentUser: _user ?? widget.currentUser),
                   ),
                 );
               },

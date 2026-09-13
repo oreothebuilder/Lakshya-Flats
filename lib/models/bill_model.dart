@@ -19,6 +19,11 @@ class BillModel {
   final String? paymentMethod;
   final String? transactionRef;
   final String? paidDate;
+  final String? studentEmail;
+  final String? proofUrl;
+  final String? paymentRemarks;
+  final String? adminRemarks;
+  final DateTime? submittedAt;
 
   BillModel({
     required this.id,
@@ -39,11 +44,24 @@ class BillModel {
     this.paymentMethod,
     this.transactionRef,
     this.paidDate,
+    this.studentEmail,
+    this.proofUrl,
+    this.paymentRemarks,
+    this.adminRemarks,
+    this.submittedAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
   double get balance => (amount - paidAmount).clamp(0.0, amount);
-  bool get isPaid => paidAmount >= amount && amount > 0;
+  bool get isPaid => (paidAmount >= amount && amount > 0) || status.toLowerCase() == 'paid';
   
+  String? get utrNumber => transactionRef;
+  
+  bool get isPendingVerification {
+    if (isPaid || status.toLowerCase() == 'paid') return false;
+    final s = status.toLowerCase();
+    return s == 'pending verification' || (transactionRef != null && transactionRef!.trim().isNotEmpty);
+  }
+
   bool get isDefaulter {
     if (isPaid) return false;
     if (status.toLowerCase() == 'defaulter') return true;
@@ -55,6 +73,7 @@ class BillModel {
 
   String get computedStatus {
     if (isPaid) return 'Paid';
+    if (isPendingVerification) return 'Pending Verification';
     if (isDefaulter) return 'Defaulter';
     return 'Pending';
   }
@@ -77,6 +96,11 @@ class BillModel {
     }
     return studentName.trim().substring(0, studentName.trim().length >= 2 ? 2 : 1).toUpperCase();
   }
+
+  bool get isBankTransfer => (paymentMethod ?? '').toLowerCase().contains('bank');
+  bool get isUpi => (paymentMethod ?? '').toLowerCase().contains('upi');
+  bool get isCash => (paymentMethod ?? '').toLowerCase().contains('cash');
+  bool get hasProofScreenshot => proofUrl != null && proofUrl!.isNotEmpty;
 
   // Helper to categorize bill into user's requested 2 types:
   // 1. Hostel bill & security deposit
@@ -123,6 +147,15 @@ class BillModel {
       }
     }
 
+    DateTime? parsedSubmittedAt;
+    if (data['submittedAt'] != null) {
+      if (data['submittedAt'] is Timestamp) {
+        parsedSubmittedAt = (data['submittedAt'] as Timestamp).toDate();
+      } else {
+        parsedSubmittedAt = DateTime.tryParse(data['submittedAt'].toString());
+      }
+    }
+
     return BillModel(
       id: doc.id,
       studentId: data['studentId']?.toString() ?? '',
@@ -140,8 +173,13 @@ class BillModel {
       avatarUrl: data['avatarUrl']?.toString() ?? data['photoUrl']?.toString() ?? '',
       billingMonth: data['billingMonth']?.toString() ?? '',
       paymentMethod: data['paymentMethod']?.toString() ?? data['paymentMode']?.toString(),
-      transactionRef: data['transactionRef']?.toString(),
+      transactionRef: data['transactionRef']?.toString() ?? data['utrNumber']?.toString(),
       paidDate: data['paidDate']?.toString(),
+      studentEmail: data['studentEmail']?.toString(),
+      proofUrl: data['proofUrl']?.toString() ?? data['receiptUrl']?.toString(),
+      paymentRemarks: data['paymentRemarks']?.toString() ?? data['remarks']?.toString(),
+      adminRemarks: data['adminRemarks']?.toString(),
+      submittedAt: parsedSubmittedAt,
     );
   }
 
@@ -162,8 +200,67 @@ class BillModel {
       'avatarUrl': avatarUrl,
       'billingMonth': billingMonth,
       'paymentMethod': paymentMethod,
+      'paymentMode': paymentMethod,
       'transactionRef': transactionRef,
+      'utrNumber': transactionRef,
       'paidDate': paidDate,
+      'studentEmail': studentEmail,
+      'proofUrl': proofUrl,
+      'paymentRemarks': paymentRemarks,
+      'adminRemarks': adminRemarks,
+      if (submittedAt != null) 'submittedAt': Timestamp.fromDate(submittedAt!),
     };
+  }
+
+  BillModel copyWith({
+    String? id,
+    String? studentId,
+    String? studentName,
+    String? building,
+    String? room,
+    String? billType,
+    double? amount,
+    double? paidAmount,
+    String? status,
+    DateTime? dueDate,
+    String? invoiceNo,
+    DateTime? createdAt,
+    String? phone,
+    String? avatarUrl,
+    String? billingMonth,
+    String? paymentMethod,
+    String? transactionRef,
+    String? paidDate,
+    String? studentEmail,
+    String? proofUrl,
+    String? paymentRemarks,
+    String? adminRemarks,
+    DateTime? submittedAt,
+  }) {
+    return BillModel(
+      id: id ?? this.id,
+      studentId: studentId ?? this.studentId,
+      studentName: studentName ?? this.studentName,
+      building: building ?? this.building,
+      room: room ?? this.room,
+      billType: billType ?? this.billType,
+      amount: amount ?? this.amount,
+      paidAmount: paidAmount ?? this.paidAmount,
+      status: status ?? this.status,
+      dueDate: dueDate ?? this.dueDate,
+      invoiceNo: invoiceNo ?? this.invoiceNo,
+      createdAt: createdAt ?? this.createdAt,
+      phone: phone ?? this.phone,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      billingMonth: billingMonth ?? this.billingMonth,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      transactionRef: transactionRef ?? this.transactionRef,
+      paidDate: paidDate ?? this.paidDate,
+      studentEmail: studentEmail ?? this.studentEmail,
+      proofUrl: proofUrl ?? this.proofUrl,
+      paymentRemarks: paymentRemarks ?? this.paymentRemarks,
+      adminRemarks: adminRemarks ?? this.adminRemarks,
+      submittedAt: submittedAt ?? this.submittedAt,
+    );
   }
 }

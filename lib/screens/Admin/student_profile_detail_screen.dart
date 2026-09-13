@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../models/student_profile_model.dart';
 import '../../models/user_role_model.dart';
 import '../../models/bill_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
+import '../../config/cloudinary_config.dart';
+import '../../services/media_picker_service.dart';
+import '../../widgets/document_viewer_modal.dart';
 import 'broadcast_notification_screen.dart';
 import 'dashboard_screen.dart';
 
@@ -33,7 +35,6 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
 
   final TextEditingController _noteInputController = TextEditingController();
   final ScrollController _notesScrollController = ScrollController();
-  final ImagePicker _picker = ImagePicker();
 
   bool _isSendingNote = false;
   bool _isUploadingDoc = false;
@@ -814,17 +815,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
             // Row 3: Action Buttons (Download Bill or Send Notification)
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    "Invoice: ${bill.invoiceNo}",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11.5,
-                      color: const Color(0xFF94A3B8),
-                    ),
-                  ),
-                ),
+                const Spacer(),
                 const SizedBox(width: 8),
                 if (isPaid)
                   // Option to Download Receipt (PAID FEES ONLY)
@@ -2399,6 +2390,7 @@ Status: PAID & VERIFIED
     required IconData icon,
   }) {
     final bool hasDoc = url != null && url.isNotEmpty;
+    final bool isPdf = hasDoc && CloudinaryService.isPdf(url);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2422,10 +2414,10 @@ Status: PAID & VERIFIED
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: hasDoc ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9),
+                  color: hasDoc ? (isPdf ? const Color(0xFFFEF2F2) : const Color(0xFFEFF6FF)) : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: hasDoc ? primaryBlue : textMuted, size: 22),
+                child: Icon(isPdf ? Icons.picture_as_pdf_rounded : icon, color: hasDoc ? (isPdf ? const Color(0xFFDC2626) : primaryBlue) : textMuted, size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2450,15 +2442,15 @@ Status: PAID & VERIFIED
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: hasDoc ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                  color: hasDoc ? (isPdf ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7)) : const Color(0xFFFEF3C7),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  hasDoc ? "Uploaded" : "Pending",
+                  hasDoc ? (isPdf ? "PDF Attached" : "Uploaded") : "Pending",
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: hasDoc ? const Color(0xFF15803D) : const Color(0xFFB45309),
+                    color: hasDoc ? (isPdf ? const Color(0xFFB91C1C) : const Color(0xFF15803D)) : const Color(0xFFB45309),
                   ),
                 ),
               ),
@@ -2521,14 +2513,19 @@ Status: PAID & VERIFIED
 
   Future<void> _uploadOrReplaceDoc(String docKey) async {
     try {
-      final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
-      if (file == null) return;
+      final res = await MediaPickerService.showPickerAndUpload(
+        context: context,
+        title: "Upload Document (PDF / Image)",
+        folder: CloudinaryConfig.folderStudentDocs,
+        allowPdf: true,
+      );
+      if (res == null) return;
 
       setState(() => _isUploadingDoc = true);
-      _showSnackbar("Uploading document...");
+      _showSnackbar("Saving document to profile...");
 
-      final url = await CloudinaryService.uploadImage(file, folder: "lakshya_documents");
-      if (url != null) {
+      final url = res.url;
+      if (url.isNotEmpty) {
         if (docKey.startsWith("additionalDocs.")) {
           final customName = docKey.replaceFirst("additionalDocs.", "");
           final updatedAdditional = Map<String, dynamic>.from(_student.additionalDocs);
@@ -2657,68 +2654,9 @@ Status: PAID & VERIFIED
     );
   }
 
-  // Fullscreen interactive document & photo viewer
+  // Interactive document, PDF, and photo viewer modal
   void _openImageFullscreen(String url, {required String title}) {
-    if (url.isEmpty) {
-      _showSnackbar("No document file uploaded yet to view.");
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog.fullscreen(
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            backgroundColor: Colors.black,
-            elevation: 0,
-            iconTheme: const IconThemeData(color: Colors.white),
-            title: Text(
-              title,
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.close_rounded, color: Colors.white),
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ],
-          ),
-          body: Center(
-            child: InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: Image.network(
-                url,
-                fit: BoxFit.contain,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return const Center(child: CircularProgressIndicator(color: Colors.white));
-                },
-                errorBuilder: (context, err, stack) {
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.broken_image_rounded, size: 50, color: Colors.white54),
-                      const SizedBox(height: 12),
-                      Text(
-                        "Unable to load document preview",
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white70),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    DocumentViewerModal.show(context, url: url, title: title);
   }
 
   // Edit Basic Profile Information Dialog

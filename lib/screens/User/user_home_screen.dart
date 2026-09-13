@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/user_role_model.dart';
@@ -5,7 +6,6 @@ import '../../models/bill_model.dart';
 import '../../models/complaint_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/firebase_auth_service.dart';
-import '../../theme/app_colors.dart';
 import '../../widgets/user_drawer.dart';
 import 'mess_menu_screen.dart';
 import '../../services/mess_menu_service.dart';
@@ -65,18 +65,23 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     }
   }
 
-  void _showFeatureSnackbar(String featureName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          "$featureName selected.",
-          style: GoogleFonts.plusJakartaSans(),
-        ),
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  String _formatRelativeTime(dynamic createdAt) {
+    if (createdAt == null) return "Just now";
+    DateTime date;
+    if (createdAt is Timestamp) {
+      date = createdAt.toDate();
+    } else if (createdAt is DateTime) {
+      date = createdAt;
+    } else {
+      date = DateTime.tryParse(createdAt.toString()) ?? DateTime.now();
+    }
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return "Just now";
+    if (diff.inMinutes < 60) return "${diff.inMinutes}m ago";
+    if (diff.inHours < 24) return "${diff.inHours}h ago";
+    if (diff.inDays == 1) return "Yesterday";
+    if (diff.inDays < 7) return "${diff.inDays}d ago";
+    return "${date.day}/${date.month}/${date.year}";
   }
 
   String _formatDate(DateTime d) {
@@ -173,47 +178,61 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           ],
         ),
         actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NotificationsScreen(currentUser: widget.currentUser),
-                    ),
-                  );
-                },
-              ),
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.redAccent,
-                    shape: BoxShape.circle,
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: FirestoreService().getStudentNotificationsStream(
+              widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
+              building: widget.currentUser?.building,
+              regNo: widget.currentUser?.registrationNumber,
+            ),
+            builder: (context, notifSnapshot) {
+              final notifs = notifSnapshot.data ?? [];
+              final unreadCount = notifs.where((n) => n['isRead'] != true).length;
+
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
+                    tooltip: "Notifications",
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NotificationsScreen(currentUser: widget.currentUser),
+                        ),
+                      );
+                    },
                   ),
-                  child: const Text(
-                    "2",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
+                  if (unreadCount > 0)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEF4444),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          unreadCount > 9 ? "9+" : "$unreadCount",
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              )
-            ],
+                ],
+              );
+            },
           ),
           GestureDetector(
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ProfileScreen(),
+                  builder: (context) => ProfileScreen(currentUser: widget.currentUser),
                 ),
               );
             },
@@ -440,170 +459,208 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Recent Notification Card
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+              // Recent Notification Card (Live Firestore Stream)
+              StreamBuilder<List<Map<String, dynamic>>>(
+                stream: FirestoreService().getStudentNotificationsStream(
+                  widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
+                  building: widget.currentUser?.building,
+                  regNo: widget.currentUser?.registrationNumber,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFE0F2FE),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.notifications_active_rounded,
-                            color: Color(0xFF0284C7),
-                            size: 18,
-                          ),
+                builder: (context, notifSnapshot) {
+                  final notifs = notifSnapshot.data ?? [];
+                  final unreadCount = notifs.where((n) => n['isRead'] != true).length;
+                  final latestNotif = notifs.isNotEmpty ? notifs.first : null;
+
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.03),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFE0F2FE),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.notifications_active_rounded,
+                                color: Color(0xFF0284C7),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    "Recent Notification",
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 15.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: const Color(0xFF0F172A),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.redAccent.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Text(
-                                      "2 New",
-                                      style: TextStyle(
-                                        color: Colors.redAccent,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
+                                  Row(
+                                    children: [
+                                      Text(
+                                        "Recent Notification",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 15.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF0F172A),
+                                        ),
                                       ),
+                                      if (unreadCount > 0) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.redAccent.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            "$unreadCount New",
+                                            style: const TextStyle(
+                                              color: Colors.redAccent,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "Updates from hostel administration",
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11,
+                                      color: const Color(0xFF64748B),
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 2),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => NotificationsScreen(currentUser: widget.currentUser),
+                                  ),
+                                );
+                              },
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: Text(
+                                "View All",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF2563EB),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (latestNotif != null) ...[
+                          const SizedBox(height: 14),
+                          const Divider(color: Color(0xFFF1F5F9), height: 1),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: latestNotif['isRead'] == true ? const Color(0xFF94A3B8) : const Color(0xFF2563EB),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  latestNotif['category']?.toString().toUpperCase() ?? "NOTICE",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF2563EB),
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
                               Text(
-                                "Updates from hostel administr...",
+                                _formatRelativeTime(latestNotif['createdAt']),
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11,
-                                  color: const Color(0xFF64748B),
+                                  color: const Color(0xFF94A3B8),
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        TextButton(
-                          onPressed: () => _showFeatureSnackbar("View All Notifications"),
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: Text(
-                            "View All",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF2563EB),
+                          const SizedBox(height: 10),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  latestNotif['title'] ?? "Hostel Announcement",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  latestNotif['message'] ?? "",
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12.5,
+                                    color: const Color(0xFF475569),
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    const Divider(color: Color(0xFFF1F5F9), height: 1),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF2563EB),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFEE2E2),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            "Fee Reminder",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFFEF4444),
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          "2h ago >",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            color: const Color(0xFF94A3B8),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Fee Payment Reminder",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "Dear Resident, September hostel rent is due on September 1, 2026. Please pay ...",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12.5,
-                              color: const Color(0xFF475569),
-                              height: 1.4,
+                        ] else ...[
+                          const SizedBox(height: 12),
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              "No notifications right now.",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: const Color(0xFF94A3B8),
+                              ),
                             ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
               const SizedBox(height: 20),
 
@@ -694,7 +751,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => const MessMenuScreen(),
+                                    builder: (context) => MessMenuScreen(currentUser: widget.currentUser),
                                   ),
                                 );
                               },
@@ -753,6 +810,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                       FirebaseAuthService().currentUser?.uid ??
                       '',
                   phone: widget.currentUser?.phone,
+                  email: widget.currentUser?.email,
+                  regNo: widget.currentUser?.registrationNumber,
                 ),
                 builder: (context, snapshot) {
                   final allBills = snapshot.data ?? [];
@@ -1050,6 +1109,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           ? FirestoreService().getStudentComplaintsStream(
                               widget.currentUser!.uid,
                               studentName: widget.currentUser?.fullName,
+                              studentEmail: widget.currentUser?.email,
+                              studentPhone: widget.currentUser?.phone,
                             )
                           : FirestoreService().getComplaintsStream(),
                       builder: (context, snapshot) {

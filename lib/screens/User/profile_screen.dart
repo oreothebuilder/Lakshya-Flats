@@ -119,19 +119,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 
 
-  void _toggleEditSave() {
+  void _toggleEditSave() async {
     if (_isEditing) {
       if (_formKey.currentState!.validate()) {
+        final newName = _nameController.text.trim();
+        final newEmail = _emailController.text.trim();
+        final newPhone = _phoneController.text.trim();
+        final newDob = _dobController.text.trim();
+        final newReg = _regController.text.trim();
+        final newCourse = _courseController.text.trim();
+        final newBranch = _branchController.text.trim();
+
         setState(() {
-          _name = _nameController.text;
-          _email = _emailController.text;
-          _phone = _phoneController.text;
-          _dob = _dobController.text;
-          _reg = _regController.text;
-          _course = _courseController.text;
-          _branch = _branchController.text;
+          _name = newName;
+          _email = newEmail;
+          _phone = newPhone;
+          _dob = newDob;
+          _reg = newReg;
+          _course = newCourse;
+          _branch = newBranch;
           _isEditing = false;
         });
+
+        final sId = widget.currentUser?.uid ??
+            widget.currentUser?.studentId ??
+            FirebaseAuthService().currentUser?.uid ??
+            '';
+        if (sId.isNotEmpty) {
+          try {
+            await FirestoreService().updateStudentProfile(sId, {
+              'fullName': newName,
+              'phone': newPhone,
+              'dob': newDob,
+              'registrationNumber': newReg,
+              'course': newCourse,
+              'branch': newBranch,
+            });
+          } catch (e) {
+            debugPrint("Error updating profile in Firestore: $e");
+          }
+        }
+
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -158,7 +187,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogCtx) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
@@ -183,7 +212,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       labelStyle: GoogleFonts.plusJakartaSans(fontSize: 13),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    validator: (v) => v!.isEmpty ? "Enter current password" : null,
+                    validator: (v) => (v == null || v.isEmpty) ? "Enter current password" : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -195,7 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     validator: (v) {
-                      if (v!.isEmpty) return "Enter new password";
+                      if (v == null || v.isEmpty) return "Enter new password";
                       if (v.length < 6) return "Password must be at least 6 characters";
                       return null;
                     },
@@ -220,26 +249,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: Text(
                 "Cancel",
                 style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B)),
               ),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (passFormKey.currentState!.validate()) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        "Password changed successfully!",
-                        style: GoogleFonts.plusJakartaSans(),
+                  final newPass = newPasswordController.text.trim();
+                  Navigator.pop(dialogCtx);
+                  try {
+                    final user = FirebaseAuthService().currentUser;
+                    if (user != null) {
+                      await user.updatePassword(newPass);
+                    }
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          "Password changed successfully!",
+                          style: GoogleFonts.plusJakartaSans(),
+                        ),
+                        backgroundColor: Colors.green,
+                        behavior: SnackBarBehavior.floating,
                       ),
-                      backgroundColor: Colors.green,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                    );
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          "Failed to update password: $e",
+                          style: GoogleFonts.plusJakartaSans(),
+                        ),
+                        backgroundColor: Colors.redAccent,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -404,7 +453,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _handleBackToHome() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const UserHomeScreen()),
+      MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: widget.currentUser)),
       (route) => false,
     );
   }
@@ -438,38 +487,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           actions: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                    );
-                  },
-                ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.redAccent,
-                      shape: BoxShape.circle,
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: FirestoreService().getStudentNotificationsStream(
+                widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
+                building: widget.currentUser?.building,
+                regNo: widget.currentUser?.registrationNumber,
+              ),
+              builder: (context, notifSnapshot) {
+                final notifs = notifSnapshot.data ?? [];
+                final unreadCount = notifs.where((n) => n['isRead'] != true).length;
+
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NotificationsScreen(currentUser: widget.currentUser),
+                          ),
+                        );
+                      },
                     ),
-                    child: const Text(
-                      "2",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            unreadCount > 9 ? "9+" : "$unreadCount",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
             Padding(
               padding: const EdgeInsets.only(right: 8, left: 4),

@@ -1,0 +1,174 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // Helper Functions
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'sudhansu1906@gmail.com'
+      );
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdminOrManagement() {
+      return isSuperAdmin() || (
+        isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (getUserDoc().role == 'admin' || getUserDoc().role == 'management') &&
+        getUserDoc().status != 'Inactive' &&
+        getUserDoc().status != 'Suspended'
+      );
+    }
+
+    // =========================================================================
+    // 1. Users & Resident Profiles
+    // =========================================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdminOrManagement();
+      allow create: if isOwner(userId) || isAdminOrManagement();
+      allow update: if isAdminOrManagement() || (
+        isOwner(userId) &&
+        // Students cannot elevate role, alter fee structures, or self-assign rooms
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'status', 'monthlyRent', 'securityDeposit', 'room', 'building', 'plan'
+        ])
+      );
+      allow delete: if isAdminOrManagement();
+
+      // Subcollections (personal notes, student notifications)
+      match /personal_notes/{noteId} {
+        allow read, write: if isOwner(userId) || isAdminOrManagement();
+      }
+      match /notifications/{notifId} {
+        allow read, write: if isOwner(userId) || isAdminOrManagement();
+      }
+    }
+
+    // =========================================================================
+    // 2. Bills & Payment Collection
+    // =========================================================================
+
+    match /bills/{billId} {
+      allow read: if isAdminOrManagement() || (
+        isAuthenticated() && resource.data.studentId == request.auth.uid
+      );
+      allow create: if isAdminOrManagement();
+      allow update: if isAdminOrManagement() || (
+        isAuthenticated() &&
+        resource.data.studentId == request.auth.uid &&
+        // Residents can only submit payment proof and transition to Pending Verification
+        request.resource.data.status != 'Paid' &&
+        request.resource.data.amount == resource.data.amount &&
+        request.resource.data.paidAmount == resource.data.paidAmount &&
+        request.resource.data.studentId == resource.data.studentId
+      );
+      allow delete: if isAdminOrManagement();
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isAdminOrManagement() || (
+        isAuthenticated() && resource.data.studentId == request.auth.uid
+      );
+      allow write: if isAdminOrManagement();
+    }
+
+    // =========================================================================
+    // 3. Maintenance Complaints & Helpdesk
+    // =========================================================================
+
+    match /complaints/{complaintId} {
+      allow read: if isAdminOrManagement() || (
+        isAuthenticated() && resource.data.studentId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isAdminOrManagement() || (
+        isAuthenticated() &&
+        resource.data.studentId == request.auth.uid &&
+        request.resource.data.studentId == resource.data.studentId &&
+        // Residents cannot edit administrative feedback or resolve tickets themselves
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['adminRemarks', 'resolvedAt'])
+      );
+      allow delete: if isAdminOrManagement();
+    }
+
+    // =========================================================================
+    // 4. Broadcast Notices & Announcements
+    // =========================================================================
+
+    match /broadcast_notifications/{noticeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminOrManagement();
+    }
+
+    // =========================================================================
+    // 5. Properties, Buildings & Spaces
+    // =========================================================================
+
+    match /buildings/{buildingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminOrManagement();
+    }
+
+    // =========================================================================
+    // 6. Mess Menu & Schedules
+    // =========================================================================
+
+    match /mess_menus/{messId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminOrManagement();
+    }
+
+    match /mess_menu/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminOrManagement();
+    }
+
+    // =========================================================================
+    // 7. Staff & Operations
+    // =========================================================================
+
+    match /staff/{staffId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminOrManagement();
+    }
+
+    // =========================================================================
+    // 8. Management Ledger: Expenses, Buckets & Admin Tasks
+    // =========================================================================
+
+    match /expenses/{expenseId} {
+      allow read, write: if isAdminOrManagement();
+    }
+
+    match /expense_buckets/{bucketId} {
+      allow read, write: if isAdminOrManagement();
+    }
+
+    match /admin_todos/{todoId} {
+      allow read, write: if isAdminOrManagement();
+    }
+
+    match /management_users/{userId} {
+      allow read, write: if isAdminOrManagement();
+    }
+
+    match /onboarding_drafts/{draftId} {
+      allow read, write: if isAdminOrManagement();
+    }
+  }
+}

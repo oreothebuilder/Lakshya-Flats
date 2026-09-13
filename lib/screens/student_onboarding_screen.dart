@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/cloudinary_service.dart';
 import '../config/cloudinary_config.dart';
 import '../services/firebase_auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/email_service.dart';
+import '../widgets/document_viewer_modal.dart';
 import 'Admin/dashboard_screen.dart';
 
 class StudentOnboardingScreen extends StatefulWidget {
@@ -413,6 +415,64 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     }
   }
 
+  Future<void> _handleUploadPdfDocument({required String documentType}) async {
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+
+      if (documentType == "College ID") {
+        setState(() {
+          _collegeIdBytes = bytes;
+          _isUploadingCollegeId = true;
+        });
+      } else {
+        setState(() {
+          _govtIdBytes = bytes;
+          _isUploadingGovtId = true;
+        });
+      }
+
+      _showSnackbar("Uploading $documentType PDF to cloud...");
+
+      final uploadedUrl = await CloudinaryService.uploadPlatformFile(
+        file,
+        folder: CloudinaryConfig.folderStudentDocs,
+      );
+
+      setState(() {
+        if (documentType == "College ID") {
+          _isUploadingCollegeId = false;
+          _collegeIdUploaded = uploadedUrl != null;
+          _collegeIdUrl = uploadedUrl;
+        } else {
+          _isUploadingGovtId = false;
+          _govtIdUploaded = uploadedUrl != null;
+          _govtIdUrl = uploadedUrl;
+        }
+      });
+
+      if (uploadedUrl != null) {
+        _showSnackbar("$documentType PDF uploaded successfully!");
+      } else {
+        _showSnackbar("Could not upload PDF. Please check connection.", isError: true);
+      }
+    } catch (e) {
+      setState(() {
+        if (documentType == "College ID") {
+          _isUploadingCollegeId = false;
+        } else {
+          _isUploadingGovtId = false;
+        }
+      });
+      _showSnackbar("Error picking PDF: $e", isError: true);
+    }
+  }
+
   void _showDocumentSourceSheet(String documentType) {
     showModalBottomSheet(
       context: context,
@@ -481,16 +541,39 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   child: const Icon(Icons.photo_library_rounded, color: Color(0xFF475569), size: 22),
                 ),
                 title: Text(
-                  "Choose from Gallery / Files",
+                  "Choose Image from Gallery",
                   style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14.5),
                 ),
                 subtitle: Text(
-                  "Select an existing file or image from device",
+                  "Select JPG or PNG image from device",
                   style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B)),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _handleUploadDocument(documentType: documentType, source: ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 22),
+                ),
+                title: Text(
+                  "Select PDF Document",
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14.5),
+                ),
+                subtitle: Text(
+                  "Upload official PDF document or agreement",
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleUploadPdfDocument(documentType: documentType);
                 },
               ),
             ],
@@ -1176,7 +1259,6 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       'profilePhotoUploaded': _profilePhotoUploaded,
       'collegeIdUrl': _collegeIdUrl,
       'collegeIdUploaded': _collegeIdUploaded,
-      'govtIdBytes': _govtIdBytes,
       'govtIdUrl': _govtIdUrl,
       'govtIdUploaded': _govtIdUploaded,
       'savedStep': _currentStep > 0 ? _currentStep : 1,
@@ -1225,15 +1307,15 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       _guardianPhoneController.text = draft['guardianPhone'] ?? "";
       _guardianRelationship = draft['guardianRelationship'] ?? "Father";
       _dietaryPreference = draft['dietaryPreference'] ?? "Vegetarian";
-      _profilePhotoBytes = draft['profilePhotoBytes'];
+      _profilePhotoBytes = null;
       _profilePhotoUrl = draft['profilePhotoUrl'];
-      _profilePhotoUploaded = draft['profilePhotoUploaded'] ?? false;
-      _collegeIdBytes = draft['collegeIdBytes'];
+      _profilePhotoUploaded = draft['profilePhotoUploaded'] ?? (_profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty);
+      _collegeIdBytes = null;
       _collegeIdUrl = draft['collegeIdUrl'];
-      _collegeIdUploaded = draft['collegeIdUploaded'] ?? false;
-      _govtIdBytes = draft['govtIdBytes'];
+      _collegeIdUploaded = draft['collegeIdUploaded'] ?? (_collegeIdUrl != null && _collegeIdUrl!.isNotEmpty);
+      _govtIdBytes = null;
       _govtIdUrl = draft['govtIdUrl'];
-      _govtIdUploaded = draft['govtIdUploaded'] ?? false;
+      _govtIdUploaded = draft['govtIdUploaded'] ?? (_govtIdUrl != null && _govtIdUrl!.isNotEmpty);
       _currentStep = draft['savedStep'] ?? 1;
     });
 
@@ -2159,13 +2241,14 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         const SizedBox(height: 10),
         _buildUploadCard(
           title: _collegeIdAddLater ? "College ID (Marked for Add Later)" : "Click to Upload College ID Card",
-          subtitle: "📸 Take Photo with Camera or 📁 Choose File",
+          subtitle: "📸 Camera, 📁 Gallery, or 📄 PDF Document",
           icon: Icons.note_add_rounded,
           iconBg: const Color(0xFFEEF2FF),
           iconColor: const Color(0xFF4F46E5),
           isUploaded: _collegeIdUploaded,
           isUploading: _isUploadingCollegeId,
           previewBytes: _collegeIdBytes,
+          uploadedUrl: _collegeIdUrl,
           onTap: () {
             setState(() => _collegeIdAddLater = false);
             _showDocumentSourceSheet("College ID");
@@ -2236,13 +2319,14 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         const SizedBox(height: 10),
         _buildUploadCard(
           title: _govtIdAddLater ? "Government ID (Marked for Add Later)" : "Click to Upload Government Authorized ID",
-          subtitle: "📸 Take Photo with Camera or 📁 Choose File",
+          subtitle: "📸 Camera, 📁 Gallery, or 📄 PDF Document",
           icon: Icons.verified_user_rounded,
           iconBg: const Color(0xFFDCFCE7),
           iconColor: const Color(0xFF16A34A),
           isUploaded: _govtIdUploaded,
           isUploading: _isUploadingGovtId,
           previewBytes: _govtIdBytes,
+          uploadedUrl: _govtIdUrl,
           onTap: () {
             setState(() => _govtIdAddLater = false);
             _showDocumentSourceSheet("Government ID");
@@ -4900,9 +4984,12 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     required bool isUploaded,
     bool isUploading = false,
     Uint8List? previewBytes,
+    String? uploadedUrl,
     required VoidCallback onTap,
     VoidCallback? onRemove,
   }) {
+    final bool isPdfDoc = CloudinaryService.isPdf(uploadedUrl);
+
     return GestureDetector(
       onTap: isUploading ? null : onTap,
       child: Container(
@@ -4933,7 +5020,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               )
             : Column(
                 children: [
-                  if (previewBytes != null) ...[
+                  if (previewBytes != null && !isPdfDoc) ...[
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.memory(
@@ -4944,6 +5031,31 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                  ] else if (isUploaded && isPdfDoc) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 22),
+                          const SizedBox(width: 8),
+                          Text(
+                            "PDF Document Attached",
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF991B1B),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ] else ...[
                     Container(
                       padding: const EdgeInsets.all(14),
@@ -4952,8 +5064,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        isUploaded ? Icons.check_circle_rounded : icon,
-                        color: isUploaded ? const Color(0xFF16A34A) : iconColor,
+                        isUploaded ? (isPdfDoc ? Icons.picture_as_pdf_rounded : Icons.check_circle_rounded) : icon,
+                        color: isUploaded ? (isPdfDoc ? const Color(0xFFDC2626) : const Color(0xFF16A34A)) : iconColor,
                         size: 28,
                       ),
                     ),
@@ -4963,12 +5075,12 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (isUploaded) ...[
-                        const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 18),
+                        Icon(isPdfDoc ? Icons.picture_as_pdf_rounded : Icons.check_circle_rounded, color: isPdfDoc ? const Color(0xFFDC2626) : const Color(0xFF16A34A), size: 18),
                         const SizedBox(width: 6),
                       ],
                       Flexible(
                         child: Text(
-                          isUploaded ? "Uploaded Successfully! (Tap to change)" : title,
+                          isUploaded ? (isPdfDoc ? "PDF Attached! (Tap to change)" : "Uploaded Successfully! (Tap to change)") : title,
                           textAlign: TextAlign.center,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 14.5,
@@ -4989,15 +5101,39 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                       color: const Color(0xFF64748B),
                     ),
                   ),
-                  if (isUploaded && onRemove != null) ...[
-                    const SizedBox(height: 6),
-                    TextButton.icon(
-                      onPressed: onRemove,
-                      icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
-                      label: Text(
-                        "Remove Document",
-                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.redAccent),
-                      ),
+                  if (isUploaded) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (uploadedUrl != null || previewBytes != null) ...[
+                          TextButton.icon(
+                            onPressed: () {
+                              DocumentViewerModal.show(
+                                context,
+                                url: uploadedUrl ?? "",
+                                title: title,
+                                memoryBytes: previewBytes,
+                              );
+                            },
+                            icon: const Icon(Icons.visibility_rounded, size: 16, color: Color(0xFF0056D2)),
+                            label: Text(
+                              "View / Download",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF0056D2)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (onRemove != null)
+                          TextButton.icon(
+                            onPressed: onRemove,
+                            icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
+                            label: Text(
+                              "Remove",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.redAccent),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ],

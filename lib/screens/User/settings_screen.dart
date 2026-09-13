@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../models/user_role_model.dart';
+import '../../services/firebase_auth_service.dart';
+import '../../services/firestore_service.dart';
 import '../../widgets/user_drawer.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'user_home_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final AppUser? currentUser;
+
+  const SettingsScreen({
+    super.key,
+    this.currentUser,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -17,9 +25,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _phoneController;
 
   // Account State
-  final String _email = "student@university.edu";
-  String _phone = "+1 (555) 019-2834";
-  String _passwordSubtext = "Last changed 3 months ago";
+  late String _email;
+  late String _phone;
+  String _passwordSubtext = "Protected with Lakshya Auth";
 
   // Preference State
   String _selectedLanguage = "English (US)";
@@ -36,6 +44,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    final u = widget.currentUser;
+    final authUser = FirebaseAuthService().currentUser;
+    _email = (u?.email.isNotEmpty == true)
+        ? u!.email
+        : (authUser?.email ?? "resident@lakshya.edu");
+    _phone = (u?.phone.isNotEmpty == true)
+        ? u!.phone
+        : (authUser?.phoneNumber ?? "");
     _phoneController = TextEditingController(text: _phone);
   }
 
@@ -53,7 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogCtx) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
@@ -166,7 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: Text(
                 "Cancel",
                 style: GoogleFonts.plusJakartaSans(
@@ -176,22 +192,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (dialogFormKey.currentState!.validate()) {
-                  setState(() {
-                    _passwordSubtext = "Last changed just now";
-                  });
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        "Password updated successfully",
-                        style: GoogleFonts.plusJakartaSans(),
+                  final newPass = newPasswordController.text.trim();
+                  Navigator.pop(dialogCtx);
+                  try {
+                    final user = FirebaseAuthService().currentUser;
+                    if (user != null) {
+                      await user.updatePassword(newPass);
+                    }
+                    setState(() {
+                      _passwordSubtext = "Last changed just now";
+                    });
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          "Password updated successfully",
+                          style: GoogleFonts.plusJakartaSans(),
+                        ),
+                        backgroundColor: Colors.green,
+                        behavior: SnackBarBehavior.floating,
                       ),
-                      backgroundColor: Colors.green,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                    );
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          "Failed to update password: $e",
+                          style: GoogleFonts.plusJakartaSans(),
+                        ),
+                        backgroundColor: Colors.redAccent,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -210,12 +246,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _saveChanges() {
+  void _saveChanges() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
-        _phone = _phoneController.text;
+        _phone = _phoneController.text.trim();
       });
 
+      final sId = widget.currentUser?.uid ??
+          widget.currentUser?.studentId ??
+          FirebaseAuthService().currentUser?.uid ??
+          '';
+      if (sId.isNotEmpty) {
+        try {
+          await FirestoreService().updateStudentProfile(sId, {
+            'phone': _phone,
+          });
+        } catch (e) {
+          debugPrint("Error updating phone in Firestore: $e");
+        }
+      }
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -232,7 +283,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _handleBackToHome() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const UserHomeScreen()),
+      MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: widget.currentUser)),
       (route) => false,
     );
   }
@@ -247,7 +298,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        drawer: UserDrawer(activeItem: "Settings"),
+        drawer: UserDrawer(activeItem: "Settings", currentUser: widget.currentUser),
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
@@ -266,12 +317,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: FirestoreService().getStudentNotificationsStream(
+                widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
+                building: widget.currentUser?.building,
+                regNo: widget.currentUser?.registrationNumber,
+              ),
+              builder: (context, notifSnapshot) {
+                final notifs = notifSnapshot.data ?? [];
+                final unreadCount = notifs.where((n) => n['isRead'] != true).length;
+
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NotificationsScreen(currentUser: widget.currentUser),
+                          ),
+                        );
+                      },
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            unreadCount > 9 ? "9+" : "$unreadCount",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
@@ -279,7 +369,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                  MaterialPageRoute(builder: (context) => ProfileScreen(currentUser: widget.currentUser)),
                 );
               },
               child: Padding(
@@ -288,7 +378,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   radius: 18,
                   backgroundColor: const Color(0xFF2563EB),
                   child: Text(
-                    "SU",
+                    (widget.currentUser?.fullName.isNotEmpty ?? false)
+                        ? widget.currentUser!.fullName.substring(0, 1).toUpperCase()
+                        : "R",
                     style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
                       fontSize: 12,

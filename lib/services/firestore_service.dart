@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/student_profile_model.dart';
@@ -18,6 +20,7 @@ class FirestoreService {
 
   // Collection References
   CollectionReference get _usersRef => _db.collection('users');
+  CollectionReference get _studentsRef => _db.collection('students');
   CollectionReference get _managementRef => _db.collection('management_users');
   CollectionReference get _billsRef => _db.collection('bills');
   CollectionReference get _paymentsRef => _db.collection('payments');
@@ -236,9 +239,17 @@ class FirestoreService {
     }
   }
 
-  Stream<List<BillModel>> getStudentBillsStream(String studentId, {String? phone}) {
+  Stream<List<BillModel>> getStudentBillsStream(
+    String studentId, {
+    String? phone,
+    String? email,
+    String? regNo,
+  }) {
     try {
-      if (studentId.isEmpty && (phone == null || phone.isEmpty)) {
+      if (studentId.isEmpty &&
+          (phone == null || phone.isEmpty) &&
+          (email == null || email.isEmpty) &&
+          (regNo == null || regNo.isEmpty)) {
         return Stream.value(<BillModel>[]);
       }
       return _billsRef.snapshots().map((snapshot) {
@@ -256,9 +267,22 @@ class FirestoreService {
             doc.reference.delete().catchError((_) {});
             continue;
           }
-          final matchStudent = studentId.isNotEmpty && (b.studentId == studentId || b.id == studentId);
-          final matchPhone = phone != null && phone.isNotEmpty && b.phone.isNotEmpty && b.phone == phone;
-          if (matchStudent || matchPhone) {
+          final matchStudent = studentId.isNotEmpty &&
+              (b.studentId.toLowerCase() == studentId.toLowerCase() || b.id == studentId);
+          final matchPhone = phone != null &&
+              phone.isNotEmpty &&
+              b.phone.isNotEmpty &&
+              b.phone.replaceAll(RegExp(r'\D'), '') == phone.replaceAll(RegExp(r'\D'), '');
+          final matchEmail = email != null &&
+              email.isNotEmpty &&
+              ((b.studentEmail != null && b.studentEmail!.toLowerCase() == email.toLowerCase()) ||
+                  b.id.contains(email.toLowerCase()));
+          final matchRegNo = regNo != null &&
+              regNo.isNotEmpty &&
+              (b.invoiceNo.toLowerCase().contains(regNo.toLowerCase()) ||
+                  b.studentName.toLowerCase().contains(regNo.toLowerCase()));
+
+          if (matchStudent || matchPhone || matchEmail || matchRegNo) {
             list.add(b);
           }
         }
@@ -271,6 +295,144 @@ class FirestoreService {
     } catch (e) {
       debugPrint("getStudentBillsStream error: $e");
       return Stream.value(<BillModel>[]);
+    }
+  }
+
+  /// Resident submits payment proof (Bank transfer, UPI, or Cash)
+  Future<void> submitBillPaymentProof({
+    required String billId,
+    String? utrNumber,
+    String paymentMode = 'UPI',
+    String? proofUrl,
+    String remarks = '',
+  }) async {
+    final payload = <String, dynamic>{
+      'paymentStatus': 'Pending Verification',
+      'status': 'Pending Verification',
+      'paymentMethod': paymentMode,
+      'paymentMode': paymentMode,
+      'submittedAt': FieldValue.serverTimestamp(),
+      'utrSubmittedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (utrNumber != null && utrNumber.trim().isNotEmpty) {
+      payload['transactionRef'] = utrNumber.trim();
+      payload['utrNumber'] = utrNumber.trim();
+    }
+    if (proofUrl != null && proofUrl.trim().isNotEmpty) {
+      payload['proofUrl'] = proofUrl.trim();
+      payload['receiptUrl'] = proofUrl.trim();
+    }
+    if (remarks.trim().isNotEmpty) {
+      payload['paymentRemarks'] = remarks.trim();
+    }
+    await _billsRef.doc(billId).update(payload);
+  }
+
+  /// Admin verifies payment proof and marks the bill as fully or partially paid
+  Future<void> verifyAndMarkBillPaid(
+    String billId, {
+    double? paidAmount,
+    String? adminRemarks,
+  }) async {
+    final doc = await _billsRef.doc(billId).get();
+    if (!doc.exists) return;
+    final b = BillModel.fromFirestore(doc);
+    final actualPaid = paidAmount ?? b.amount;
+    final newBalance = (b.amount - actualPaid).clamp(0.0, double.infinity);
+    final isFullyPaid = newBalance == 0;
+
+    await _billsRef.doc(billId).update({
+      'paidAmount': actualPaid,
+      'balance': newBalance,
+      'isPaid': isFullyPaid,
+      'status': isFullyPaid ? 'Paid' : 'Partial',
+      'paymentStatus': isFullyPaid ? 'Verified & Paid' : 'Partially Paid',
+      'paidDate': DateTime.now().toIso8601String(),
+      'adminRemarks': adminRemarks ?? 'Payment verified by Administrator',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Record receipt in payments collection
+    try {
+      await _paymentsRef.add({
+        'billId': billId,
+        'invoiceNo': b.invoiceNo,
+        'studentId': b.studentId,
+        'studentName': b.studentName,
+        'building': b.building,
+        'room': b.room,
+        'billType': b.billType,
+        'amount': actualPaid,
+        'paymentMode': b.paymentMethod ?? 'Online',
+        'paymentMethod': b.paymentMethod ?? 'Online',
+        'transactionRef': b.transactionRef ?? 'TXN-${DateTime.now().millisecondsSinceEpoch}',
+        'proofUrl': b.proofUrl,
+        'adminRemarks': adminRemarks ?? 'Verified by Admin',
+        'paidAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint("Error recording payment receipt: $e");
+    }
+
+    // Send student in-app notification confirming fee clearance reward
+    try {
+      final billTitle = b.billingMonth.isNotEmpty ? b.billingMonth : b.billType;
+      await sendStudentNotification(
+        studentId: b.studentId,
+        studentName: b.studentName,
+        title: "Fee Payment Approved & Cleared! 🎉",
+        message: "Your payment of ₹${actualPaid.toStringAsFixed(0)} for $billTitle has been verified and marked as Paid. Your official payment receipt & zero-dues clearance voucher are now available.",
+        category: "Payment",
+        targetBuilding: b.building,
+        targetRoom: b.room,
+        metadata: {
+          'billId': billId,
+          'invoiceNo': b.invoiceNo,
+          'status': 'Paid',
+          'amount': actualPaid,
+          'paidDate': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      debugPrint("Error sending fee payment notification: $e");
+    }
+  }
+
+  /// Admin rejects payment proof / unreceived cash and sets bill back to Pending
+  Future<void> rejectBillPaymentProof(
+    String billId, {
+    required String rejectionReason,
+  }) async {
+    final doc = await _billsRef.doc(billId).get();
+    if (!doc.exists) return;
+    final b = BillModel.fromFirestore(doc);
+
+    await _billsRef.doc(billId).update({
+      'status': 'Pending',
+      'paymentStatus': 'Proof Rejected',
+      'adminRemarks': rejectionReason.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    try {
+      final billTitle = b.billingMonth.isNotEmpty ? b.billingMonth : b.billType;
+      await sendStudentNotification(
+        studentId: b.studentId,
+        studentName: b.studentName,
+        title: "Payment Proof Update Required",
+        message: "Your payment submission for $billTitle requires attention. Admin note: \"${rejectionReason.trim()}\". Please re-submit your payment proof or contact the administration office.",
+        category: "Payment",
+        targetBuilding: b.building,
+        targetRoom: b.room,
+        metadata: {
+          'billId': billId,
+          'invoiceNo': b.invoiceNo,
+          'status': 'Pending',
+        },
+      );
+    } catch (e) {
+      debugPrint("Error sending rejection notification: $e");
     }
   }
 
@@ -426,9 +588,17 @@ class FirestoreService {
     }
   }
 
-  Stream<List<ComplaintModel>> getStudentComplaintsStream(String studentId, {String? studentName}) {
+  Stream<List<ComplaintModel>> getStudentComplaintsStream(
+    String studentId, {
+    String? studentName,
+    String? studentEmail,
+    String? studentPhone,
+  }) {
     try {
-      if (studentId.isEmpty && (studentName == null || studentName.isEmpty)) {
+      if (studentId.isEmpty &&
+          (studentName == null || studentName.isEmpty) &&
+          (studentEmail == null || studentEmail.isEmpty) &&
+          (studentPhone == null || studentPhone.isEmpty)) {
         return Stream.value(<ComplaintModel>[]);
       }
       return _complaintsRef.snapshots().map((snapshot) {
@@ -437,6 +607,12 @@ class FirestoreService {
             .where((c) {
               if (studentId.isNotEmpty && (c.studentId == studentId || c.id == studentId)) return true;
               if (studentName != null && studentName.isNotEmpty && c.studentName.toLowerCase() == studentName.toLowerCase()) return true;
+              if (studentEmail != null && studentEmail.isNotEmpty && c.studentEmail.isNotEmpty && c.studentEmail.toLowerCase() == studentEmail.toLowerCase()) return true;
+              if (studentPhone != null && studentPhone.isNotEmpty && c.studentPhone.isNotEmpty) {
+                final clean1 = studentPhone.replaceAll(RegExp(r'\D'), '');
+                final clean2 = c.studentPhone.replaceAll(RegExp(r'\D'), '');
+                if (clean1.isNotEmpty && clean1 == clean2) return true;
+              }
               return false;
             })
             .toList();
@@ -514,39 +690,151 @@ class FirestoreService {
     });
   }
 
-  /// Live stream of notifications for a specific student
-  Stream<List<Map<String, dynamic>>> getStudentNotificationsStream(String studentId) {
-    if (studentId.isEmpty) {
+  /// Live stream of notifications for a specific student, merging personal ticket/bill alerts
+  /// and relevant admin broadcast notices (All students, student's building, or specific target)
+  Stream<List<Map<String, dynamic>>> getStudentNotificationsStream(
+    String studentId, {
+    String? building,
+    String? regNo,
+  }) {
+    if (Firebase.apps.isEmpty) {
       return Stream.value(<Map<String, dynamic>>[]);
     }
-    return _usersRef
-        .doc(studentId)
-        .collection('notifications')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          ...data,
-        };
-      }).toList();
-    }).handleError((e) {
-      debugPrint("getStudentNotificationsStream error: $e");
-      return <Map<String, dynamic>>[];
-    });
+    late StreamController<List<Map<String, dynamic>>> controller;
+    StreamSubscription? personalSub;
+    StreamSubscription? broadcastSub;
+
+    List<Map<String, dynamic>> personalList = [];
+    List<Map<String, dynamic>> broadcastList = [];
+    final Set<String> readNoticeIds = {};
+
+    void emitMerged() {
+      if (controller.isClosed) return;
+      final Map<String, Map<String, dynamic>> combined = {};
+
+      for (var n in personalList) {
+        final id = n['id']?.toString() ?? '';
+        if (id.isNotEmpty) combined[id] = n;
+      }
+
+      for (var n in broadcastList) {
+        final id = n['id']?.toString() ?? '';
+        if (id.isNotEmpty && !combined.containsKey(id)) {
+          final isNoticeRead = readNoticeIds.contains(id) || n['isRead'] == true;
+          combined[id] = {
+            ...n,
+            'isRead': isNoticeRead,
+          };
+        }
+      }
+
+      final sorted = combined.values.toList();
+      sorted.sort((a, b) {
+        DateTime parseDate(dynamic d) {
+          if (d == null) return DateTime.fromMillisecondsSinceEpoch(0);
+          if (d is Timestamp) return d.toDate();
+          if (d is DateTime) return d;
+          return DateTime.tryParse(d.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        }
+
+        final aDate = parseDate(a['createdAt']);
+        final bDate = parseDate(b['createdAt']);
+        return bDate.compareTo(aDate);
+      });
+
+      controller.add(sorted);
+    }
+
+    controller = StreamController<List<Map<String, dynamic>>>(
+      onListen: () {
+        if (studentId.isNotEmpty) {
+          personalSub = _usersRef
+              .doc(studentId)
+              .collection('notifications')
+              .orderBy('createdAt', descending: true)
+              .snapshots()
+              .listen((snap) {
+            personalList = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+            for (var d in personalList) {
+              if (d['isRead'] == true) {
+                readNoticeIds.add(d['id'].toString());
+              }
+            }
+            emitMerged();
+          }, onError: (e) {
+            debugPrint("Personal notifications stream error: $e");
+          });
+        }
+
+        broadcastSub = _noticesRef
+            .orderBy('createdAt', descending: true)
+            .snapshots()
+            .listen((snap) {
+          broadcastList = snap.docs
+              .map((d) => {'id': d.id, ...(d.data() as Map<String, dynamic>)})
+              .where((n) {
+                final aud = (n['targetAudience'] ?? '').toString().toLowerCase();
+                final selectedBuildings = (n['selectedBuildings'] as List?)
+                        ?.map((e) => e.toString().toLowerCase().trim())
+                        .toList() ??
+                    [];
+                final selectedStudents = (n['selectedStudentIds'] as List?)
+                        ?.map((e) => e.toString().trim())
+                        .toList() ??
+                    [];
+
+                // 1. All students
+                if (aud.contains('all student') || aud.isEmpty) return true;
+
+                // 2. Specific student match
+                if (studentId.isNotEmpty && selectedStudents.contains(studentId)) return true;
+                if (regNo != null && regNo.isNotEmpty && selectedStudents.contains(regNo)) return true;
+
+                // 3. Building match
+                if (building != null && building.isNotEmpty) {
+                  final bLower = building.toLowerCase().trim();
+                  if (selectedBuildings.any((b) => b.contains(bLower) || bLower.contains(b))) return true;
+                  if (aud.contains(bLower)) return true;
+                }
+
+                // 4. Defaulters
+                if (aud.contains('defaulter')) {
+                  if (studentId.isNotEmpty && selectedStudents.contains(studentId)) return true;
+                }
+
+                return false;
+              })
+              .toList();
+
+          emitMerged();
+        }, onError: (e) {
+          debugPrint("Broadcast notifications stream error: $e");
+        });
+      },
+      onCancel: () {
+        personalSub?.cancel();
+        broadcastSub?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 
   /// Mark single notification as read
   Future<void> markNotificationAsRead(String studentId, String notificationId) async {
     if (studentId.isEmpty || notificationId.isEmpty) return;
     try {
-      await _usersRef
-          .doc(studentId)
-          .collection('notifications')
-          .doc(notificationId)
-          .update({'isRead': true});
+      final docRef = _usersRef.doc(studentId).collection('notifications').doc(notificationId);
+      final doc = await docRef.get();
+      if (doc.exists) {
+        await docRef.update({'isRead': true});
+      } else {
+        await docRef.set({
+          'notificationId': notificationId,
+          'isRead': true,
+          'readAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
     } catch (e) {
       debugPrint("markNotificationAsRead error: $e");
     }
@@ -568,6 +856,44 @@ class FirestoreService {
       await batch.commit();
     } catch (e) {
       debugPrint("markAllNotificationsAsRead error: $e");
+    }
+  }
+
+  /// Updates resident profile across both 'students' and 'users' collections
+  Future<void> updateStudentProfile(String studentId, Map<String, dynamic> data) async {
+    final updateData = {
+      ...data,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    // 1. Update students collection (studentId could be doc.id or studentId field)
+    try {
+      final doc = await _studentsRef.doc(studentId).get();
+      if (doc.exists) {
+        await _studentsRef.doc(studentId).update(updateData);
+      } else {
+        final query = await _studentsRef.where('studentId', isEqualTo: studentId).limit(1).get();
+        if (query.docs.isNotEmpty) {
+          await query.docs.first.reference.update(updateData);
+        } else if (data['email'] != null) {
+          final qEmail = await _studentsRef.where('email', isEqualTo: data['email'].toString().toLowerCase().trim()).limit(1).get();
+          if (qEmail.docs.isNotEmpty) {
+            await qEmail.docs.first.reference.update(updateData);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("updateStudentProfile students collection error: $e");
+    }
+
+    // 2. Update users collection (roles and credentials doc)
+    try {
+      final uDoc = await _usersRef.doc(studentId).get();
+      if (uDoc.exists) {
+        await _usersRef.doc(studentId).update(updateData);
+      }
+    } catch (e) {
+      debugPrint("updateStudentProfile users collection error: $e");
     }
   }
 

@@ -336,17 +336,25 @@ class _PersonalTodoScreenState extends State<PersonalTodoScreen> {
 
               // 2. Filter Tabs & Summary Row
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                 child: Row(
                   children: [
-                    // All / Pending / Completed Filter Chips
-                    _buildFilterChip("All", allTodos.length),
-                    const SizedBox(width: 8),
-                    _buildFilterChip("Pending", pendingCount),
-                    const SizedBox(width: 8),
-                    _buildFilterChip("Completed", completedCount),
-                    const Spacer(),
-                    if (completedCount > 0)
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterChip("All", allTodos.length),
+                            const SizedBox(width: 8),
+                            _buildFilterChip("Pending", pendingCount),
+                            const SizedBox(width: 8),
+                            _buildFilterChip("Completed", completedCount),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (completedCount > 0) ...[
+                      const SizedBox(width: 8),
                       TextButton.icon(
                         onPressed: _confirmClearCompleted,
                         icon: const Icon(Icons.delete_sweep_outlined, size: 16, color: Color(0xFFDC2626)),
@@ -363,6 +371,7 @@ class _PersonalTodoScreenState extends State<PersonalTodoScreen> {
                           visualDensity: VisualDensity.compact,
                         ),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -371,43 +380,51 @@ class _PersonalTodoScreenState extends State<PersonalTodoScreen> {
               Expanded(
                 child: filtered.isEmpty
                     ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFEFF6FF),
-                                shape: BoxShape.circle,
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFEFF6FF),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.check_circle_outline_rounded,
+                                  size: 36,
+                                  color: Color(0xFF0D52CE),
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.check_circle_outline_rounded,
-                                size: 36,
-                                color: Color(0xFF0D52CE),
+                              const SizedBox(height: 16),
+                              Text(
+                                _filter == 'Completed'
+                                    ? "No completed tasks yet"
+                                    : _filter == 'Pending'
+                                        ? "All caught up! No pending tasks."
+                                        : "Your personal to-do list is empty",
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF1E293B),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _filter == 'Completed'
-                                  ? "No completed tasks yet"
-                                  : _filter == 'Pending'
-                                      ? "All caught up! No pending tasks."
-                                      : "Your personal to-do list is empty",
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF334155),
+                              const SizedBox(height: 6),
+                              Text(
+                                "Quickly add thoughts or reminders using the bar above.",
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  color: const Color(0xFF64748B),
+                                  height: 1.4,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "Quickly add thoughts or reminders using the bar above.",
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12.5,
-                                color: const Color(0xFF94A3B8),
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       )
                     : ListView.separated(

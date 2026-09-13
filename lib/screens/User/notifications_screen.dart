@@ -153,7 +153,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        drawer: UserDrawer(activeItem: "Notification"),
+        drawer: UserDrawer(activeItem: "Notification", currentUser: widget.currentUser),
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
@@ -181,7 +181,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ProfileScreen(),
+                  builder: (context) => ProfileScreen(currentUser: widget.currentUser),
                 ),
               );
             },
@@ -191,7 +191,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 radius: 18,
                 backgroundColor: const Color(0xFF2563EB),
                 child: Text(
-                  "SU",
+                  (widget.currentUser?.fullName.isNotEmpty ?? false)
+                      ? widget.currentUser!.fullName.substring(0, 1).toUpperCase()
+                      : "R",
                   style: GoogleFonts.plusJakartaSans(
                     color: Colors.white,
                     fontSize: 12,
@@ -213,7 +215,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
       body: SafeArea(
         child: StreamBuilder<List<Map<String, dynamic>>>(
-          stream: FirestoreService().getStudentNotificationsStream(_studentId),
+          stream: FirestoreService().getStudentNotificationsStream(
+            _studentId,
+            building: widget.currentUser?.building,
+            regNo: widget.currentUser?.registrationNumber,
+          ),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(
@@ -283,37 +289,45 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        "Notifications (${notifications.length})",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F172A),
+                      Expanded(
+                        child: Text(
+                          "Notifications (${notifications.length})",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                            letterSpacing: -0.5,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 10),
                       InkWell(
                         onTap: _markAllAsRead,
                         borderRadius: BorderRadius.circular(10),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEFF6FF),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               const Icon(
                                 Icons.done_all_rounded,
                                 color: Color(0xFF1D4ED8),
-                                size: 16,
+                                size: 15,
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 5),
                               Text(
                                 "Mark all as read",
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
                                   color: const Color(0xFF1D4ED8),
                                 ),
                               ),

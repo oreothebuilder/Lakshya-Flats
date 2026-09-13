@@ -12,6 +12,7 @@ import '../screens/User/notifications_screen.dart';
 import '../screens/User/settings_screen.dart';
 
 import '../models/user_role_model.dart';
+import '../services/firestore_service.dart';
 
 class UserDrawer extends StatelessWidget {
   final String activeItem;
@@ -259,7 +260,7 @@ class UserDrawer extends StatelessWidget {
                     if (activeItem != "Home") {
                       Navigator.pushAndRemoveUntil(
                         context,
-                        MaterialPageRoute(builder: (context) => const UserHomeScreen()),
+                        MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: currentUser)),
                         (route) => false,
                       );
                     }
@@ -276,7 +277,7 @@ class UserDrawer extends StatelessWidget {
                     if (activeItem != "Mess Menu") {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => const MessMenuScreen()),
+                        MaterialPageRoute(builder: (context) => MessMenuScreen(currentUser: currentUser)),
                       );
                     }
                   },
@@ -292,26 +293,38 @@ class UserDrawer extends StatelessWidget {
                     if (activeItem != "Payments & Bills") {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => const PaymentsBillsScreen()),
+                        MaterialPageRoute(builder: (context) => PaymentsBillsScreen(currentUser: currentUser)),
                       );
                     }
                   },
                 ),
                 const SizedBox(height: 8),
-                _buildDrawerItem(
-                  context: context,
-                  icon: Icons.notifications_rounded,
-                  title: "Notification",
-                  isSelected: activeItem == "Notification",
-                  badgeCount: 2,
-                  onTap: () {
-                    Navigator.pop(context);
-                    if (activeItem != "Notification") {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                      );
-                    }
+                StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: FirestoreService().getStudentNotificationsStream(
+                    currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
+                    building: currentUser?.building,
+                    regNo: currentUser?.registrationNumber,
+                  ),
+                  builder: (context, snapshot) {
+                    final notifs = snapshot.data ?? [];
+                    final unreadCount = notifs.where((n) => n['isRead'] != true).length;
+
+                    return _buildDrawerItem(
+                      context: context,
+                      icon: Icons.notifications_rounded,
+                      title: "Notification",
+                      isSelected: activeItem == "Notification",
+                      badgeCount: unreadCount > 0 ? unreadCount : null,
+                      onTap: () {
+                        Navigator.pop(context);
+                        if (activeItem != "Notification") {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (context) => NotificationsScreen(currentUser: currentUser)),
+                          );
+                        }
+                      },
+                    );
                   },
                 ),
                 const SizedBox(height: 8),
@@ -325,7 +338,7 @@ class UserDrawer extends StatelessWidget {
                     if (activeItem != "Tickets") {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => const TicketsScreen()),
+                        MaterialPageRoute(builder: (context) => TicketsScreen(currentUser: currentUser)),
                       );
                     }
                   },
@@ -341,7 +354,7 @@ class UserDrawer extends StatelessWidget {
                     if (activeItem != "Profile") {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                        MaterialPageRoute(builder: (context) => ProfileScreen(currentUser: currentUser)),
                       );
                     }
                   },
@@ -357,7 +370,7 @@ class UserDrawer extends StatelessWidget {
                     if (activeItem != "Settings") {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                        MaterialPageRoute(builder: (context) => SettingsScreen(currentUser: currentUser)),
                       );
                     }
                   },

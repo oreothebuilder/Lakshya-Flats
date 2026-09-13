@@ -15,12 +15,14 @@ import 'building_space_screen.dart';
 import 'buildings_management_screen.dart';
 import 'tickets_management_screen.dart';
 import '../../models/user_role_model.dart';
+import '../../models/student_profile_model.dart';
 import '../../models/complaint_model.dart';
 import '../../models/building_model.dart';
 import '../../models/bill_model.dart';
 import '../../models/mess_menu_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mess_menu_service.dart';
+import '../../services/firebase_auth_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -58,6 +60,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       otherNumbers = otherNumbers.replaceAllMapped(reg, (Match m) => "${m[1]},");
     }
     return "₹$otherNumbers,$lastThree";
+  }
+
+  bool _matchesBuilding(String target, String candidate) {
+    final t = target.toLowerCase().replaceAll('residency', '').replaceAll('homes', '').replaceAll('villa', '').trim();
+    final c = candidate.toLowerCase().replaceAll('residency', '').replaceAll('homes', '').replaceAll('villa', '').trim();
+    if (t.isEmpty || c.isEmpty) return false;
+    return t.contains(c) || c.contains(t);
+  }
+
+  int _countStudentsForBuilding(String buildingName, List<StudentProfile> students) {
+    return students.where((s) => _matchesBuilding(buildingName, s.building)).length;
   }
 
   void _showQuickStatusDialog(ComplaintModel ticket) {
@@ -142,7 +155,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _handleLogout() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           "Log Out",
@@ -157,7 +170,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogCtx),
             child: Text(
               "Cancel",
               style: GoogleFonts.plusJakartaSans(
@@ -167,8 +180,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              try {
+                await FirebaseAuthService().signOut();
+              } catch (_) {}
+              if (!mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(
@@ -271,9 +288,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       final activeTickets = complaints
                           .where((c) => c.status != ComplaintModel.statusResolved)
                           .toList();
-                      final highPriorityCount = activeTickets
-                          .where((c) => c.priority.toLowerCase() == 'high')
-                          .length;
 
                       return GridView.count(
                         shrinkWrap: true,
@@ -281,7 +295,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisCount: 2,
                         crossAxisSpacing: 14,
                         mainAxisSpacing: 14,
-                        childAspectRatio: 1.25,
+                        childAspectRatio: 1.35,
                         children: [
                           _buildMetricCard(
                             icon: Icons.account_balance_wallet_rounded,
@@ -289,8 +303,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             iconColor: const Color(0xFFEF4444),
                             title: "Total Pending Fees",
                             value: _formatIndianCurrency(totalPending),
-                            tag: totalPending > 0 ? "Requires attention" : "All cleared",
-                            tagColor: totalPending > 0 ? const Color(0xFFEF4444) : const Color(0xFF16A34A),
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -306,8 +318,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             iconColor: const Color(0xFF0284C7),
                             title: "Fee Defaulters",
                             value: defaultersCount.toString(),
-                            tag: defaultersCount > 0 ? "High priority" : "Zero defaulters",
-                            tagColor: defaultersCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -323,8 +333,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             iconColor: const Color(0xFFEF4444),
                             title: "Pending Payments",
                             value: pendingPaymentsCount.toString(),
-                            tag: pendingPaymentsCount > 0 ? "Requires attention" : "All settled",
-                            tagColor: pendingPaymentsCount > 0 ? const Color(0xFFEF4444) : const Color(0xFF16A34A),
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -340,8 +348,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             iconColor: const Color(0xFF4F46E5),
                             title: "Active Tickets",
                             value: activeTickets.length.toString(),
-                            tag: highPriorityCount > 0 ? "$highPriorityCount high priority" : "Normal pace",
-                            tagColor: highPriorityCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF475569),
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -574,16 +580,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          "Weekly fixed menu preview for today across all hostel buildings",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: const Color(0xFF64748B),
-                            height: 1.3,
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -751,43 +747,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 14),
 
               // Live Property Horizontal ListView (Matching Photo 1)
-              StreamBuilder<List<BuildingModel>>(
-                stream: FirestoreService().getBuildingsStream(),
-                builder: (context, snapshot) {
-                  final buildings = snapshot.data ?? [];
-                  if (buildings.isEmpty) {
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Center(
-                        child: Text(
-                          "No properties registered yet.",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                    );
-                  }
+              StreamBuilder<List<StudentProfile>>(
+                stream: FirestoreService().getStudentsStream(),
+                builder: (context, studentSnapshot) {
+                  final allStudents = studentSnapshot.data ?? [];
 
-                  return SizedBox(
-                    height: 215,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: buildings.length,
-                      separatorBuilder: (context, index) => const SizedBox(width: 14),
-                      itemBuilder: (context, index) {
-                        final building = buildings[index];
-                        return _buildLivePropertyCard(building);
-                      },
-                    ),
+                  return StreamBuilder<List<BuildingModel>>(
+                    stream: FirestoreService().getBuildingsStream(),
+                    builder: (context, snapshot) {
+                      final rawBuildings = snapshot.data ?? BuildingModel.defaultBuildings;
+                      if (rawBuildings.isEmpty) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Center(
+                            child: Text(
+                              "No properties registered yet.",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
+                      // Dynamic student occupancy detection for consistency across the app
+                      final buildings = rawBuildings.map((b) {
+                        final count = _countStudentsForBuilding(b.name, allStudents);
+                        return b.copyWith(occupiedCount: count);
+                      }).toList();
+
+                      return SizedBox(
+                        height: 198,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: buildings.length,
+                          separatorBuilder: (context, index) => const SizedBox(width: 14),
+                          itemBuilder: (context, index) {
+                            final building = buildings[index];
+                            return _buildLivePropertyCard(building);
+                          },
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -805,8 +814,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required Color iconColor,
     required String title,
     required String value,
-    required String tag,
-    required Color tagColor,
     VoidCallback? onTap,
   }) {
     return GestureDetector(
@@ -858,15 +865,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       fontWeight: FontWeight.w800,
                       color: const Color(0xFF0F172A),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  tag,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: tagColor,
                   ),
                 ),
               ],
@@ -1002,53 +1000,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: indicatorColor,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    buildingName,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                ],
+              Container(
+                width: 4,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: indicatorColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => MessMenuManagementScreen(
-                        initialMess: buildingName,
-                        isAdmin: true,
-                      ),
-                    ),
-                  );
-                },
-                child: Row(
-                  children: [
-                    Text(
-                      "Edit Menu",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF2563EB),
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right_rounded, size: 15, color: Color(0xFF2563EB)),
-                  ],
+              const SizedBox(width: 8),
+              Text(
+                buildingName,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
                 ),
               ),
             ],
@@ -1122,8 +1089,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 
   Widget _buildLiveTicketCard(ComplaintModel ticket) {
+    final roomDisplay = ticket.room.isNotEmpty
+        ? (ticket.room.toLowerCase().startsWith('room') ? ticket.room : 'Room ${ticket.room}')
+        : 'Room N/A';
+    final studentDisplay = ticket.studentName.isNotEmpty ? ticket.studentName : 'Resident';
+
     return Container(
-      width: 240,
+      width: 255,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1164,7 +1136,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 3),
               Text(
-                "${ticket.studentName.isNotEmpty ? ticket.studentName : 'Resident'} • Room ${ticket.room.isNotEmpty ? ticket.room : 'N/A'}",
+                "$studentDisplay • $roomDisplay",
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.plusJakartaSans(
@@ -1186,33 +1158,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: const Color(0xFF94A3B8),
                 ),
               ),
-              GestureDetector(
-                onTap: () => _showQuickStatusDialog(ticket),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFBFDBFE), width: 1.0),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        ticket.status,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF0056D2),
+              const SizedBox(width: 8),
+              Flexible(
+                child: GestureDetector(
+                  onTap: () => _showQuickStatusDialog(ticket),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFBFDBFE), width: 1.0),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            ticket.status,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0056D2),
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 15,
-                        color: Color(0xFF0056D2),
-                      ),
-                    ],
+                        const SizedBox(width: 3),
+                        const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 14,
+                          color: Color(0xFF0056D2),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1224,6 +1203,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildLivePropertyCard(BuildingModel building) {
+    final occupancyRate = building.occupancyRate;
+    final occupancyColor = building.isFull
+        ? const Color(0xFFDC2626)
+        : (building.isNearCapacity ? const Color(0xFFEA580C) : const Color(0xFF0D52CE));
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -1237,10 +1221,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       },
       child: Container(
-        width: 170,
+        width: 190,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -1252,10 +1237,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Building Photo with Occupancy Badge
             Stack(
               children: [
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
                   child: SizedBox(
                     height: 105,
                     width: double.infinity,
@@ -1276,10 +1262,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   top: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.08),
@@ -1293,15 +1279,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0056D2),
+                        color: occupancyColor,
                       ),
                     ),
                   ),
                 ),
               ],
             ),
+            // Details & Live Occupancy Progress Bar
             Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1315,32 +1302,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: const Color(0xFF0F172A),
                     ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Flexible(
-                        child: Text(
-                          "${building.occupiedCount}/${building.totalCapacity} Students",
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF64748B),
-                          ),
+                      Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.people_alt_rounded, size: 13, color: Color(0xFF0D52CE)),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                "${building.occupiedCount}/${building.totalCapacity} Beds",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const Icon(Icons.chevron_right_rounded, size: 15, color: Color(0xFF2563EB)),
+                      const SizedBox(width: 4),
+                      Text(
+                        "${building.availableBeds} Free",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: building.availableBeds > 0 ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    "₹${building.startingRent.toInt()} / mo",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0056D2),
+                  const SizedBox(height: 8),
+                  // Visual Occupancy Progress Bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: SizedBox(
+                      height: 6,
+                      child: LinearProgressIndicator(
+                        value: occupancyRate,
+                        backgroundColor: const Color(0xFFE2E8F0),
+                        valueColor: AlwaysStoppedAnimation<Color>(occupancyColor),
+                      ),
                     ),
                   ),
                 ],
