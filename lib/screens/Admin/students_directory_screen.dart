@@ -77,7 +77,8 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
         final matchesPhone = student.phone.toLowerCase().contains(query);
         final matchesEmail = student.email.toLowerCase().contains(query);
         final matchesReg = student.registrationNumber.toLowerCase().contains(query);
-        return matchesName || matchesRoom || matchesPhone || matchesEmail || matchesReg;
+        final matchesStudentId = student.studentId.toLowerCase().contains(query) || student.id.toLowerCase().contains(query);
+        return matchesName || matchesRoom || matchesPhone || matchesEmail || matchesReg || matchesStudentId;
       }
 
       return true;
@@ -477,14 +478,40 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "${student.building} • ${student.room}",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF64748B),
-                          ),
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Text(
+                                student.studentId.isNotEmpty ? student.studentId : student.id,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF334155),
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "${student.building} • ${student.room}",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -652,7 +679,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                     });
                   },
                   decoration: InputDecoration(
-                    hintText: "Search name, room, phone, reg no...",
+                    hintText: "Search name, ID (STU-...), room, phone, reg no...",
                     hintStyle: GoogleFonts.plusJakartaSans(fontSize: 14, color: Colors.grey[500]),
                     border: InputBorder.none,
                   ),

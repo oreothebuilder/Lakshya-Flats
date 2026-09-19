@@ -280,9 +280,41 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                 ),
                 const Divider(height: 18, color: Color(0xFFE2E8F0)),
 
-                // Reg No, Course & Branch Row
+                // Tenant ID & College Reg No Row
                 Row(
                   children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () {
+                          final sid = _student.studentId.isNotEmpty ? _student.studentId : _student.id;
+                          Clipboard.setData(ClipboardData(text: sid));
+                          _showSnackbar("Tenant ID copied: $sid");
+                        },
+                        child: Row(
+                          children: [
+                            const Icon(Icons.tag_rounded, size: 16, color: primaryBlue),
+                            const SizedBox(width: 8),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Tenant ID",
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 10, color: textMuted),
+                                ),
+                                Text(
+                                  _student.studentId.isNotEmpty ? _student.studentId : _student.id,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: primaryBlue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     Expanded(
                       child: InkWell(
                         onTap: () {
@@ -314,6 +346,13 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                         ),
                       ),
                     ),
+                  ],
+                ),
+                const Divider(height: 18, color: Color(0xFFE2E8F0)),
+
+                // Course & Branch Row
+                Row(
+                  children: [
                     Expanded(
                       child: Row(
                         children: [

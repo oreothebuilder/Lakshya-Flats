@@ -761,6 +761,36 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     final bedNumber = _bedNumberController.text.trim();
     final defaultPassword = "$firstName@$regNo";
 
+    // Validate unique email to prevent Firebase Auth collisions & student lockout
+    final dupEmail = await FirestoreService().checkDuplicateStudentEmail(email);
+    if (dupEmail != null) {
+      setState(() => _isSavingStudent = false);
+      if (mounted) {
+        AppToast.show(
+          context,
+          "Email \"$email\" is already registered to ${dupEmail['fullName']} (${dupEmail['studentId']}). Please provide a unique email address.",
+          isSuccess: false,
+        );
+      }
+      return;
+    }
+
+    // Validate unique registration number to prevent credential lookup collisions
+    final dupReg = await FirestoreService().checkDuplicateStudentRegNo(regNo);
+    if (dupReg != null) {
+      setState(() => _isSavingStudent = false);
+      if (mounted) {
+        AppToast.show(
+          context,
+          "Registration Number \"$regNo\" is already registered to ${dupReg['fullName']} (${dupReg['studentId']}).",
+          isSuccess: false,
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
     // Show non-dismissible loading dialog immediately during the async creation/email delay
     BuildContext? loadingDialogContext;
     showDialog(
@@ -817,7 +847,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     );
 
     try {
-      final studentId = "STU-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
+      final studentId = await FirestoreService().generateUniqueStudentId();
 
       // 1A. Upload Signed Rental Agreement PDF to Cloudinary
       String? agreementUrl;
