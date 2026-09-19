@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/mess_menu_model.dart';
 import '../services/mess_menu_service.dart';
 import 'Admin/dashboard_screen.dart';
+import '../widgets/app_toast.dart';
 
 class MessMenuManagementScreen extends StatefulWidget {
   final String initialMess;
@@ -626,15 +627,9 @@ class _EditMessMenuBottomSheetState extends State<_EditMessMenuBottomSheet> {
     }
 
     Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          "Mess Menu updated successfully for ${widget.messName}!",
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: const Color(0xFF16A34A),
-        behavior: SnackBarBehavior.floating,
-      ),
+    AppToast.showSuccess(
+      context,
+      "Mess Menu updated successfully for ${widget.messName}!",
     );
   }
 

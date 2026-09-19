@@ -14,6 +14,8 @@ import 'payments_bills_screen.dart';
 import 'tickets_screen.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
+import '../../widgets/onboarding_tour_overlay.dart';
+import '../../widgets/app_toast.dart';
 
 class UserHomeScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -29,19 +31,327 @@ class UserHomeScreen extends StatefulWidget {
 
 class _UserHomeScreenState extends State<UserHomeScreen> {
   final ScrollController _mealScrollController = ScrollController();
+  final ScrollController _mainScrollController = ScrollController();
+
+  // Navigation Keys for Onboarding Tour Spotlight
+  final GlobalKey _drawerKey = GlobalKey();
+  final GlobalKey _profileCardKey = GlobalKey();
+  final GlobalKey _notificationsKey = GlobalKey();
+  final GlobalKey _messMenuKey = GlobalKey();
+  final GlobalKey _billsKey = GlobalKey();
+  final GlobalKey _ticketsKey = GlobalKey();
+  final GlobalKey _profileAvatarKey = GlobalKey();
+
+  late AppUser? _activeUser;
+  bool _isTourActive = false;
+  int _currentTourIndex = 0;
+  List<TourStep> _tourSteps = [];
+  static final Set<String> _dismissedPasswordNoticeUids = {};
 
   @override
   void initState() {
     super.initState();
+    _activeUser = widget.currentUser;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToActiveMeal();
+      _checkFirstTimeUser();
     });
   }
 
   @override
   void dispose() {
     _mealScrollController.dispose();
+    _mainScrollController.dispose();
     super.dispose();
+  }
+
+  List<TourStep> _buildTourSteps() {
+    return [
+      TourStep(
+        targetKey: _drawerKey,
+        title: "Navigation Menu",
+        description: "Open the menu anytime to access your Mess Menu, Payments & Bills, Support Tickets, Profile, and Settings.",
+        icon: Icons.menu_rounded,
+        category: "Navigation",
+        borderRadius: BorderRadius.circular(12),
+      ),
+      TourStep(
+        targetKey: _profileCardKey,
+        title: "Resident Room Details",
+        description: "Check your allocated building, room number, contact information, and current residency status at a glance.",
+        icon: Icons.domain_rounded,
+        category: "Resident Info",
+        borderRadius: BorderRadius.circular(24),
+      ),
+      TourStep(
+        targetKey: _notificationsKey,
+        title: "Notifications & Alerts",
+        description: "Stay up-to-date with official announcements from hostel management, curfew notices, and maintenance alerts.",
+        icon: Icons.notifications_active_rounded,
+        category: "Updates",
+        borderRadius: BorderRadius.circular(12),
+      ),
+      TourStep(
+        targetKey: _messMenuKey,
+        title: "Today's Mess Menu",
+        description: "View scheduled meals for breakfast, lunch, snacks, and dinner. Tap 'Weekly Menu' to see the complete 7-day schedule.",
+        icon: Icons.restaurant_rounded,
+        category: "Dining",
+        borderRadius: BorderRadius.circular(24),
+      ),
+      TourStep(
+        targetKey: _billsKey,
+        title: "Upcoming Bills & Payments",
+        description: "Review outstanding hostel rent and electricity bills. Tap 'Details' to pay dues and download official payment receipts.",
+        icon: Icons.account_balance_wallet_rounded,
+        category: "Billing",
+        borderRadius: BorderRadius.circular(24),
+      ),
+      TourStep(
+        targetKey: _ticketsKey,
+        title: "Raise a Support Ticket",
+        description: "Facing any room repair, electrical, Wi-Fi, or cleaning issues? Report a ticket directly to the administration here.",
+        icon: Icons.headset_mic_rounded,
+        category: "Helpdesk",
+        borderRadius: BorderRadius.circular(24),
+      ),
+      TourStep(
+        targetKey: _profileAvatarKey,
+        title: "Profile & Account Security",
+        description: "View your personal profile, download your signed rental agreement, and manage your password securely.",
+        icon: Icons.person_rounded,
+        category: "Profile & Security",
+        borderRadius: BorderRadius.circular(20),
+      ),
+    ];
+  }
+
+  bool _hasUserDismissedPasswordNotice() {
+    final uid = _activeUser?.uid ?? FirebaseAuthService().currentUser?.uid;
+    if (_activeUser?.hasDismissedPasswordNotice == true) return true;
+    if (uid != null && _dismissedPasswordNoticeUids.contains(uid)) return true;
+    return false;
+  }
+
+  Future<void> _dismissPasswordNotice() async {
+    final uid = _activeUser?.uid ?? FirebaseAuthService().currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      _dismissedPasswordNoticeUids.add(uid);
+    }
+    if (_activeUser != null && _activeUser!.hasDismissedPasswordNotice) return;
+
+    if (mounted) {
+      setState(() {
+        _activeUser = _activeUser?.copyWith(hasDismissedPasswordNotice: true);
+      });
+    }
+
+    if (uid != null && uid.isNotEmpty) {
+      await FirestoreService().markPasswordNoticeDismissed(
+        uid,
+        studentId: _activeUser?.studentId,
+      );
+    }
+  }
+
+  void _checkFirstTimeUser() {
+    if (_activeUser != null && _activeUser!.isStudent && !_activeUser!.hasCompletedOnboardingTour) {
+      OnboardingWelcomeModal.show(
+        context,
+        userName: _activeUser!.fullName,
+        onContinue: () {
+          _startTour();
+        },
+        onDismiss: () {
+          _dismissTour();
+        },
+      );
+    } else if (_activeUser != null &&
+        _activeUser!.isStudent &&
+        !_activeUser!.hasChangedDefaultPassword &&
+        !_hasUserDismissedPasswordNotice()) {
+      _checkSecurityPasswordPrompt();
+    }
+  }
+
+  void _startTour() {
+    _tourSteps = _buildTourSteps();
+    setState(() {
+      _isTourActive = true;
+      _currentTourIndex = 0;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _goToTourStep(0);
+    });
+  }
+
+  Future<void> _goToTourStep(int index) async {
+    if (index < 0 || index >= _tourSteps.length) return;
+
+    final targetContext = _tourSteps[index].targetKey.currentContext;
+    if (targetContext != null) {
+      try {
+        await Scrollable.ensureVisible(
+          targetContext,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeInOut,
+          alignment: 0.25,
+        );
+      } catch (_) {}
+    }
+
+    if (mounted) {
+      setState(() {
+        _currentTourIndex = index;
+      });
+    }
+  }
+
+  Future<void> _dismissTour() async {
+    setState(() {
+      _isTourActive = false;
+    });
+    final uid = _activeUser?.uid ?? FirebaseAuthService().currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      await FirestoreService().markTourCompleted(uid);
+    }
+    if (mounted) {
+      setState(() {
+        _activeUser = _activeUser?.copyWith(hasCompletedOnboardingTour: true);
+      });
+      if (!_activeUser!.hasChangedDefaultPassword && !_hasUserDismissedPasswordNotice()) {
+        _checkSecurityPasswordPrompt();
+      }
+    }
+  }
+
+  Future<void> _finishTour() async {
+    setState(() {
+      _isTourActive = false;
+    });
+    final uid = _activeUser?.uid ?? FirebaseAuthService().currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      await FirestoreService().markTourCompleted(uid);
+    }
+    if (mounted) {
+      setState(() {
+        _activeUser = _activeUser?.copyWith(hasCompletedOnboardingTour: true);
+      });
+      AppToast.showSuccess(
+        context,
+        "You're all set! Enjoy your stay at Lakshya Residency.",
+      );
+      if (!_activeUser!.hasChangedDefaultPassword && !_hasUserDismissedPasswordNotice()) {
+        _checkSecurityPasswordPrompt();
+      }
+    }
+  }
+
+  void _checkSecurityPasswordPrompt() {
+    if (_activeUser == null ||
+        !_activeUser!.isStudent ||
+        _activeUser!.hasChangedDefaultPassword ||
+        _hasUserDismissedPasswordNotice()) {
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.security_rounded, color: Color(0xFFDC2626), size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Security Notice",
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "For your security, please change your password before continuing. You are currently using the temporary default password issued during student onboarding.",
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13.5,
+            color: const Color(0xFF475569),
+            height: 1.45,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              _dismissPasswordNotice();
+            },
+            child: Text(
+              "Later",
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              _dismissPasswordNotice();
+              _openChangePasswordScreen();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: Text(
+              "Change Password",
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    ).then((_) {
+      // If dialog dismissed via outside tap or back button, record dismissal
+      _dismissPasswordNotice();
+    });
+  }
+
+  Future<void> _openChangePasswordScreen() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(
+          currentUser: _activeUser,
+          autoOpenChangePassword: true,
+        ),
+      ),
+    );
+
+    if (result == true || mounted) {
+      final uid = _activeUser?.uid ?? FirebaseAuthService().currentUser?.uid;
+      if (uid != null) {
+        final updatedUser = await FirestoreService().getAppUser(uid, emailHint: _activeUser?.email);
+        if (updatedUser != null && mounted) {
+          setState(() {
+            _activeUser = updatedUser;
+          });
+        }
+      }
+    }
   }
 
   void _scrollToActiveMeal() {
@@ -122,18 +432,207 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     return Icons.home_rounded;
   }
 
+  Widget _buildRejectionWarningBanner(BillModel bill) {
+    final billTitle = bill.billingMonth.isNotEmpty ? bill.billingMonth : bill.billType;
+    final reason = (bill.adminRemarks != null && bill.adminRemarks!.isNotEmpty)
+        ? bill.adminRemarks!
+        : "Payment proof could not be verified. Please review and re-submit.";
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF87171), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDC2626),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEE2E2),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                            ),
+                            child: Text(
+                              "ACTION REQUIRED",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFFDC2626),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          // Dismiss button (Permanently removes warning from dashboard)
+                          InkWell(
+                            onTap: () async {
+                              await FirestoreService().dismissBillRejection(bill.id);
+                              if (mounted) {
+                                AppToast.showInfo(
+                                  context,
+                                  "Warning dismissed. You can re-submit anytime from Payments & Bills.",
+                                );
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    "Dismiss",
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF991B1B),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  const Icon(Icons.close_rounded, size: 14, color: Color(0xFF991B1B)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "Payment Proof Rejected",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF991B1B),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "$billTitle • ₹${bill.balance.toStringAsFixed(0)}",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF7F1D1D),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Reason bubble
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      reason,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF7F1D1D),
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Re-submit button
+            SizedBox(
+              width: double.infinity,
+              height: 40,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PaymentsBillsScreen(
+                        currentUser: _activeUser ?? widget.currentUser,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: Text(
+                  "Re-submit Payment Proof",
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      drawer: UserDrawer(activeItem: "Home", currentUser: widget.currentUser),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+      drawer: UserDrawer(activeItem: "Home", currentUser: _activeUser ?? widget.currentUser),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 1,
+        titleSpacing: 0,
         leading: Builder(
           builder: (context) {
             return IconButton(
+              key: _drawerKey,
               icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A)),
               onPressed: () => Scaffold.of(context).openDrawer(),
             );
@@ -154,35 +653,42 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Student Portal",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Student Portal",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
                   ),
-                ),
-                Text(
-                  "${widget.currentUser?.building ?? 'Lakshya'} • ${widget.currentUser?.room ?? 'Resident'}",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF64748B),
+                  Text(
+                    "${_activeUser?.building ?? widget.currentUser?.building ?? 'Lakshya'} • ${_activeUser?.room ?? widget.currentUser?.room ?? 'Resident'}",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
         actions: [
           StreamBuilder<List<Map<String, dynamic>>>(
             stream: FirestoreService().getStudentNotificationsStream(
-              widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
-              building: widget.currentUser?.building,
-              regNo: widget.currentUser?.registrationNumber,
+              _activeUser?.uid ?? widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
+              building: _activeUser?.building ?? widget.currentUser?.building,
+              regNo: _activeUser?.registrationNumber ?? widget.currentUser?.registrationNumber,
             ),
             builder: (context, notifSnapshot) {
               final notifs = notifSnapshot.data ?? [];
@@ -192,13 +698,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 alignment: Alignment.center,
                 children: [
                   IconButton(
+                    key: _notificationsKey,
                     icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF475569)),
                     tooltip: "Notifications",
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => NotificationsScreen(currentUser: widget.currentUser),
+                          builder: (context) => NotificationsScreen(currentUser: _activeUser ?? widget.currentUser),
                         ),
                       );
                     },
@@ -228,13 +735,22 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             },
           ),
           GestureDetector(
-            onTap: () {
-              Navigator.push(
+            key: _profileAvatarKey,
+            onTap: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ProfileScreen(currentUser: widget.currentUser),
+                  builder: (context) => ProfileScreen(currentUser: _activeUser ?? widget.currentUser),
                 ),
               );
+              // Refresh user if needed
+              final uid = _activeUser?.uid ?? FirebaseAuthService().currentUser?.uid;
+              if (uid != null && mounted) {
+                final updated = await FirestoreService().getAppUser(uid, emailHint: _activeUser?.email);
+                if (updated != null && mounted) {
+                  setState(() => _activeUser = updated);
+                }
+              }
             },
             child: Container(
               margin: const EdgeInsets.only(right: 12, left: 4),
@@ -242,8 +758,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 radius: 16,
                 backgroundColor: const Color(0xFF541FE4),
                 child: Text(
-                  (widget.currentUser?.fullName.isNotEmpty ?? false)
-                      ? widget.currentUser!.fullName.substring(0, 1).toUpperCase()
+                  (_activeUser?.fullName.isNotEmpty ?? widget.currentUser?.fullName.isNotEmpty ?? false)
+                      ? (_activeUser?.fullName ?? widget.currentUser!.fullName).substring(0, 1).toUpperCase()
                       : "R",
                   style: GoogleFonts.plusJakartaSans(
                     color: Colors.white,
@@ -258,12 +774,39 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
+          controller: _mainScrollController,
           padding: const EdgeInsets.all(20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Active Payment Rejection Warning Banner (Live Stream)
+              StreamBuilder<List<BillModel>>(
+                stream: FirestoreService().getStudentBillsStream(
+                  _activeUser?.studentId ??
+                      widget.currentUser?.studentId ??
+                      _activeUser?.uid ??
+                      widget.currentUser?.uid ??
+                      FirebaseAuthService().currentUser?.uid ??
+                      '',
+                  phone: _activeUser?.phone ?? widget.currentUser?.phone,
+                  email: _activeUser?.email ?? widget.currentUser?.email,
+                  regNo: _activeUser?.registrationNumber ?? widget.currentUser?.registrationNumber,
+                ),
+                builder: (context, snapshot) {
+                  final bills = snapshot.data ?? [];
+                  final activeRejected = bills.where((b) => b.hasActiveRejectionWarning).toList();
+                  if (activeRejected.isEmpty) return const SizedBox.shrink();
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: activeRejected.map((bill) => _buildRejectionWarningBanner(bill)).toList(),
+                  );
+                },
+              ),
+
               // User Profile Banner Card
               Container(
+                key: _profileCardKey,
                 width: double.infinity,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
@@ -312,8 +855,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                   ),
                                   child: Center(
                                     child: Text(
-                                      (widget.currentUser?.fullName.isNotEmpty ?? false)
-                                          ? widget.currentUser!.fullName.substring(0, 1).toUpperCase()
+                                      ((_activeUser ?? widget.currentUser)?.fullName.isNotEmpty ?? false)
+                                          ? (_activeUser ?? widget.currentUser)!.fullName.substring(0, 1).toUpperCase()
                                           : "R",
                                       style: GoogleFonts.plusJakartaSans(
                                         color: Colors.white,
@@ -337,7 +880,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                         ),
                                       ),
                                       Text(
-                                        widget.currentUser?.fullName ?? "Resident",
+                                        (_activeUser ?? widget.currentUser)?.fullName ?? "Resident",
                                         style: GoogleFonts.plusJakartaSans(
                                           fontSize: 20,
                                           color: Colors.white,
@@ -350,9 +893,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                           const Icon(Icons.phone_android_rounded, color: Colors.white70, size: 13),
                                           const SizedBox(width: 4),
                                           Text(
-                                            (widget.currentUser?.phone.isNotEmpty ?? false)
-                                                ? widget.currentUser!.phone
-                                                : widget.currentUser?.email ?? "",
+                                            ((_activeUser ?? widget.currentUser)?.phone.isNotEmpty ?? false)
+                                                ? (_activeUser ?? widget.currentUser)!.phone
+                                                : ((_activeUser ?? widget.currentUser)?.email ?? ""),
                                             style: GoogleFonts.plusJakartaSans(
                                               fontSize: 13,
                                               color: Colors.white.withValues(alpha: 0.85),
@@ -394,7 +937,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                                 ),
                                               ),
                                               Text(
-                                                widget.currentUser?.building ?? "Lakshya",
+                                                (_activeUser ?? widget.currentUser)?.building ?? "Lakshya",
                                                 style: GoogleFonts.plusJakartaSans(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w700,
@@ -434,7 +977,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                                 ),
                                               ),
                                               Text(
-                                                widget.currentUser?.room ?? "Active",
+                                                (_activeUser ?? widget.currentUser)?.room ?? "Active",
                                                 style: GoogleFonts.plusJakartaSans(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w700,
@@ -689,6 +1232,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   final meals = todayMenu?.meals ?? [];
 
                   return Container(
+                    key: _messMenuKey,
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -805,13 +1349,15 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               // Upcoming Bills Section (Live Firestore Stream)
               StreamBuilder<List<BillModel>>(
                 stream: FirestoreService().getStudentBillsStream(
-                  widget.currentUser?.studentId ??
+                  _activeUser?.studentId ??
+                      widget.currentUser?.studentId ??
+                      _activeUser?.uid ??
                       widget.currentUser?.uid ??
                       FirebaseAuthService().currentUser?.uid ??
                       '',
-                  phone: widget.currentUser?.phone,
-                  email: widget.currentUser?.email,
-                  regNo: widget.currentUser?.registrationNumber,
+                  phone: _activeUser?.phone ?? widget.currentUser?.phone,
+                  email: _activeUser?.email ?? widget.currentUser?.email,
+                  regNo: _activeUser?.registrationNumber ?? widget.currentUser?.registrationNumber,
                 ),
                 builder: (context, snapshot) {
                   final allBills = snapshot.data ?? [];
@@ -819,6 +1365,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   final totalOutstanding = pendingBills.fold(0.0, (acc, b) => acc + b.balance);
 
                   return Container(
+                    key: _billsKey,
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -997,6 +1544,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
               // Raise a Ticket Card & Recent Tickets
               Container(
+                key: _ticketsKey,
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -1169,8 +1717,30 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+    if (_isTourActive)
+      Positioned.fill(
+        child: OnboardingTourOverlay(
+          steps: _tourSteps,
+          currentStepIndex: _currentTourIndex,
+          onNext: () {
+            if (_currentTourIndex < _tourSteps.length - 1) {
+              _goToTourStep(_currentTourIndex + 1);
+            } else {
+              _finishTour();
+            }
+          },
+          onBack: () {
+            if (_currentTourIndex > 0) {
+              _goToTourStep(_currentTourIndex - 1);
+            }
+          },
+          onDismiss: _dismissTour,
+        ),
+      ),
+  ],
+);
+}
 
   Widget _buildMealTile({
     required String title,

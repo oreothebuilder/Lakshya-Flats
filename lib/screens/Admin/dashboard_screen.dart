@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/admin_drawer.dart';
+import '../../widgets/app_toast.dart';
+import '../../services/navigation_service.dart';
 import '../login_screen.dart';
 import '../student_onboarding_screen.dart';
 import '../mess_menu_management_screen.dart';
@@ -35,17 +37,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   void _showSnackbar(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          msg,
-          style: GoogleFonts.plusJakartaSans(),
-        ),
-        backgroundColor: const Color(0xFF003896),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    AppToast.show(context, msg, isSuccess: !msg.toLowerCase().contains("failed") && !msg.toLowerCase().contains("error"));
   }
 
   String _formatIndianCurrency(double amount) {
@@ -184,15 +176,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Navigator.pop(dialogCtx);
               try {
                 await FirebaseAuthService().signOut();
-              } catch (_) {}
-              if (!mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
-                ),
-                (route) => false,
-              );
+              } catch (e) {
+                debugPrint("Dashboard logout error: $e");
+              }
+              final nav = rootNavigatorKey.currentState;
+              if (nav != null) {
+                nav.pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
+                  ),
+                  (route) => false,
+                );
+              } else if (mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
+                  ),
+                  (route) => false,
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.redAccent,
@@ -244,14 +247,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.only(right: 16.0),
               child: CircleAvatar(
                 radius: 18,
-                backgroundColor: const Color(0xFFE2E8F0),
-                backgroundImage: const NetworkImage(
-                  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 1.5),
+                backgroundColor: const Color(0xFF1E3A8A),
+                child: Text(
+                  widget.currentUser?.fullName.isNotEmpty == true
+                      ? widget.currentUser!.fullName[0].toUpperCase()
+                      : "A",
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),

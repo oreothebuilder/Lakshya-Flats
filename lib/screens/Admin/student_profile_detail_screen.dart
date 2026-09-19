@@ -10,6 +10,9 @@ import '../../services/cloudinary_service.dart';
 import '../../config/cloudinary_config.dart';
 import '../../services/media_picker_service.dart';
 import '../../widgets/document_viewer_modal.dart';
+import '../../widgets/payment_receipt_dialog.dart';
+import '../../widgets/app_toast.dart';
+import '../../services/email_service.dart';
 import 'broadcast_notification_screen.dart';
 import 'dashboard_screen.dart';
 
@@ -60,18 +63,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
   }
 
   void _showSnackbar(String msg, {bool isSuccess = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          msg,
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: Colors.white),
-        ),
-        backgroundColor: isSuccess ? primaryBlue : const Color(0xFFDC2626),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.show(context, msg, isSuccess: isSuccess);
   }
 
   String _formatDate(DateTime d) {
@@ -354,6 +346,35 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                     ),
                   ],
                 ),
+                if (_student.hometownAddress.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.home_outlined, size: 16, color: textMuted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Hometown Address",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 10, color: textMuted),
+                            ),
+                            Text(
+                              _student.hometownAddress,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: primaryDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -446,7 +467,12 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
 
   Widget _buildFeesDetailsSection() {
     return StreamBuilder<List<BillModel>>(
-      stream: FirestoreService().getStudentBillsStream(_student.id),
+      stream: FirestoreService().getStudentBillsStream(
+        _student.id,
+        phone: _student.phone,
+        email: _student.email,
+        regNo: _student.registrationNumber,
+      ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
           return const Center(
@@ -513,6 +539,11 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
             ),
 
             const SizedBox(height: 16),
+
+            // Lease Plan & Installments Overview Card
+            _buildLeasePlanCard(),
+
+            const SizedBox(height: 18),
 
             // SECTION 1. THE HOSTEL FEES
             _buildFeeCategoryHeader(
@@ -621,11 +652,26 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
     Color statusBadgeText;
     IconData statusIcon;
 
-    if (isPaid) {
+    if (bill.isDepositReturned) {
+      dueStatusText = "Deposit Returned";
+      statusBadgeBg = const Color(0xFFEDE9FE);
+      statusBadgeText = const Color(0xFF6D28D9);
+      statusIcon = Icons.assignment_return_rounded;
+    } else if (bill.isDepositHeld) {
+      dueStatusText = "Deposit Held";
+      statusBadgeBg = const Color(0xFFE0E7FF);
+      statusBadgeText = const Color(0xFF4338CA);
+      statusIcon = Icons.shield_rounded;
+    } else if (isPaid) {
       dueStatusText = "Paid";
       statusBadgeBg = const Color(0xFFDCFCE7);
       statusBadgeText = const Color(0xFF15803D);
       statusIcon = Icons.check_circle_rounded;
+    } else if (bill.isPendingVerification) {
+      dueStatusText = "Unverified (Awaiting Approval)";
+      statusBadgeBg = const Color(0xFFFFF7ED);
+      statusBadgeText = const Color(0xFFEA580C);
+      statusIcon = Icons.pending_actions_rounded;
     } else if (isDefaulter) {
       final days = bill.daysOverdue;
       dueStatusText = days > 0 ? "Defaulter • ${days}d overdue" : "Defaulter";
@@ -645,7 +691,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
         dueStatusText = "$months ${months == 1 ? 'mo' : 'mos'} remaining";
       }
       statusBadgeBg = const Color(0xFFFEF3C7);
-      statusBadgeText = const Color(0xFFB45309);
+      statusBadgeText = const Color(0xFFD97706);
       statusIcon = Icons.schedule_rounded;
     }
 
@@ -808,29 +854,161 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
               ],
             ),
 
+            // Banner for unverified payment proof
+            if (bill.isPendingVerification) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.verified_user_outlined, size: 16, color: Color(0xFFD97706)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        bill.isCash
+                            ? "Cash Handover Reported • Please verify physical cash"
+                            : "Proof Submitted • Ref: ${bill.transactionRef ?? 'Uploaded'}${bill.paymentMethod != null ? ' via ${bill.paymentMethod}' : ''}",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF92400E),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Banner for returned deposit
+            if (bill.isDepositReturned) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F3FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFDDD6FE)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.assignment_return_rounded, size: 16, color: Color(0xFF7C3AED)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Security Deposit Refunded on ${bill.returnedAt != null ? _formatDate(bill.returnedAt!) : 'Record'} via ${bill.refundMode ?? 'Bank transfer'}${bill.refundRef?.isNotEmpty == true ? ' (Ref: ${bill.refundRef})' : ''}",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF5B21B6),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             const SizedBox(height: 14),
             const Divider(height: 1, color: Color(0xFFF1F5F9)),
             const SizedBox(height: 12),
 
-            // Row 3: Action Buttons (Download Bill or Send Notification)
+            // Row 3: Action Buttons
             Row(
               children: [
-                const Spacer(),
-                const SizedBox(width: 8),
-                if (isPaid)
-                  // Option to Download Receipt (PAID FEES ONLY)
+                if (bill.isPendingVerification) ...[
+                  // Verify Payment Action
+                  ElevatedButton.icon(
+                    onPressed: () => _openVerifyPaymentDialog(bill),
+                    icon: const Icon(Icons.check_circle_rounded, size: 15),
+                    label: Text(
+                      "Verify Payment",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      elevation: 0,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: () => _openRejectPaymentDialog(bill),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFDC2626),
+                      side: const BorderSide(color: Color(0xFFFCA5A5)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    child: Text(
+                      "Reject",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ] else if (bill.isDepositReturned) ...[
                   ElevatedButton.icon(
                     onPressed: () => _openReceiptDialog(bill),
                     icon: const Icon(Icons.download_rounded, size: 15),
-                    label: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        "Download Receipt",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    label: Text(
+                      "Download Receipt",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6D28D9),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      elevation: 0,
+                    ),
+                  ),
+                ] else if (bill.isDepositHeld) ...[
+                  ElevatedButton.icon(
+                    onPressed: () => _openReceiptDialog(bill),
+                    icon: const Icon(Icons.download_rounded, size: 15),
+                    label: Text(
+                      "Receipt",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF15803D),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      elevation: 0,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _openReturnDepositDialog(bill),
+                    icon: const Icon(Icons.assignment_return_rounded, size: 15),
+                    label: Text(
+                      "Return Deposit",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6D28D9),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      elevation: 0,
+                    ),
+                  ),
+                ] else if (isPaid) ...[
+                  ElevatedButton.icon(
+                    onPressed: () => _openReceiptDialog(bill),
+                    icon: const Icon(Icons.download_rounded, size: 15),
+                    label: Text(
+                      "Download Receipt",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF15803D),
@@ -839,21 +1017,14 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       elevation: 0,
                     ),
-                  )
-                else
-                  // Option to Send Notification (Fee Payment Reminder for unpaid, Urgent Defaulter Warning for defaulters)
+                  ),
+                ] else ...[
                   ElevatedButton.icon(
                     onPressed: () => _navigateToBroadcastForBill(bill),
                     icon: const Icon(Icons.campaign_rounded, size: 15),
-                    label: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        "Send Notification",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    label: Text(
+                      "Send Notification",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isDefaulter ? const Color(0xFFDC2626) : primaryBlue,
@@ -863,7 +1034,8 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                       elevation: 0,
                     ),
                   ),
-                const SizedBox(width: 6),
+                ],
+                const Spacer(),
                 IconButton(
                   onPressed: () => _confirmDeleteBill(bill),
                   icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Color(0xFFDC2626)),
@@ -960,168 +1132,892 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
     );
   }
 
-  // Receipt / Download Bill Dialog (Paid fees only)
+  // Receipt / Download Bill Dialog
   void _openReceiptDialog(BillModel item) {
-    if (!item.isPaid) {
-      _showSnackbar("Receipts are available for paid fees only.", isSuccess: false);
+    if (!item.isPaid && !item.isDepositHeld && !item.isDepositReturned) {
+      _showSnackbar("Receipts are available for paid fees and security deposits only.", isSuccess: false);
       return;
     }
-    final receiptNo = item.transactionRef ?? item.invoiceNo;
-    final dateStr = item.paidDate != null && item.paidDate!.isNotEmpty
-        ? item.paidDate!
-        : _formatDate(item.createdAt);
+    PaymentReceiptDialog.show(context, bill: item);
+  }
+
+  void _viewFullScreenImage(String imageUrl) {
+    DocumentViewerModal.show(
+      context,
+      url: imageUrl,
+      title: "Attached Payment Proof",
+    );
+  }
+
+  Widget _buildVerifyRow(String label, String value, {bool isBold = false, Color? textColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12.5,
+            color: const Color(0xFF64748B),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12.5,
+              color: textColor ?? const Color(0xFF0F172A),
+              fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openVerifyPaymentDialog(BillModel item) {
+    bool isVerifying = false;
+    final remarksController = TextEditingController(
+      text: item.isCash
+          ? "Cash payment verified and registered by administration"
+          : "Verified payment via UTR ${item.transactionRef ?? ''}".trim(),
+    );
 
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(22.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFEFF6FF),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.receipt_long_rounded, color: primaryBlue, size: 30),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "LAKSHYA RESIDENCY",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: primaryBlue,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              Text(
-                "Official Fee Receipt",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: textMuted,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: bgSurface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Column(
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(22.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    _buildReceiptRow("Receipt / Ref No", receiptNo, isBold: true),
-                    const Divider(height: 16, color: Color(0xFFE2E8F0)),
-                    _buildReceiptRow("Student Name", _student.fullName),
-                    _buildReceiptRow("Building / Room", "${_student.building} • ${_student.room}"),
-                    _buildReceiptRow("Fee Description", item.billType),
-                    _buildReceiptRow("Billing Period", item.billingMonth.isNotEmpty ? item.billingMonth : "Current Term"),
-                    _buildReceiptRow("Payment Date", dateStr),
-                    _buildReceiptRow("Payment Mode", item.paymentMethod ?? "Online / UPI / Cash"),
-                    const Divider(height: 16, color: Color(0xFFE2E8F0)),
-                    _buildReceiptRow(
-                      "Amount Paid",
-                      "₹${(item.isPaid ? item.paidAmount : item.amount).toStringAsFixed(0)}",
-                      isHighlight: true,
-                      highlightColor: const Color(0xFF16A34A),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: item.isCash ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        item.isCash ? Icons.payments_rounded : Icons.verified_user_rounded,
+                        color: item.isCash ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.isCash ? "Verify Cash Payment" : "Verify Payment Proof",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            item.isCash
+                                ? "Confirm physical cash receipt"
+                                : "Inspect student's payment screenshot / UTR",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        side: const BorderSide(color: Color(0xFFCBD5E1)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildVerifyRow("Student", item.studentName),
+                      const SizedBox(height: 8),
+                      _buildVerifyRow("Room / Bldg", "${item.room} • ${item.building}"),
+                      const SizedBox(height: 8),
+                      _buildVerifyRow("Invoice", item.invoiceNo),
+                      const SizedBox(height: 8),
+                      _buildVerifyRow("Bill Type", item.billType),
+                      const SizedBox(height: 8),
+                      _buildVerifyRow("Amount Due", "₹${item.balance.toStringAsFixed(0)}", isBold: true),
+                      const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                      _buildVerifyRow(
+                        "Payment Method",
+                        item.paymentMethod ?? (item.isCash ? "Cash" : "Online"),
+                        isBold: true,
+                        textColor: item.isCash ? const Color(0xFF16A34A) : const Color(0xFF003896),
                       ),
-                      child: Text(
-                        "Close",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF475569),
+                      if (!item.isCash) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Submitted UTR",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF64748B)),
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  item.transactionRef ?? "Not Provided",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF003896),
+                                  ),
+                                ),
+                                if (item.transactionRef != null && item.transactionRef!.isNotEmpty) ...[
+                                  const SizedBox(width: 6),
+                                  InkWell(
+                                    onTap: () {
+                                      Clipboard.setData(ClipboardData(text: item.transactionRef!));
+                                      _showSnackbar("UTR copied to clipboard!");
+                                    },
+                                    child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF003896)),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (item.paymentRemarks != null && item.paymentRemarks!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _buildVerifyRow("Student Note", item.paymentRemarks!),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Screenshot Proof Preview Section (for Bank / UPI or paper slips)
+                if (item.proofUrl != null && item.proofUrl!.isNotEmpty) ...[
+                  Text(
+                    "Student's Payment Proof Screenshot",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () => _viewFullScreenImage(item.proofUrl!),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              item.proofUrl!,
+                              width: 54,
+                              height: 54,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Screenshot Proof Attached",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.zoom_in_rounded, size: 14, color: Color(0xFF003896)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "Tap to inspect in full screen",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF003896),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.open_in_new_rounded, size: 18, color: Color(0xFF64748B)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ] else if (!item.isCash) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "No screenshot image was uploaded by student.",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ] else ...[
+                  // Cash Handover Notice
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, color: Color(0xFF16A34A), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "Physical Cash: Ensure ₹${item.balance.toStringAsFixed(0)} cash has been handed over at the hostel office before approving.",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF166534),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
+                Text(
+                  "Admin Remarks (Optional)",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: remarksController,
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: item.isCash ? "E.g. Cash received & entered in register" : "E.g. Bank credit confirmed",
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    // Reject / Re-submit button
+                    OutlinedButton(
+                      onPressed: isVerifying
+                          ? null
+                          : () {
+                              Navigator.pop(ctx);
+                              _openRejectPaymentDialog(item);
+                            },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFDC2626),
+                        side: const BorderSide(color: Color(0xFFFCA5A5)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                      ),
+                      child: Text("Reject", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: isVerifying ? null : () => Navigator.pop(ctx),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        child: Text("Cancel", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 12.5)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: isVerifying
+                            ? null
+                            : () async {
+                                setDialogState(() => isVerifying = true);
+                                try {
+                                  await FirestoreService().verifyAndMarkBillPaid(
+                                    item.id,
+                                    paidAmount: item.balance,
+                                    adminRemarks: remarksController.text.trim(),
+                                  );
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (mounted) {
+                                    _showSnackbar(
+                                      item.isCash
+                                          ? "Cash verified! Bill marked as Paid & fee clearance receipt issued."
+                                          : "Payment verified and invoice marked as Paid!",
+                                      isSuccess: true,
+                                    );
+                                  }
+                                } catch (e) {
+                                  setDialogState(() => isVerifying = false);
+                                  _showSnackbar("Verification failed: $e", isSuccess: false);
+                                }
+                              },
+                        icon: isVerifying
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.check_circle_rounded, size: 16),
+                        label: Text(
+                          isVerifying ? "Verifying..." : "Confirm Paid",
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF16A34A),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: '''
-LAKSHYA RESIDENCY - OFFICIAL FEE RECEIPT
------------------------------------------
-Receipt Ref: $receiptNo
-Student Name: ${_student.fullName}
-Building: ${_student.building} (Room ${_student.room}, ${_student.displayBed})
-Fee Description: ${item.billType}
-Billing Period: ${item.billingMonth}
-Amount Paid: ₹${(item.isPaid ? item.paidAmount : item.amount).toStringAsFixed(0)}
-Payment Date: $dateStr
-Payment Mode: ${item.paymentMethod ?? 'Online'}
-Status: PAID & VERIFIED
------------------------------------------
-'''));
-                        Navigator.pop(ctx);
-                        _showSnackbar("Bill receipt downloaded & copied to clipboard!");
-                      },
-                      icon: const Icon(Icons.download_rounded, size: 18),
-                      label: Text(
-                        "Download",
-                        style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryBlue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildReceiptRow(String title, String value,
-      {bool isBold = false, bool isHighlight = false, Color? highlightColor}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12.5,
-              color: textMuted,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+  void _openRejectPaymentDialog(BillModel item) {
+    final rejectReasonController = TextEditingController(
+      text: item.isCash ? "Physical cash not yet received at office" : "Payment proof unreadable or invalid",
+    );
+
+    showDialog(
+      context: context,
+      builder: (rCtx) => AlertDialog(
+        title: Text(
+          "Request Re-submission",
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "Please provide a reason so the student knows how to correct their submission:",
+              style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF64748B)),
             ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: rejectReasonController,
+              style: GoogleFonts.plusJakartaSans(fontSize: 13),
+              decoration: InputDecoration(
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.all(10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(rCtx),
+            child: const Text("Cancel"),
           ),
-          Text(
-            value,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: isHighlight ? 15 : 12.5,
-              color: highlightColor ?? (isBold ? primaryDark : const Color(0xFF334155)),
-              fontWeight: (isBold || isHighlight) ? FontWeight.bold : FontWeight.w600,
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(rCtx);
+              try {
+                await FirestoreService().rejectBillPaymentProof(
+                  item.id,
+                  rejectionReason: rejectReasonController.text.trim(),
+                );
+                _showSnackbar("Bill set back to Pending. Student notified.");
+              } catch (e) {
+                _showSnackbar("Action failed: $e", isSuccess: false);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
             ),
+            child: const Text("Reject & Notify"),
           ),
         ],
+      ),
+    );
+  }
+
+  void _openReturnDepositDialog(BillModel item) {
+    String selectedRefundMode = "UPI";
+    final refController = TextEditingController();
+    final remarksController = TextEditingController(text: "Lock-in period ended, full refund processed");
+    bool isProcessing = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              top: 20,
+              left: 20,
+              right: 20,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEDE9FE),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.assignment_return_rounded, color: Color(0xFF6D28D9), size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Return Security Deposit",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                "${item.studentName} • ${item.building} (${item.room})",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  color: const Color(0xFF64748B),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Deposit Amount",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            color: const Color(0xFF64748B),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          "₹${(item.paidAmount > 0 ? item.paidAmount : item.amount).toStringAsFixed(0)}",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF6D28D9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Refund Mode",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: ["UPI", "Bank transfer", "Cash"].map((mode) {
+                      final isSelected = selectedRefundMode == mode;
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => setModalState(() => selectedRefundMode = mode),
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFFEDE9FE) : Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFF6D28D9) : const Color(0xFFCBD5E1),
+                                width: isSelected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                mode,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                  color: isSelected ? const Color(0xFF6D28D9) : const Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 14),
+                  if (selectedRefundMode != "Cash") ...[
+                    Text(
+                      "Refund Reference / Transaction ID",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: refController,
+                      style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: "Enter UTR or bank transaction reference",
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  Text(
+                    "Deductions / Return Remarks",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: remarksController,
+                    maxLines: 2,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: "Lock-in period ended, full refund processed",
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      onPressed: isProcessing
+                          ? null
+                          : () async {
+                              setModalState(() => isProcessing = true);
+                              try {
+                                await FirestoreService().markSecurityDepositReturned(
+                                  billId: item.id,
+                                  refundMode: selectedRefundMode,
+                                  refundRef: refController.text.trim(),
+                                  refundRemarks: remarksController.text.trim(),
+                                );
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                _showSnackbar("Security deposit returned & resident notified!", isSuccess: true);
+                              } catch (e) {
+                                setModalState(() => isProcessing = false);
+                                _showSnackbar("Failed to return deposit: $e", isSuccess: false);
+                              }
+                            },
+                      icon: isProcessing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.check_circle_rounded, size: 18),
+                      label: Text(
+                        isProcessing ? "Processing Return..." : "Confirm & Mark as Returned",
+                        style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13.5),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6D28D9),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLeasePlanCard() {
+    final plan = _student.plan.isNotEmpty ? _student.plan : "Rent Only";
+    final monthlyRent = _student.monthlyRent.isNotEmpty ? _student.monthlyRent : "0";
+    final deposit = _student.securityDeposit.isNotEmpty ? _student.securityDeposit : "0";
+    final installments = _student.installments.isNotEmpty
+        ? "${_student.installments.length} Installments"
+        : (_student.paymentFrequency.isNotEmpty ? "${_student.paymentFrequency} Installments" : "12 Installments");
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.assignment_outlined, size: 18, color: primaryBlue),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    "Lease Plan & Installments",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: primaryDark,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 18, color: primaryBlue),
+                tooltip: "Edit Lease Details",
+                onPressed: _openEditLeaseDialog,
+              ),
+            ],
+          ),
+          const Divider(height: 20, color: Color(0xFFF1F5F9)),
+          _buildLeaseDetailRow("Plan", plan),
+          const SizedBox(height: 8),
+          _buildLeaseDetailRow("Monthly Rent", "₹ $monthlyRent"),
+          const SizedBox(height: 8),
+          _buildLeaseDetailRow("Security Deposit", "₹ $deposit"),
+          const SizedBox(height: 8),
+          _buildLeaseDetailRow("Installments Count", installments),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeaseDetailRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: textMuted),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13.5,
+            fontWeight: FontWeight.bold,
+            color: primaryDark,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openEditLeaseDialog() {
+    final rentCtrl = TextEditingController(text: _student.monthlyRent);
+    final depositCtrl = TextEditingController(text: _student.securityDeposit);
+    final installmentsCtrl = TextEditingController(
+      text: _student.installments.isNotEmpty
+          ? _student.installments.length.toString()
+          : (_student.paymentFrequency.isNotEmpty ? _student.paymentFrequency : "12"),
+    );
+    String selectedPlan = _student.plan.isNotEmpty ? _student.plan : "Rent Only";
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            "Edit Lease Plan & Installments",
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 17),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Lease Plan", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedPlan,
+                  items: ["Rent Only", "Rent + Food", "Custom"].map((p) {
+                    return DropdownMenuItem(value: p, child: Text(p));
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedPlan = val);
+                  },
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text("Monthly Rent (₹)", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: rentCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: "e.g. 12500",
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text("Security Deposit (₹)", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: depositCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: "e.g. 25000",
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text("Installments Count", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: installmentsCtrl,
+                  decoration: InputDecoration(
+                    hintText: "e.g. 12",
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final rent = rentCtrl.text.trim();
+                final deposit = depositCtrl.text.trim();
+                final count = installmentsCtrl.text.trim();
+                Navigator.pop(dialogCtx);
+
+                setState(() {
+                  _student = _student.copyWith(
+                    plan: selectedPlan,
+                    monthlyRent: rent,
+                    securityDeposit: deposit,
+                    paymentFrequency: count,
+                  );
+                });
+
+                try {
+                  await FirestoreService().updateStudentProfileFields(_student.id, {
+                    'plan': selectedPlan,
+                    'monthlyRent': rent,
+                    'securityDeposit': deposit,
+                    'paymentFrequency': count,
+                  });
+                  _showSnackbar("Lease details updated successfully!");
+                } catch (e) {
+                  _showSnackbar("Failed to update lease details: $e", isSuccess: false);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: primaryBlue),
+              child: const Text("Save Changes", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1266,24 +2162,80 @@ Status: PAID & VERIFIED
                             _showSnackbar("Please enter a valid amount", isSuccess: false);
                             return;
                           }
+                          final billName = nameController.text.trim().isNotEmpty ? nameController.text.trim() : billType;
+                          final billId = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+                          final dueDate = DateTime.now().add(Duration(days: dueDays));
+                          final isHostel = billType.toLowerCase().contains("deposit") ||
+                              billType.toLowerCase().contains("rent") ||
+                              billType.toLowerCase().contains("installment");
+                          final category = isHostel ? "Hostel rent/security deposit" : "Utility bill";
+
                           setModalState(() => isSaving = true);
                           try {
                             await FirestoreService().issueBill({
                               'studentId': _student.id,
+                              'studentDocId': _student.id,
+                              'studentUid': _student.studentId.isNotEmpty ? _student.studentId : _student.id,
+                              'userId': _student.studentId.isNotEmpty ? _student.studentId : _student.id,
                               'studentName': _student.fullName,
                               'phone': _student.phone,
+                              'studentPhone': _student.phone,
                               'building': _student.building,
                               'room': _student.room,
+                              'bed': _student.bedNumber,
+                              'bedNumber': _student.bedNumber,
+                              'regNo': _student.registrationNumber,
+                              'registrationNumber': _student.registrationNumber,
                               'billType': billType,
+                              'billCategory': category,
+                              'billingMonth': billName,
                               'amount': amt,
                               'paidAmount': 0.0,
-                              'dueDate': Timestamp.fromDate(DateTime.now().add(Duration(days: dueDays))),
+                              'dueDate': Timestamp.fromDate(dueDate),
                               'status': 'Pending',
-                              'invoiceNo': 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-                              'billingMonth': nameController.text.trim().isNotEmpty
-                                  ? nameController.text.trim()
-                                  : billType,
+                              'paymentStatus': 'Unpaid',
+                              'invoiceNo': billId,
+                              'avatarUrl': _student.photoUrl ?? '',
+                              'studentEmail': _student.email,
+                              'email': _student.email,
                             });
+
+                            // Send student notification
+                            await FirestoreService().sendStudentNotification(
+                              studentId: _student.id,
+                              studentUid: _student.studentId.isNotEmpty ? _student.studentId : _student.id,
+                              regNo: _student.registrationNumber,
+                              studentName: _student.fullName,
+                              title: "New Bill: $billName (₹${amt.toStringAsFixed(0)})",
+                              message:
+                                  "A new $category for $billName (₹${amt.toStringAsFixed(0)}) has been issued for your Room ${_student.room} (${_student.building}). Due date: ${_formatDate(dueDate)}.",
+                              category: "Payment",
+                              targetBuilding: _student.building,
+                              targetRoom: _student.room,
+                              metadata: {
+                                'invoiceNo': billId,
+                                'amount': amt,
+                                'dueDate': dueDate.toIso8601String(),
+                                'billCategory': category,
+                                'billName': billName,
+                              },
+                            );
+
+                            // Send student email if available
+                            if (_student.email.isNotEmpty) {
+                              EmailService().sendBillInvoiceEmail(
+                                studentEmail: _student.email,
+                                studentName: _student.fullName,
+                                billName: billName,
+                                billCategory: category,
+                                amount: amt,
+                                dueDate: dueDate,
+                                invoiceNo: billId,
+                                building: _student.building,
+                                room: _student.room,
+                              );
+                            }
+
                             if (modalCtx.mounted) {
                               Navigator.pop(modalCtx);
                             }
@@ -1354,18 +2306,7 @@ Status: PAID & VERIFIED
               // Merge Firestore subcollection notes with existing onboarding notes
               final allNotes = <Map<String, dynamic>>[];
 
-              // Add historical onboarding notes if subcollection is new
-              if (_student.notes.isNotEmpty && docs.isEmpty) {
-                for (var n in _student.notes) {
-                  allNotes.add({
-                    'text': n,
-                    'senderName': 'Management',
-                    'senderRole': 'admin',
-                    'createdAt': _student.createdAt,
-                  });
-                }
-              }
-
+              final subcollectionTexts = <String>{};
               for (var doc in docs) {
                 final data = doc.data() as Map<String, dynamic>? ?? {};
                 DateTime dt = DateTime.now();
@@ -1375,13 +2316,31 @@ Status: PAID & VERIFIED
                   dt = DateTime.tryParse(data['createdAt'].toString()) ?? DateTime.now();
                 }
 
+                final text = (data['text'] ?? data['message'] ?? '').toString();
+                if (text.isNotEmpty) {
+                  subcollectionTexts.add(text.trim());
+                }
+
                 allNotes.add({
                   'id': doc.id,
-                  'text': data['text'] ?? data['message'] ?? '',
+                  'text': text,
                   'senderName': data['senderName'] ?? 'Admin',
                   'senderRole': data['senderRole'] ?? 'admin',
                   'createdAt': dt,
                 });
+              }
+
+              // Add historical onboarding notes if not already in subcollection
+              for (var n in _student.notes) {
+                if (n.trim().isNotEmpty && !subcollectionTexts.contains(n.trim())) {
+                  allNotes.add({
+                    'id': null,
+                    'text': n,
+                    'senderName': 'Management',
+                    'senderRole': 'admin',
+                    'createdAt': _student.createdAt,
+                  });
+                }
               }
 
               if (allNotes.isEmpty) {
@@ -1473,6 +2432,26 @@ Status: PAID & VERIFIED
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w700,
                                     color: isAdmin ? Colors.white : primaryBlue,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Admin delete note button
+                              InkWell(
+                                onTap: () => _confirmDeleteNote(
+                                  docId: note['id'] as String?,
+                                  noteText: text,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(2.0),
+                                  child: Tooltip(
+                                    message: "Delete note",
+                                    child: Icon(
+                                      Icons.delete_outline_rounded,
+                                      size: 15,
+                                      color: isAdmin ? Colors.white70 : const Color(0xFFEF4444),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1604,6 +2583,77 @@ Status: PAID & VERIFIED
     }
   }
 
+  Future<void> _confirmDeleteNote({String? docId, required String noteText}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 20),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              "Delete Note",
+              style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Text(
+          "Are you sure you want to delete this personal note? This note will be permanently removed for both admin and resident.",
+          style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              "Cancel",
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text(
+              "Delete",
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await FirestoreService().deletePersonalNote(
+          _student.id,
+          noteDocId: docId,
+          noteText: noteText,
+        );
+        setState(() {
+          _student.notes.remove(noteText);
+        });
+        _showSnackbar("Personal note deleted successfully");
+      } catch (e) {
+        _showSnackbar("Failed to delete note: $e", isSuccess: false);
+      }
+    }
+  }
+
   // ===========================================================================
   // SECTION 3: AMENITIES (ROOM INVENTORY & ASSETS)
   // ===========================================================================
@@ -1614,16 +2664,17 @@ Status: PAID & VERIFIED
     // Fallback default room amenities if none were recorded
     if (inventory.isEmpty) {
       inventory.addAll([
+        "AC",
         "Bed",
-        "Almirah",
-        "Induction",
-        "Microwave",
-        "Fridge",
-        "TV",
+        "Cupboard",
         "Study Table",
         "Chair",
-        "AC",
         "Geyser",
+        "Fan",
+        "Curtains",
+        "Pillow",
+        "Bucket",
+        "Mug",
       ]);
     }
 
@@ -1891,6 +2942,7 @@ Status: PAID & VERIFIED
           registrationNumber: _student.registrationNumber,
           course: _student.course,
           branch: _student.branch,
+          hometownAddress: _student.hometownAddress,
           building: _student.building,
           room: _student.room,
           bedNumber: _student.bedNumber,
@@ -1937,6 +2989,7 @@ Status: PAID & VERIFIED
         registrationNumber: _student.registrationNumber,
         course: _student.course,
         branch: _student.branch,
+        hometownAddress: _student.hometownAddress,
         building: _student.building,
         room: _student.room,
         bedNumber: _student.bedNumber,
@@ -2168,6 +3221,9 @@ Status: PAID & VERIFIED
     String relationship = _student.guardianRelationship.isNotEmpty
         ? _student.guardianRelationship
         : "Father";
+    String dietary = _student.dietaryPreference.isNotEmpty
+        ? _student.dietaryPreference
+        : "Vegetarian";
 
     showDialog(
       context: context,
@@ -2175,7 +3231,7 @@ Status: PAID & VERIFIED
         builder: (ctx, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
-            "Edit Emergency Contact",
+            "Edit Guardian & Dietary Details",
             style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 17),
           ),
           content: SingleChildScrollView(
@@ -2183,7 +3239,7 @@ Status: PAID & VERIFIED
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Guardian / Parent Name", style: GoogleFonts.plusJakartaSans(fontSize: 12)),
+                Text("Guardian / Parent Name", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: nameCtrl,
@@ -2192,7 +3248,7 @@ Status: PAID & VERIFIED
                   ),
                 ),
                 const SizedBox(height: 14),
-                Text("Relationship", style: GoogleFonts.plusJakartaSans(fontSize: 12)),
+                Text("Relationship", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
                   initialValue: relationship,
@@ -2207,11 +3263,26 @@ Status: PAID & VERIFIED
                   ),
                 ),
                 const SizedBox(height: 14),
-                Text("Emergency Phone Number", style: GoogleFonts.plusJakartaSans(fontSize: 12)),
+                Text("Emergency Phone Number", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: phoneCtrl,
                   keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text("Dietary Preference", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  initialValue: dietary,
+                  items: ["Vegetarian", "Non-Vegetarian", "Eggetarian", "Vegan", "Jain"].map((d) {
+                    return DropdownMenuItem(value: d, child: Text(d));
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => dietary = val);
+                  },
                   decoration: InputDecoration(
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -2231,48 +3302,22 @@ Status: PAID & VERIFIED
                 Navigator.pop(dialogCtx);
 
                 setState(() {
-                  _student = StudentProfile(
-                    id: _student.id,
-                    studentId: _student.studentId,
-                    fullName: _student.fullName,
-                    firstName: _student.firstName,
-                    email: _student.email,
-                    phone: _student.phone,
-                    registrationNumber: _student.registrationNumber,
-                    course: _student.course,
-                    branch: _student.branch,
-                    building: _student.building,
-                    room: _student.room,
-                    bedNumber: _student.bedNumber,
-                    plan: _student.plan,
-                    paymentFrequency: _student.paymentFrequency,
-                    monthlyRent: _student.monthlyRent,
-                    securityDeposit: _student.securityDeposit,
+                  _student = _student.copyWith(
                     guardianName: newName,
                     guardianPhone: newPhone,
                     guardianRelationship: relationship,
-                    dietaryPreference: _student.dietaryPreference,
-                    photoUrl: _student.photoUrl,
-                    collegeIdUrl: _student.collegeIdUrl,
-                    govtIdUrl: _student.govtIdUrl,
-                    rentAgreementUrl: _student.rentAgreementUrl,
-                    additionalDocs: _student.additionalDocs,
-                    inventory: _student.inventory,
-                    notes: _student.notes,
-                    installments: _student.installments,
-                    status: _student.status,
-                    createdAt: _student.createdAt,
+                    dietaryPreference: dietary,
                   );
                 });
 
                 try {
-                  await FirestoreService().updateStudentEmergencyContact(
-                    _student.id,
-                    name: newName,
-                    relationship: relationship,
-                    phone: newPhone,
-                  );
-                  _showSnackbar("Emergency contact details updated!");
+                  await FirestoreService().updateStudentProfileFields(_student.id, {
+                    'guardianName': newName,
+                    'guardianRelationship': relationship,
+                    'guardianPhone': newPhone,
+                    'dietaryPreference': dietary,
+                  });
+                  _showSnackbar("Emergency & dietary details updated!");
                 } catch (e) {
                   _showSnackbar("Failed to update contact: $e", isSuccess: false);
                 }
@@ -2313,29 +3358,43 @@ Status: PAID & VERIFIED
             child: LinearProgressIndicator(color: primaryBlue),
           ),
 
-        // 1. College ID Card
+        // 1. Student Profile Photo
+        _buildDocumentCard(
+          title: "Student Profile Photo",
+          subtitle: "Official resident profile photograph",
+          url: _student.photoUrl,
+          docKey: "photoUrl",
+          icon: Icons.account_circle_rounded,
+          isAddLater: _student.photoAddLater,
+        ),
+
+        const SizedBox(height: 14),
+
+        // 2. College ID Card
         _buildDocumentCard(
           title: "College ID Card",
           subtitle: "Institutional student verification card",
           url: _student.collegeIdUrl,
           docKey: "collegeIdUrl",
           icon: Icons.badge_rounded,
+          isAddLater: _student.collegeIdAddLater,
         ),
 
         const SizedBox(height: 14),
 
-        // 2. Registered Government ID Card
+        // 3. Registered Government ID Card
         _buildDocumentCard(
-          title: "Registered Government ID Card",
+          title: "Government Authorized ID",
           subtitle: "Aadhaar Card, Passport, or Voter Identity",
           url: _student.govtIdUrl,
           docKey: "govtIdUrl",
           icon: Icons.shield_rounded,
+          isAddLater: _student.govtIdAddLater,
         ),
 
         const SizedBox(height: 14),
 
-        // 3. Rent Agreement
+        // 4. Rent Agreement
         _buildDocumentCard(
           title: "Rent Agreement",
           subtitle: "Executed residential lease agreement & terms",
@@ -2346,7 +3405,7 @@ Status: PAID & VERIFIED
 
         const SizedBox(height: 14),
 
-        // 4. Additional Documents (if any)
+        // 5. Additional Documents (if any)
         ..._student.additionalDocs.entries.map((entry) {
           return Padding(
             padding: const EdgeInsets.only(bottom: 14.0),
@@ -2388,6 +3447,7 @@ Status: PAID & VERIFIED
     required String? url,
     required String docKey,
     required IconData icon,
+    bool isAddLater = false,
   }) {
     final bool hasDoc = url != null && url.isNotEmpty;
     final bool isPdf = hasDoc && CloudinaryService.isPdf(url);
@@ -2439,21 +3499,46 @@ Status: PAID & VERIFIED
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: hasDoc ? (isPdf ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7)) : const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  hasDoc ? (isPdf ? "PDF Attached" : "Uploaded") : "Pending",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: hasDoc ? (isPdf ? const Color(0xFFB91C1C) : const Color(0xFF15803D)) : const Color(0xFFB45309),
+              if (!hasDoc && isAddLater)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.access_time_rounded, size: 12, color: Color(0xFFD97706)),
+                      const SizedBox(width: 4),
+                      Text(
+                        "Marked: Add Later",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFB45309),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: hasDoc ? (isPdf ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7)) : const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    hasDoc ? (isPdf ? "PDF Attached" : "Uploaded") : "Pending",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: hasDoc ? (isPdf ? const Color(0xFFB91C1C) : const Color(0xFF15803D)) : const Color(0xFFB45309),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
 
@@ -2534,73 +3619,24 @@ Status: PAID & VERIFIED
             'additionalDocs': updatedAdditional,
           });
           setState(() {
-            _student = StudentProfile(
-              id: _student.id,
-              studentId: _student.studentId,
-              fullName: _student.fullName,
-              firstName: _student.firstName,
-              email: _student.email,
-              phone: _student.phone,
-              registrationNumber: _student.registrationNumber,
-              course: _student.course,
-              branch: _student.branch,
-              building: _student.building,
-              room: _student.room,
-              bedNumber: _student.bedNumber,
-              plan: _student.plan,
-              paymentFrequency: _student.paymentFrequency,
-              monthlyRent: _student.monthlyRent,
-              securityDeposit: _student.securityDeposit,
-              guardianName: _student.guardianName,
-              guardianPhone: _student.guardianPhone,
-              guardianRelationship: _student.guardianRelationship,
-              dietaryPreference: _student.dietaryPreference,
-              photoUrl: _student.photoUrl,
-              collegeIdUrl: _student.collegeIdUrl,
-              govtIdUrl: _student.govtIdUrl,
-              rentAgreementUrl: _student.rentAgreementUrl,
-              additionalDocs: updatedAdditional,
-              inventory: _student.inventory,
-              notes: _student.notes,
-              installments: _student.installments,
-              status: _student.status,
-              createdAt: _student.createdAt,
-            );
+            _student = _student.copyWith(additionalDocs: updatedAdditional);
           });
         } else {
-          await FirestoreService().updateStudentDocuments(_student.id, {docKey: url});
+          final Map<String, dynamic> docPayload = {docKey: url};
+          if (docKey == 'photoUrl') docPayload['photoAddLater'] = false;
+          if (docKey == 'collegeIdUrl') docPayload['collegeIdAddLater'] = false;
+          if (docKey == 'govtIdUrl') docPayload['govtIdAddLater'] = false;
+
+          await FirestoreService().updateStudentDocuments(_student.id, docPayload);
           setState(() {
-            _student = StudentProfile(
-              id: _student.id,
-              studentId: _student.studentId,
-              fullName: _student.fullName,
-              firstName: _student.firstName,
-              email: _student.email,
-              phone: _student.phone,
-              registrationNumber: _student.registrationNumber,
-              course: _student.course,
-              branch: _student.branch,
-              building: _student.building,
-              room: _student.room,
-              bedNumber: _student.bedNumber,
-              plan: _student.plan,
-              paymentFrequency: _student.paymentFrequency,
-              monthlyRent: _student.monthlyRent,
-              securityDeposit: _student.securityDeposit,
-              guardianName: _student.guardianName,
-              guardianPhone: _student.guardianPhone,
-              guardianRelationship: _student.guardianRelationship,
-              dietaryPreference: _student.dietaryPreference,
+            _student = _student.copyWith(
               photoUrl: docKey == 'photoUrl' ? url : _student.photoUrl,
+              photoAddLater: docKey == 'photoUrl' ? false : _student.photoAddLater,
               collegeIdUrl: docKey == 'collegeIdUrl' ? url : _student.collegeIdUrl,
+              collegeIdAddLater: docKey == 'collegeIdUrl' ? false : _student.collegeIdAddLater,
               govtIdUrl: docKey == 'govtIdUrl' ? url : _student.govtIdUrl,
+              govtIdAddLater: docKey == 'govtIdUrl' ? false : _student.govtIdAddLater,
               rentAgreementUrl: docKey == 'rentAgreementUrl' ? url : _student.rentAgreementUrl,
-              additionalDocs: _student.additionalDocs,
-              inventory: _student.inventory,
-              notes: _student.notes,
-              installments: _student.installments,
-              status: _student.status,
-              createdAt: _student.createdAt,
             );
           });
         }
@@ -2610,8 +3646,6 @@ Status: PAID & VERIFIED
       }
     } catch (e) {
       _showSnackbar("Error uploading: $e", isSuccess: false);
-    } finally {
-      if (mounted) setState(() => _isUploadingDoc = false);
     }
   }
 
@@ -2667,6 +3701,7 @@ Status: PAID & VERIFIED
     final regCtrl = TextEditingController(text: _student.registrationNumber);
     final courseCtrl = TextEditingController(text: _student.course);
     final branchCtrl = TextEditingController(text: _student.branch);
+    final addressCtrl = TextEditingController(text: _student.hometownAddress);
     final roomCtrl = TextEditingController(text: _student.room);
     final bedCtrl = TextEditingController(text: _student.bedNumber);
     String selectedBuilding = _student.building;
@@ -2771,6 +3806,9 @@ Status: PAID & VERIFIED
                     Expanded(child: _buildTextField("Branch", branchCtrl, hint: "CSE")),
                   ],
                 ),
+                const SizedBox(height: 12),
+
+                _buildTextField("Hometown Address", addressCtrl, hint: "House No, Street, City, State, PIN"),
 
                 const SizedBox(height: 20),
 
@@ -2789,6 +3827,8 @@ Status: PAID & VERIFIED
                         'registrationNumber': regCtrl.text.trim(),
                         'course': courseCtrl.text.trim(),
                         'branch': branchCtrl.text.trim(),
+                        'hometownAddress': addressCtrl.text.trim(),
+                        'address': addressCtrl.text.trim(),
                       };
 
                       Navigator.pop(modalCtx);
@@ -2804,6 +3844,7 @@ Status: PAID & VERIFIED
                           registrationNumber: updatedFields['registrationNumber']!,
                           course: updatedFields['course']!,
                           branch: updatedFields['branch']!,
+                          hometownAddress: updatedFields['hometownAddress']!,
                           building: updatedFields['building']!,
                           room: updatedFields['room']!,
                           bedNumber: updatedFields['bedNumber']!,
@@ -3121,16 +4162,9 @@ Status: PAID & VERIFIED
         if (mounted) {
           Navigator.pop(context); // Dismiss loading spinner
           Navigator.pop(context, true); // Pop back to students directory
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                "Student profile for ${_student.fullName} deleted successfully.",
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: Colors.white),
-              ),
-              backgroundColor: const Color(0xFF16A34A),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
+          AppToast.showSuccess(
+            context,
+            "Student profile for ${_student.fullName} deleted successfully.",
           );
         }
       } catch (e) {

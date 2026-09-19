@@ -6,6 +6,7 @@ import 'User/user_home_screen.dart';
 import 'Admin/dashboard_screen.dart';
 import 'onboarding_screen.dart';
 import '../services/firebase_auth_service.dart';
+import '../widgets/app_toast.dart';
 
 enum LoginRole { user, manager }
 enum ManagementSubRole { staff, admin }
@@ -66,33 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showNotification(String msg, {bool isSuccess = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isSuccess ? Icons.check_circle_rounded : Icons.error_outline_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                msg,
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: isSuccess ? AppColors.primary : const Color(0xFFDC2626),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.show(context, msg, isSuccess: isSuccess);
   }
 
   Future<void> _handleSignIn() async {

@@ -7,6 +7,7 @@ import '../../models/user_role_model.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/admin_drawer.dart';
 import 'dashboard_screen.dart';
+import '../../widgets/app_toast.dart';
 
 class StaffScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -33,33 +34,7 @@ class _StaffScreenState extends State<StaffScreen> {
   }
 
   void _showSnackbar(String msg, {bool isSuccess = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                msg,
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: isSuccess ? const Color(0xFF0D52CE) : const Color(0xFFDC2626),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.show(context, msg, isSuccess: isSuccess);
   }
 
   List<StaffModel> _filterStaff(List<StaffModel> staffList) {

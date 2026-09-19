@@ -7,6 +7,7 @@ import '../../widgets/user_drawer.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'user_home_screen.dart';
+import '../../widgets/app_toast.dart';
 
 class SettingsScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -48,7 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final authUser = FirebaseAuthService().currentUser;
     _email = (u?.email.isNotEmpty == true)
         ? u!.email
-        : (authUser?.email ?? "resident@lakshya.edu");
+        : (authUser?.email ?? "");
     _phone = (u?.phone.isNotEmpty == true)
         ? u!.phone
         : (authUser?.phoneNumber ?? "");
@@ -66,181 +67,228 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
     final dialogFormKey = GlobalKey<FormState>();
+    bool isSubmitting = false;
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (dialogCtx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(
-            "Change Password",
-            style: GoogleFonts.plusJakartaSans(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              color: const Color(0xFF0F172A),
-            ),
-          ),
-          content: Form(
-            key: dialogFormKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return StatefulBuilder(
+          builder: (_, setModalState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
                 children: [
-                  Text(
-                    "Current Password",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
                     ),
+                    child: const Icon(Icons.lock_rounded, color: Color(0xFF1D4ED8), size: 22),
                   ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: currentPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      hintText: "Enter current password",
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "Change Password",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: const Color(0xFF0F172A),
                       ),
                     ),
-                    validator: (v) => v == null || v.isEmpty ? "Field cannot be empty" : null,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "New Password",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: newPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      hintText: "Enter new password",
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return "Field cannot be empty";
-                      if (v.length < 6) return "Password must be at least 6 characters";
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Confirm New Password",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: confirmPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      hintText: "Confirm new password",
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (v != newPasswordController.text) {
-                        return "Passwords do not match";
-                      }
-                      return null;
-                    },
                   ),
                 ],
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text(
-                "Cancel",
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF64748B),
+              content: Form(
+                key: dialogFormKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Current Password",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: currentPasswordController,
+                        obscureText: obscureCurrent,
+                        enabled: !isSubmitting,
+                        decoration: InputDecoration(
+                          hintText: "Enter current password",
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscureCurrent ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              size: 18,
+                              color: const Color(0xFF64748B),
+                            ),
+                            onPressed: () => setModalState(() => obscureCurrent = !obscureCurrent),
+                          ),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? "Field cannot be empty" : null,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        "New Password",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: newPasswordController,
+                        obscureText: obscureNew,
+                        enabled: !isSubmitting,
+                        decoration: InputDecoration(
+                          hintText: "Enter new password",
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              size: 18,
+                              color: const Color(0xFF64748B),
+                            ),
+                            onPressed: () => setModalState(() => obscureNew = !obscureNew),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return "Field cannot be empty";
+                          if (v.trim().length < 6) return "Password must be at least 6 characters";
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        "Confirm New Password",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: confirmPasswordController,
+                        obscureText: obscureConfirm,
+                        enabled: !isSubmitting,
+                        decoration: InputDecoration(
+                          hintText: "Confirm new password",
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              size: 18,
+                              color: const Color(0xFF64748B),
+                            ),
+                            onPressed: () => setModalState(() => obscureConfirm = !obscureConfirm),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (v != newPasswordController.text) {
+                            return "Passwords do not match";
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (dialogFormKey.currentState!.validate()) {
-                  final newPass = newPasswordController.text.trim();
-                  Navigator.pop(dialogCtx);
-                  try {
-                    final user = FirebaseAuthService().currentUser;
-                    if (user != null) {
-                      await user.updatePassword(newPass);
-                    }
-                    setState(() {
-                      _passwordSubtext = "Last changed just now";
-                    });
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          "Password updated successfully",
-                          style: GoogleFonts.plusJakartaSans(),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
+                  child: Text(
+                    "Cancel",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          if (dialogFormKey.currentState!.validate()) {
+                            setModalState(() => isSubmitting = true);
+                            final navigator = Navigator.of(dialogCtx);
+                            final currentPass = currentPasswordController.text.trim();
+                            final newPass = newPasswordController.text.trim();
+                            try {
+                              await FirebaseAuthService().changePassword(
+                                currentPassword: currentPass,
+                                newPassword: newPass,
+                              );
+                              setState(() {
+                                _passwordSubtext = "Last changed just now";
+                              });
+                              navigator.pop();
+                              if (mounted) {
+                                AppToast.showSuccess(context, "Password updated successfully!");
+                              }
+                            } catch (e) {
+                              setModalState(() => isSubmitting = false);
+                              if (mounted) {
+                                AppToast.showError(context, FirebaseAuthService.getReadableErrorMessage(e));
+                              }
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D4ED8),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          "Update",
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
                         ),
-                        backgroundColor: Colors.green,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          "Failed to update password: $e",
-                          style: GoogleFonts.plusJakartaSans(),
-                        ),
-                        backgroundColor: Colors.redAccent,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1D4ED8),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text(
-                "Update",
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -267,17 +315,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Settings saved successfully!",
-            style: GoogleFonts.plusJakartaSans(),
-          ),
-          backgroundColor: const Color(0xFF1D4ED8),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      AppToast.showSuccess(context, "Settings saved successfully!");
     }
   }
 

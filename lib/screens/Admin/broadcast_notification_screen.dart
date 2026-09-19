@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/admin_drawer.dart';
+import '../../widgets/app_toast.dart';
 import 'dashboard_screen.dart';
 import '../../services/firestore_service.dart';
 import '../../models/student_profile_model.dart';
@@ -313,15 +314,7 @@ class _BroadcastNotificationScreenState extends State<BroadcastNotificationScree
               final h = headingCtrl.text.trim();
               final d = descCtrl.text.trim();
               if (h.isEmpty || d.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      "Please fill in both heading and description.",
-                      style: GoogleFonts.plusJakartaSans(),
-                    ),
-                    backgroundColor: Colors.redAccent,
-                  ),
-                );
+                AppToast.showError(context, "Please fill in both heading and description.");
                 return;
               }
 
@@ -338,15 +331,7 @@ class _BroadcastNotificationScreenState extends State<BroadcastNotificationScree
                 _onSelectTemplate(newTemplate);
               });
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    "Template \"$h\" saved successfully!",
-                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-                  ),
-                  backgroundColor: adminPrimary,
-                ),
-              );
+              AppToast.showSuccess(context, "Template \"$h\" saved successfully!");
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: adminPrimary,
@@ -444,15 +429,7 @@ class _BroadcastNotificationScreenState extends State<BroadcastNotificationScree
                 }
               });
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    "Template updated successfully!",
-                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-                  ),
-                  backgroundColor: adminPrimary,
-                ),
-              );
+              AppToast.showSuccess(context, "Template updated successfully!");
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: adminPrimary,
@@ -500,15 +477,7 @@ class _BroadcastNotificationScreenState extends State<BroadcastNotificationScree
                   _onSelectTemplate(_templates.first);
                 }
               });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    "Template removed.",
-                    style: GoogleFonts.plusJakartaSans(),
-                  ),
-                  backgroundColor: const Color(0xFFDC2626),
-                ),
-              );
+              AppToast.showSuccess(context, "Template removed.");
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
@@ -888,18 +857,7 @@ class _BroadcastNotificationScreenState extends State<BroadcastNotificationScree
   }
 
   void _showSnackbar(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          msg,
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: Colors.white),
-        ),
-        backgroundColor: isError ? const Color(0xFFDC2626) : adminPrimary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.show(context, msg, isSuccess: !isError);
   }
 
   // ---------------------------------------------------------------------------

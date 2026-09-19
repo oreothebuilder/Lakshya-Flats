@@ -13,6 +13,7 @@ import '../screens/User/settings_screen.dart';
 
 import '../models/user_role_model.dart';
 import '../services/firestore_service.dart';
+import '../services/navigation_service.dart';
 
 class UserDrawer extends StatelessWidget {
   final String activeItem;
@@ -56,15 +57,26 @@ class UserDrawer extends StatelessWidget {
               Navigator.pop(dialogContext); // close dialog
               try {
                 await FirebaseAuthService().signOut();
-              } catch (_) {}
-              if (!context.mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LoginScreen(initialRole: LoginRole.user),
-                ),
-                (route) => false,
-              );
+              } catch (e) {
+                debugPrint("Logout error: $e");
+              }
+              final nav = rootNavigatorKey.currentState;
+              if (nav != null) {
+                nav.pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (context) => const LoginScreen(initialRole: LoginRole.user),
+                  ),
+                  (route) => false,
+                );
+              } else if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LoginScreen(initialRole: LoginRole.user),
+                  ),
+                  (route) => false,
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.redAccent,
@@ -385,7 +397,6 @@ class UserDrawer extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
             child: InkWell(
               onTap: () {
-                Navigator.pop(context);
                 _handleLogout(context);
               },
               borderRadius: BorderRadius.circular(12),

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/user_role_model.dart';
 import '../theme/app_colors.dart';
 import '../services/firebase_auth_service.dart';
+import '../services/navigation_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/Admin/dashboard_screen.dart';
 import '../screens/mess_menu_management_screen.dart';
@@ -61,15 +62,26 @@ class AdminDrawer extends StatelessWidget {
               Navigator.pop(dialogContext);
               try {
                 await FirebaseAuthService().signOut();
-              } catch (_) {}
-              if (!context.mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
-                ),
-                (route) => false,
-              );
+              } catch (e) {
+                debugPrint("Admin logout error: $e");
+              }
+              final nav = rootNavigatorKey.currentState;
+              if (nav != null) {
+                nav.pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
+                  ),
+                  (route) => false,
+                );
+              } else if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
+                  ),
+                  (route) => false,
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.redAccent,

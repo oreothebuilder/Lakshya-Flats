@@ -8,6 +8,7 @@ import '../../widgets/user_drawer.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'user_home_screen.dart';
+import '../../widgets/app_toast.dart';
 
 class TicketsScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -316,13 +317,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
                                 ? null
                                 : () async {
                                     if (titleController.text.trim().isEmpty) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text("Please enter a ticket title"),
-                                          backgroundColor: Colors.redAccent,
-                                          behavior: SnackBarBehavior.floating,
-                                        ),
-                                      );
+                                      AppToast.showError(context, "Please enter a ticket title");
                                       return;
                                     }
 
@@ -360,15 +355,9 @@ class _TicketsScreenState extends State<TicketsScreen> {
 
                                       if (context.mounted) {
                                         Navigator.pop(context);
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              "Ticket \"$title\" raised successfully! Status: Received",
-                                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-                                            ),
-                                            backgroundColor: const Color(0xFF16A34A),
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
+                                        AppToast.showSuccess(
+                                          context,
+                                          "Ticket \"$title\" raised successfully! Status: Received",
                                         );
                                       }
                                     } catch (e) {
@@ -376,13 +365,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
                                         isSubmitting = false;
                                       });
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text("Error submitting ticket: $e"),
-                                            backgroundColor: Colors.redAccent,
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
-                                        );
+                                        AppToast.showError(context, "Error submitting ticket: $e");
                                       }
                                     }
                                   },
@@ -504,6 +487,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
           backgroundColor: Colors.white,
           elevation: 0,
           scrolledUnderElevation: 1,
+          titleSpacing: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
             tooltip: "Back to Home",
@@ -524,26 +508,33 @@ class _TicketsScreenState extends State<TicketsScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Support Tickets",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Support Tickets",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                      ),
                     ),
-                  ),
-                  Text(
-                    "${_user?.building ?? 'Lakshya'} • ${(_user?.room?.isNotEmpty ?? false) ? _user!.room! : 'Resident'}",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
+                    Text(
+                      "${_user?.building ?? 'Lakshya'} • ${(_user?.room?.isNotEmpty ?? false) ? _user!.room! : 'Resident'}",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF64748B),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

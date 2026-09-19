@@ -33,7 +33,7 @@ class BuildingModel {
     this.totalRooms = 50,
     this.startingRent = 12500,
     this.wardenName = 'Warden In-Charge',
-    this.wardenPhone = '+91 9876543210',
+    this.wardenPhone = '',
     this.staffId,
     this.amenities = const [
       'High-Speed Wi-Fi',
@@ -99,7 +99,7 @@ class BuildingModel {
       totalRooms: (data['totalRooms'] as num?)?.toInt() ?? 50,
       startingRent: (data['startingRent'] as num?)?.toDouble() ?? 12500.0,
       wardenName: data['wardenName']?.toString() ?? 'Warden In-Charge',
-      wardenPhone: data['wardenPhone']?.toString() ?? '+91 9876543210',
+      wardenPhone: data['wardenPhone']?.toString() ?? '',
       staffId: data['staffId']?.toString(),
       amenities: (data['amenities'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
           const [

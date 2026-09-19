@@ -8,6 +8,8 @@ import '../../models/complaint_model.dart';
 import '../../models/user_role_model.dart';
 import '../../services/firestore_service.dart';
 import 'student_profile_detail_screen.dart';
+import '../../widgets/app_toast.dart';
+import '../../widgets/building_photo_selector.dart';
 
 class BuildingSpaceScreen extends StatefulWidget {
   final BuildingModel building;
@@ -57,33 +59,7 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
   }
 
   void _showSnackbar(String msg, {bool isSuccess = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                msg,
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: isSuccess ? const Color(0xFF0D52CE) : const Color(0xFFDC2626),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.show(context, msg, isSuccess: isSuccess);
   }
 
   String _formatDate(DateTime dt) {
@@ -115,6 +91,611 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
     if (p == 'high') return const Color(0xFFEA580C);
     if (p == 'medium') return const Color(0xFF0D52CE);
     return const Color(0xFF64748B);
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+          color: const Color(0xFF334155),
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF94A3B8)),
+      filled: true,
+      fillColor: const Color(0xFFF8FAFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF0D52CE), width: 1.5),
+      ),
+    );
+  }
+
+  void _openBuildingEditorModal(BuildingModel existing) {
+    final nameController = TextEditingController(text: existing.name);
+    final capacityController = TextEditingController(text: existing.totalCapacity.toString());
+    final roomsController = TextEditingController(text: existing.totalRooms.toString());
+    final rentController = TextEditingController(text: existing.startingRent.toStringAsFixed(0));
+    final locationController = TextEditingController(text: existing.campusLocation);
+    final addressController = TextEditingController(text: existing.address);
+    final customImageController = TextEditingController(text: existing.imageUrl ?? '');
+    final wardenNameController = TextEditingController(text: existing.wardenName);
+    final wardenPhoneController = TextEditingController(text: existing.wardenPhone);
+    String selectedCategory = existing.category;
+    String selectedAsset = existing.imageAsset;
+    String? selectedStaffId = existing.staffId;
+
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.88,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12, bottom: 8),
+                    child: Container(
+                      width: 44,
+                      height: 4.5,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F0FE),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.edit_note_rounded,
+                            color: Color(0xFF0D52CE),
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Edit ${existing.name} & Capacity",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                "Configure seats capacity, rooms, rent, and details",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12.5,
+                                  color: const Color(0xFF64748B),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFieldLabel("Building Name *"),
+                                    TextField(
+                                      controller: nameController,
+                                      decoration: _inputDecoration("e.g. Lakshya, Ishaan"),
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 14.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFieldLabel("Category"),
+                                    Container(
+                                      height: 48,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: selectedCategory,
+                                          isExpanded: true,
+                                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0D52CE), size: 18),
+                                          items: ['Boys Hostel', 'Girls Hostel', 'Co-Ed', 'Premium Flats']
+                                              .map((cat) => DropdownMenuItem(
+                                                    value: cat,
+                                                    child: Text(cat, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                                                  ))
+                                              .toList(),
+                                          onChanged: (val) {
+                                            if (val != null) setModalState(() => selectedCategory = val);
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+
+                          // Capacity & Seating Configuration
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDF4),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFBBF7D0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFDCFCE7),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(Icons.event_seat_rounded, color: Color(0xFF16A34A), size: 18),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "Seats & Room Capacity Configuration",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13.5,
+                                        color: const Color(0xFF166534),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          _buildFieldLabel("Total Seats (Capacity) *"),
+                                          TextField(
+                                            controller: capacityController,
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                            decoration: _inputDecoration("e.g. 90, 120").copyWith(
+                                              prefixIcon: const Icon(Icons.people_alt_rounded, size: 18, color: Color(0xFF16A34A)),
+                                              suffixText: "Seats",
+                                              suffixStyle: GoogleFonts.plusJakartaSans(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF166534),
+                                              ),
+                                            ),
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          _buildFieldLabel("Total Rooms *"),
+                                          TextField(
+                                            controller: roomsController,
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                            decoration: _inputDecoration("e.g. 45, 60").copyWith(
+                                              prefixIcon: const Icon(Icons.meeting_room_rounded, size: 18, color: Color(0xFF16A34A)),
+                                              suffixText: "Rooms",
+                                              suffixStyle: GoogleFonts.plusJakartaSans(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF166534),
+                                              ),
+                                            ),
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFFDCFCE7)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFF16A34A)),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          "Live Occupancy: The occupied count updates automatically whenever students are enrolled into this building from the Student Directory.",
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 11.5,
+                                            color: const Color(0xFF166534),
+                                            fontWeight: FontWeight.w600,
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFieldLabel("Starting Rent (₹ / month)"),
+                                    TextField(
+                                      controller: rentController,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                      decoration: _inputDecoration("e.g. 12500").copyWith(
+                                        prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18, color: Color(0xFF0D52CE)),
+                                      ),
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFieldLabel("Campus Location"),
+                                    TextField(
+                                      controller: locationController,
+                                      decoration: _inputDecoration("e.g. Main Campus, North"),
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          _buildFieldLabel("Property Address (optional)"),
+                          TextField(
+                            controller: addressController,
+                            decoration: _inputDecoration("e.g. Plot 12, Main Residency Boulevard"),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                          ),
+                          const SizedBox(height: 18),
+
+                          // Building Photo Selector (Catalog + Device Upload)
+                          BuildingPhotoSelector(
+                            initialAsset: selectedAsset,
+                            customImageController: customImageController,
+                            onAssetChanged: (newAsset) {
+                              setModalState(() => selectedAsset = newAsset);
+                            },
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Staff Assignment Section
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.badge_rounded, color: Color(0xFF0D52CE), size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "Assigned Staff",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+
+                                StreamBuilder<List<StaffModel>>(
+                                  stream: _firestoreService.getStaffStream(),
+                                  builder: (context, staffSnapshot) {
+                                    final staffList = staffSnapshot.data ?? [];
+
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        _buildFieldLabel("Select from Staff Directory"),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                                          ),
+                                          child: DropdownButtonHideUnderline(
+                                            child: DropdownButton<String?>(
+                                              value: staffList.any((s) => s.staffId == selectedStaffId) ? selectedStaffId : null,
+                                              hint: Text(
+                                                "Choose staff member...",
+                                                style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF94A3B8)),
+                                              ),
+                                              isExpanded: true,
+                                              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0D52CE)),
+                                              items: [
+                                                const DropdownMenuItem<String?>(
+                                                  value: null,
+                                                  child: Text("None / Custom Staff"),
+                                                ),
+                                                ...staffList.map((s) => DropdownMenuItem<String?>(
+                                                      value: s.staffId,
+                                                      child: Text("${s.name} (${s.staffId} • ${s.designation})"),
+                                                    )),
+                                              ],
+                                              onChanged: (val) {
+                                                setModalState(() {
+                                                  selectedStaffId = val;
+                                                  if (val != null) {
+                                                    final found = staffList.firstWhere((s) => s.staffId == val);
+                                                    wardenNameController.text = found.name;
+                                                    wardenPhoneController.text = found.phone;
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                      ],
+                                    );
+                                  },
+                                ),
+
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          _buildFieldLabel("Staff / Warden Name"),
+                                          TextField(
+                                            controller: wardenNameController,
+                                            decoration: _inputDecoration("e.g. Ramesh Kumar"),
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          _buildFieldLabel("Staff Contact Phone"),
+                                          TextField(
+                                            controller: wardenPhoneController,
+                                            keyboardType: TextInputType.phone,
+                                            decoration: _inputDecoration("e.g. +91 98765 43210"),
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Bottom action buttons
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFCBD5E1)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text(
+                              "Cancel",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF475569),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton(
+                            onPressed: isSaving
+                                ? null
+                                : () async {
+                                    final name = nameController.text.trim();
+                                    if (name.isEmpty) {
+                                      _showSnackbar("Please enter a building name", isSuccess: false);
+                                      return;
+                                    }
+
+                                    final capacity = int.tryParse(capacityController.text.trim());
+                                    if (capacity == null || capacity <= 0) {
+                                      _showSnackbar("Please enter a valid total seating capacity (> 0)", isSuccess: false);
+                                      return;
+                                    }
+
+                                    final rooms = int.tryParse(roomsController.text.trim()) ?? (capacity ~/ 2).clamp(1, 999);
+                                    final rent = double.tryParse(rentController.text.trim()) ?? 12500.0;
+                                    final campus = locationController.text.trim().isNotEmpty
+                                        ? locationController.text.trim()
+                                        : 'Main Campus';
+                                    final address = addressController.text.trim();
+
+                                    setModalState(() => isSaving = true);
+
+                                    try {
+                                      final warden = wardenNameController.text.trim().isNotEmpty
+                                          ? wardenNameController.text.trim()
+                                          : 'Warden In-Charge';
+                                      final phone = wardenPhoneController.text.trim().isNotEmpty
+                                          ? wardenPhoneController.text.trim()
+                                          : '';
+                                      final customImg = customImageController.text.trim().isNotEmpty
+                                          ? customImageController.text.trim()
+                                          : null;
+
+                                      final updated = existing.copyWith(
+                                        name: name,
+                                        category: selectedCategory,
+                                        campusLocation: campus,
+                                        address: address,
+                                        totalCapacity: capacity,
+                                        totalRooms: rooms,
+                                        startingRent: rent,
+                                        imageAsset: selectedAsset,
+                                        imageUrl: customImg,
+                                        wardenName: warden,
+                                        wardenPhone: phone,
+                                        staffId: selectedStaffId,
+                                      );
+                                      await _firestoreService.updateBuilding(existing.id, updated.toMap());
+                                      _showSnackbar("Building '${updated.name}' updated! Capacity set to $capacity seats.");
+
+                                      if (ctx.mounted) {
+                                        Navigator.pop(ctx);
+                                      }
+                                    } catch (e) {
+                                      _showSnackbar("Error saving building: $e", isSuccess: false);
+                                    } finally {
+                                      if (mounted) setModalState(() => isSaving = false);
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0D52CE),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: isSaving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  )
+                                : Text(
+                                    "Save Changes",
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14.5,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -306,8 +887,8 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
   // ---------------------------------------------------------------------------
   // TAB 1: All Students in this Building
   // ---------------------------------------------------------------------------
-  Widget _buildStudentsTab(List<StudentProfile> allStudents) {
-    final buildingStudents = allStudents.where((s) => _matchesBuilding(widget.building.name, s.building)).toList();
+  Widget _buildStudentsTab(List<StudentProfile> allStudents, BuildingModel currentBuilding) {
+    final buildingStudents = allStudents.where((s) => _matchesBuilding(currentBuilding.name, s.building)).toList();
 
     final filteredStudents = buildingStudents.where((s) {
       if (_studentSearchQuery.isEmpty) return true;
@@ -333,7 +914,7 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
               controller: _studentSearchController,
               onChanged: (val) => setState(() => _studentSearchQuery = val.trim()),
               decoration: InputDecoration(
-                hintText: "Search ${widget.building.name} residents by name, room...",
+                hintText: "Search ${currentBuilding.name} residents by name, room...",
                 hintStyle: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8), fontSize: 13.5),
                 prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF94A3B8), size: 22),
                 suffixIcon: _studentSearchQuery.isNotEmpty
@@ -397,7 +978,7 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                         const SizedBox(height: 14),
                         Text(
                           _studentSearchQuery.isEmpty
-                              ? "No students registered in ${widget.building.name} yet"
+                              ? "No students registered in ${currentBuilding.name} yet"
                               : "No residents match '$_studentSearchQuery'",
                           textAlign: TextAlign.center,
                           style: GoogleFonts.plusJakartaSans(
@@ -565,24 +1146,24 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
   // ---------------------------------------------------------------------------
   // TAB 2: Concerned Staff for this Building
   // ---------------------------------------------------------------------------
-  Widget _buildStaffTab(List<StaffModel> allStaff) {
+  Widget _buildStaffTab(List<StaffModel> allStaff, BuildingModel currentBuilding) {
     // Filter staff who are assigned to this building
     var staffList = allStaff.where((s) {
-      return s.assignedBuildings.any((b) => _matchesBuilding(widget.building.name, b));
+      return s.assignedBuildings.any((b) => _matchesBuilding(currentBuilding.name, b));
     }).toList();
 
     // If no staff explicitly assigned yet in staff collection, create a fallback
     // card from BuildingModel's designated warden & manager
     final hasExplicitStaff = staffList.isNotEmpty;
-    if (!hasExplicitStaff && widget.building.wardenName.isNotEmpty) {
+    if (!hasExplicitStaff && currentBuilding.wardenName.isNotEmpty) {
       staffList = [
         StaffModel(
-          id: 'warden_bld_${widget.building.id}',
+          id: 'warden_bld_${currentBuilding.id}',
           staffId: 'WARDEN-INCHARGE',
-          name: widget.building.wardenName,
-          phone: widget.building.wardenPhone,
+          name: currentBuilding.wardenName,
+          phone: currentBuilding.wardenPhone,
           designation: 'Hostel Warden In-Charge',
-          assignedBuildings: [widget.building.name],
+          assignedBuildings: [currentBuilding.name],
           status: 'Active',
         ),
       ];
@@ -777,9 +1358,9 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
   // ---------------------------------------------------------------------------
   // TAB 3: Raised Tickets for this Building (Recent One on Top)
   // ---------------------------------------------------------------------------
-  Widget _buildTicketsTab(List<ComplaintModel> allTickets) {
+  Widget _buildTicketsTab(List<ComplaintModel> allTickets, BuildingModel currentBuilding) {
     // Filter tickets for this building
-    final buildingTickets = allTickets.where((t) => _matchesBuilding(widget.building.name, t.building)).toList();
+    final buildingTickets = allTickets.where((t) => _matchesBuilding(currentBuilding.name, t.building)).toList();
 
     // Ensure sorted with recent one on top
     buildingTickets.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -884,7 +1465,7 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                         const SizedBox(height: 14),
                         Text(
                           _ticketStatusFilter == 'All'
-                              ? "No tickets raised from ${widget.building.name} yet"
+                              ? "No tickets raised from ${currentBuilding.name} yet"
                               : "No '$_ticketStatusFilter' tickets found",
                           textAlign: TextAlign.center,
                           style: GoogleFonts.plusJakartaSans(
@@ -895,7 +1476,7 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          "Resident complaints from ${widget.building.name} will be displayed here with the newest issues on top.",
+                          "Resident complaints from ${currentBuilding.name} will be displayed here with the newest issues on top.",
                           textAlign: TextAlign.center,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12.5,
@@ -1093,373 +1674,422 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAF9),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "${widget.building.name} Space",
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF0F172A),
-              ),
+    return StreamBuilder<List<BuildingModel>>(
+      stream: _firestoreService.getBuildingsStream(),
+      builder: (context, buildingsSnapshot) {
+        final currentBuilding = (buildingsSnapshot.data ?? []).firstWhere(
+          (b) => b.id == widget.building.id || b.name.toLowerCase() == widget.building.name.toLowerCase(),
+          orElse: () => widget.building,
+        );
+
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAF9),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 1,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+              onPressed: () => Navigator.pop(context),
             ),
-            Text(
-              "${widget.building.campusLocation} • ${widget.building.category}",
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF64748B),
-              ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "${currentBuilding.name} Space",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+                Text(
+                  "${currentBuilding.campusLocation} • ${currentBuilding.category}",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-      body: StreamBuilder<List<StudentProfile>>(
-        stream: _firestoreService.getStudentsStream(),
-        builder: (context, studentsSnapshot) {
-          final allStudents = studentsSnapshot.data ?? [];
-          final buildingStudents = allStudents.where((s) => _matchesBuilding(widget.building.name, s.building)).toList();
-          final detectedOccupancy = buildingStudents.length;
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, color: Color(0xFF0F172A)),
+                tooltip: "Edit Building & Capacity",
+                onPressed: () => _openBuildingEditorModal(currentBuilding),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+          body: StreamBuilder<List<StudentProfile>>(
+            stream: _firestoreService.getStudentsStream(),
+            builder: (context, studentsSnapshot) {
+              final allStudents = studentsSnapshot.data ?? [];
+              final buildingStudents = allStudents.where((s) => _matchesBuilding(currentBuilding.name, s.building)).toList();
+              final detectedOccupancy = buildingStudents.length;
 
-          return StreamBuilder<List<StaffModel>>(
-            stream: _firestoreService.getStaffStream(),
-            builder: (context, staffSnapshot) {
-              final allStaff = staffSnapshot.data ?? [];
-              final buildingStaff = allStaff.where((s) => s.assignedBuildings.any((b) => _matchesBuilding(widget.building.name, b))).toList();
-              final staffCount = buildingStaff.length;
+              return StreamBuilder<List<StaffModel>>(
+                stream: _firestoreService.getStaffStream(),
+                builder: (context, staffSnapshot) {
+                  final allStaff = staffSnapshot.data ?? [];
+                  final buildingStaff = allStaff.where((s) => s.assignedBuildings.any((b) => _matchesBuilding(currentBuilding.name, b))).toList();
+                  final staffCount = buildingStaff.length;
 
-              return StreamBuilder<List<ComplaintModel>>(
-                stream: _firestoreService.getComplaintsStream(buildingFilter: widget.building.name),
-                builder: (context, ticketsSnapshot) {
-                  final allTickets = ticketsSnapshot.data ?? [];
-                  final buildingTickets = allTickets.where((t) => _matchesBuilding(widget.building.name, t.building)).toList();
-                  final openTicketsCount = buildingTickets.where((t) => t.status != ComplaintModel.statusResolved).length;
+                  return StreamBuilder<List<ComplaintModel>>(
+                    stream: _firestoreService.getComplaintsStream(buildingFilter: currentBuilding.name),
+                    builder: (context, ticketsSnapshot) {
+                      final allTickets = ticketsSnapshot.data ?? [];
+                      final buildingTickets = allTickets.where((t) => _matchesBuilding(currentBuilding.name, t.building)).toList();
+                      final openTicketsCount = buildingTickets.where((t) => t.status != ComplaintModel.statusResolved).length;
 
-                  final occupancyRate = widget.building.totalCapacity > 0
-                      ? (detectedOccupancy / widget.building.totalCapacity).clamp(0.0, 1.0)
-                      : 0.0;
-                  final occupancyPercent = widget.building.totalCapacity > 0
-                      ? ((detectedOccupancy / widget.building.totalCapacity) * 100).round()
-                      : 0;
+                      final occupancyRate = currentBuilding.totalCapacity > 0
+                          ? (detectedOccupancy / currentBuilding.totalCapacity).clamp(0.0, 1.0)
+                          : 0.0;
+                      final occupancyPercent = currentBuilding.totalCapacity > 0
+                          ? ((detectedOccupancy / currentBuilding.totalCapacity) * 100).round()
+                          : 0;
 
-                  return Column(
-                    children: [
-                      // Top Hero & Occupancy Card
-                      Container(
-                        color: Colors.white,
-                        padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
-                        child: Column(
-                          children: [
-                            // Building Photo Banner
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: SizedBox(
-                                height: 130,
-                                width: double.infinity,
-                                child: Stack(
-                                  children: [
-                                    Positioned.fill(
-                                      child: widget.building.hasRemoteImage
-                                          ? Image.network(
-                                              widget.building.imageUrl!,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, _, _) => Container(
-                                                color: const Color(0xFFCBD5E1),
-                                                child: const Icon(Icons.apartment_rounded, color: Colors.white, size: 36),
-                                              ),
-                                            )
-                                          : widget.building.imageAsset.isNotEmpty
-                                              ? Image.asset(
-                                                  widget.building.imageAsset,
+                      return Column(
+                        children: [
+                          // Top Hero & Occupancy Card
+                          Container(
+                            color: Colors.white,
+                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+                            child: Column(
+                              children: [
+                                // Building Photo Banner
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: SizedBox(
+                                    height: 130,
+                                    width: double.infinity,
+                                    child: Stack(
+                                      children: [
+                                        Positioned.fill(
+                                          child: currentBuilding.hasRemoteImage
+                                              ? Image.network(
+                                                  currentBuilding.imageUrl!,
                                                   fit: BoxFit.cover,
                                                   errorBuilder: (_, _, _) => Container(
                                                     color: const Color(0xFFCBD5E1),
                                                     child: const Icon(Icons.apartment_rounded, color: Colors.white, size: 36),
                                                   ),
                                                 )
-                                              : Container(
-                                                  color: const Color(0xFFCBD5E1),
-                                                  child: const Icon(Icons.apartment_rounded, color: Colors.white, size: 36),
+                                              : currentBuilding.imageAsset.isNotEmpty
+                                                  ? Image.asset(
+                                                      currentBuilding.imageAsset,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (_, _, _) => Container(
+                                                        color: const Color(0xFFCBD5E1),
+                                                        child: const Icon(Icons.apartment_rounded, color: Colors.white, size: 36),
+                                                      ),
+                                                    )
+                                                  : Container(
+                                                      color: const Color(0xFFCBD5E1),
+                                                      child: const Icon(Icons.apartment_rounded, color: Colors.white, size: 36),
+                                                    ),
+                                        ),
+                                        // Gradient overlay
+                                        Positioned.fill(
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                begin: Alignment.topCenter,
+                                                end: Alignment.bottomCenter,
+                                                colors: [
+                                                  Colors.black.withValues(alpha: 0.2),
+                                                  Colors.black.withValues(alpha: 0.6),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        // Overlay info
+                                        Positioned(
+                                          bottom: 12,
+                                          left: 14,
+                                          right: 14,
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      currentBuilding.name,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: GoogleFonts.plusJakartaSans(
+                                                        fontSize: 20,
+                                                        fontWeight: FontWeight.w900,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      "${currentBuilding.campusLocation} • ${currentBuilding.totalCapacity} Total Beds",
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: GoogleFonts.plusJakartaSans(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: Colors.white.withValues(alpha: 0.9),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
-                                    ),
-                                    // Gradient overlay
-                                    Positioned.fill(
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                            colors: [
-                                              Colors.black.withValues(alpha: 0.2),
-                                              Colors.black.withValues(alpha: 0.6),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white,
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Text(
+                                                  "$occupancyPercent% Full",
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: const Color(0xFF0D52CE),
+                                                  ),
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
-                                      ),
+                                      ],
                                     ),
-                                    // Overlay info
-                                    Positioned(
-                                      bottom: 12,
-                                      left: 14,
-                                      right: 14,
-                                      child: Row(
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Dynamic Occupancy Bar
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        crossAxisAlignment: CrossAxisAlignment.end,
                                         children: [
                                           Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                            child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Text(
-                                                  widget.building.name,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: GoogleFonts.plusJakartaSans(
-                                                    fontSize: 20,
-                                                    fontWeight: FontWeight.w900,
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  "${widget.building.campusLocation} • ${widget.building.totalCapacity} Total Beds",
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: GoogleFonts.plusJakartaSans(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.white.withValues(alpha: 0.9),
+                                                const Icon(Icons.people_alt_rounded, size: 15, color: Color(0xFF0D52CE)),
+                                                const SizedBox(width: 6),
+                                                Flexible(
+                                                  child: Text(
+                                                    "$detectedOccupancy / ${currentBuilding.totalCapacity} Students",
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: GoogleFonts.plusJakartaSans(
+                                                      fontSize: 12.5,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: const Color(0xFF0F172A),
+                                                    ),
                                                   ),
                                                 ),
                                               ],
                                             ),
                                           ),
-                                          const SizedBox(width: 10),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                            decoration: BoxDecoration(
-                                              color: Colors.white,
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                            child: Text(
-                                              "$occupancyPercent% Full",
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w800,
-                                                color: const Color(0xFF0D52CE),
+                                          const SizedBox(width: 8),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                "${(currentBuilding.totalCapacity - detectedOccupancy).clamp(0, currentBuilding.totalCapacity)} Available",
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: const Color(0xFF16A34A),
+                                                ),
                                               ),
-                                            ),
+                                              const SizedBox(width: 8),
+                                              InkWell(
+                                                onTap: () => _openBuildingEditorModal(currentBuilding),
+                                                borderRadius: BorderRadius.circular(6),
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF0D52CE).withValues(alpha: 0.08),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(Icons.edit_rounded, size: 11, color: Color(0xFF0D52CE)),
+                                                      const SizedBox(width: 3),
+                                                      Text(
+                                                        "Edit Seats",
+                                                        style: GoogleFonts.plusJakartaSans(
+                                                          fontSize: 10.5,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: const Color(0xFF0D52CE),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Dynamic Occupancy Bar
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(Icons.people_alt_rounded, size: 15, color: Color(0xFF0D52CE)),
-                                            const SizedBox(width: 6),
-                                            Flexible(
-                                              child: Text(
-                                                "$detectedOccupancy / ${widget.building.totalCapacity} Students",
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: GoogleFonts.plusJakartaSans(
-                                                  fontSize: 12.5,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: const Color(0xFF0F172A),
-                                                ),
-                                              ),
+                                      const SizedBox(height: 8),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: SizedBox(
+                                          height: 7,
+                                          child: LinearProgressIndicator(
+                                            value: occupancyRate,
+                                            backgroundColor: const Color(0xFFE2E8F0),
+                                            valueColor: AlwaysStoppedAnimation<Color>(
+                                              occupancyRate >= 0.90
+                                                  ? const Color(0xFFEA580C)
+                                                  : const Color(0xFF0D52CE),
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        "${(widget.building.totalCapacity - detectedOccupancy).clamp(0, widget.building.totalCapacity)} Available",
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: const Color(0xFF16A34A),
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: SizedBox(
-                                      height: 7,
-                                      child: LinearProgressIndicator(
-                                        value: occupancyRate,
-                                        backgroundColor: const Color(0xFFE2E8F0),
-                                        valueColor: AlwaysStoppedAnimation<Color>(
-                                          occupancyRate >= 0.90
-                                              ? const Color(0xFFEA580C)
-                                              : const Color(0xFF0D52CE),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Tabs Header
+                          Container(
+                            color: Colors.white,
+                            child: TabBar(
+                              controller: _tabController,
+                              indicatorColor: const Color(0xFF0D52CE),
+                              indicatorWeight: 3,
+                              labelColor: const Color(0xFF0D52CE),
+                              unselectedLabelColor: const Color(0xFF64748B),
+                              labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13),
+                              unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 13),
+                              tabs: [
+                                Tab(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text("Students"),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: _tabController.index == 0
+                                              ? const Color(0xFF0D52CE)
+                                              : const Color(0xFFE2E8F0),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          "$detectedOccupancy",
+                                          style: TextStyle(
+                                            color: _tabController.index == 0 ? Colors.white : const Color(0xFF475569),
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w800,
+                                          ),
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Tabs Header
-                      Container(
-                        color: Colors.white,
-                        child: TabBar(
-                          controller: _tabController,
-                          indicatorColor: const Color(0xFF0D52CE),
-                          indicatorWeight: 3,
-                          labelColor: const Color(0xFF0D52CE),
-                          unselectedLabelColor: const Color(0xFF64748B),
-                          labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13),
-                          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 13),
-                          tabs: [
-                            Tab(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text("Students"),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                    decoration: BoxDecoration(
-                                      color: _tabController.index == 0
-                                          ? const Color(0xFF0D52CE)
-                                          : const Color(0xFFE2E8F0),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      "$detectedOccupancy",
-                                      style: TextStyle(
-                                        color: _tabController.index == 0 ? Colors.white : const Color(0xFF475569),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Tab(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text("Staff"),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                    decoration: BoxDecoration(
-                                      color: _tabController.index == 1
-                                          ? const Color(0xFF0D52CE)
-                                          : const Color(0xFFE2E8F0),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      "$staffCount",
-                                      style: TextStyle(
-                                        color: _tabController.index == 1 ? Colors.white : const Color(0xFF475569),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Tab(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text("Tickets"),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                    decoration: BoxDecoration(
-                                      color: openTicketsCount > 0
-                                          ? const Color(0xFFEF4444)
-                                          : (_tabController.index == 2
+                                ),
+                                Tab(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text("Staff"),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: _tabController.index == 1
                                               ? const Color(0xFF0D52CE)
-                                              : const Color(0xFFE2E8F0)),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      "${buildingTickets.length}",
-                                      style: TextStyle(
-                                        color: (openTicketsCount > 0 || _tabController.index == 2)
-                                            ? Colors.white
-                                            : const Color(0xFF475569),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w800,
+                                              : const Color(0xFFE2E8F0),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          "$staffCount",
+                                          style: TextStyle(
+                                            color: _tabController.index == 1 ? Colors.white : const Color(0xFF475569),
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                ),
+                                Tab(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text("Tickets"),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: openTicketsCount > 0
+                                              ? const Color(0xFFEF4444)
+                                              : (_tabController.index == 2
+                                                  ? const Color(0xFF0D52CE)
+                                                  : const Color(0xFFE2E8F0)),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          "${buildingTickets.length}",
+                                          style: TextStyle(
+                                            color: (openTicketsCount > 0 || _tabController.index == 2)
+                                                ? Colors.white
+                                                : const Color(0xFF475569),
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                          ),
+                          const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-                      // Tab Views
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildStudentsTab(allStudents),
-                            _buildStaffTab(allStaff),
-                            _buildTicketsTab(buildingTickets),
-                          ],
-                        ),
-                      ),
-                    ],
+                          // Tab Views
+                          Expanded(
+                            child: TabBarView(
+                              controller: _tabController,
+                              children: [
+                                _buildStudentsTab(allStudents, currentBuilding),
+                                _buildStaffTab(allStaff, currentBuilding),
+                                _buildTicketsTab(buildingTickets, currentBuilding),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   );
                 },
               );
             },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

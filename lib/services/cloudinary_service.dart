@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'platform_file_saver.dart';
 
 class CloudinaryService {
   // Configurable Cloudinary properties
@@ -117,7 +116,7 @@ class CloudinaryService {
   }
 
   /// Downloads a file/PDF from a given URL and saves it to local device storage.
-  /// Returns the absolute saved file path if successful.
+  /// Returns the absolute saved file path (or fileName on web) if successful.
   static Future<String?> downloadAndSaveFile(
     String url, {
     required String fileName,
@@ -129,21 +128,7 @@ class CloudinaryService {
         return null;
       }
 
-      Directory? dir;
-      if (!kIsWeb && Platform.isAndroid) {
-        dir = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
-      } else if (!kIsWeb) {
-        dir = await getApplicationDocumentsDirectory();
-      }
-
-      if (dir == null) return null;
-
-      // Clean file name
-      final safeName = fileName.replaceAll(RegExp(r'[^\w\.\-]'), '_');
-      final targetFile = File("${dir.path}/$safeName");
-      await targetFile.writeAsBytes(response.bodyBytes);
-      debugPrint("File downloaded and saved to: ${targetFile.path}");
-      return targetFile.path;
+      return await saveAndLaunchFile(response.bodyBytes, fileName);
     } catch (e) {
       debugPrint("downloadAndSaveFile Exception: $e");
       return null;
@@ -161,5 +146,15 @@ class CloudinaryService {
       debugPrint("openUrl Exception: $e");
     }
     return false;
+  }
+
+  /// Transforms a Cloudinary URL into a direct attachment download URL
+  static String getAttachmentDownloadUrl(String url, {String? fileName}) {
+    if (url.contains('/upload/')) {
+      final cleanFileName = fileName != null ? fileName.replaceAll(RegExp(r'[^\w\.\-]'), '_') : '';
+      final attachmentParam = cleanFileName.isNotEmpty ? 'fl_attachment:$cleanFileName/' : 'fl_attachment/';
+      return url.replaceFirst('/upload/', '/upload/$attachmentParam');
+    }
+    return url;
   }
 }

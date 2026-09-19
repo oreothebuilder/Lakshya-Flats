@@ -1,8 +1,11 @@
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../services/cloudinary_service.dart';
+import '../services/platform_file_saver.dart';
+import 'app_toast.dart';
 
 /// Modal dialog for viewing both images and PDF documents seamlessly in-app.
 /// Supports zooming, multi-page PDFs, direct downloading to device storage,
@@ -30,12 +33,7 @@ class DocumentViewerModal extends StatefulWidget {
     String? fileName,
   }) {
     if (url.isEmpty && memoryBytes == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("No document or image available to preview."),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      AppToast.showError(context, "No document or image available to preview.");
       return;
     }
 
@@ -72,58 +70,69 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
         );
   }
 
-  Future<void> _handleDownload() async {
-    if (widget.url.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("File is not uploaded to cloud yet.")),
-      );
+  Future<Uint8List?> _getBytes() async {
+    if (widget.memoryBytes != null) return widget.memoryBytes;
+    if (widget.url.isNotEmpty) {
+      try {
+        final res = await http.get(Uri.parse(widget.url));
+        if (res.statusCode == 200) return res.bodyBytes;
+      } catch (e) {
+        debugPrint("Error fetching bytes: $e");
+      }
+    }
+    return null;
+  }
+
+  Future<void> _handleShare() async {
+    final bytes = await _getBytes();
+    if (bytes == null) {
+      if (mounted) {
+        AppToast.showError(context, "Unable to fetch document for sharing.");
+      }
       return;
     }
+    final ext = _isPdf ? ".pdf" : ".jpg";
+    final targetName = _displayName.contains('.') ? _displayName : "$_displayName$ext";
+    await shareFileOrBytes(targetName, bytes, subject: widget.title);
+  }
 
+  Future<void> _handleDownload() async {
     setState(() => _isDownloading = true);
     final ext = _isPdf ? ".pdf" : ".jpg";
     final targetName = _displayName.contains('.') ? _displayName : "$_displayName$ext";
 
-    final savedPath = await CloudinaryService.downloadAndSaveFile(
-      widget.url,
-      fileName: targetName,
-    );
+    try {
+      if (kIsWeb && widget.url.isNotEmpty) {
+        final downloadUrl = CloudinaryService.getAttachmentDownloadUrl(widget.url, fileName: targetName);
+        await triggerBrowserDownloadUrl(downloadUrl, targetName);
+        setState(() => _isDownloading = false);
+        if (mounted) {
+          AppToast.showSuccess(context, "Payment proof downloaded to Downloads");
+        }
+        return;
+      }
 
-    setState(() => _isDownloading = false);
+      final bytes = await _getBytes();
+      if (bytes == null) {
+        setState(() => _isDownloading = false);
+        if (!mounted) return;
+        AppToast.showError(context, "Could not download file. Please check connection.");
+        return;
+      }
 
-    if (!mounted) return;
+      final savedPath = await saveAndLaunchFile(bytes, targetName);
+      setState(() => _isDownloading = false);
+      if (!mounted) return;
 
-    if (savedPath != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  "Downloaded successfully!\nSaved to: $savedPath",
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF16A34A),
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(
-            label: "OPEN",
-            textColor: Colors.white,
-            onPressed: () => CloudinaryService.openUrl(widget.url),
-          ),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Could not download file. Please check connection."),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      if (savedPath != null) {
+        AppToast.showSuccess(context, "Payment proof saved to Downloads");
+      } else {
+        AppToast.showError(context, "Could not save file to device.");
+      }
+    } catch (e) {
+      setState(() => _isDownloading = false);
+      if (!mounted) return;
+      AppToast.showError(context, "Download error: $e");
     }
   }
 
@@ -163,7 +172,14 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
             ],
           ),
           actions: [
-            if (widget.url.isNotEmpty) ...[
+            if (widget.url.isNotEmpty || widget.memoryBytes != null) ...[
+              // Share Button
+              IconButton(
+                icon: const Icon(Icons.share_rounded, color: Colors.white),
+                tooltip: "Share / Export",
+                onPressed: _handleShare,
+              ),
+
               // Download Button
               IconButton(
                 icon: _isDownloading
@@ -180,12 +196,13 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
                 onPressed: _isDownloading ? null : _handleDownload,
               ),
 
-              // Open in External Browser / App
-              IconButton(
-                icon: const Icon(Icons.open_in_new_rounded, color: Colors.white),
-                tooltip: "Open in external browser",
-                onPressed: () => CloudinaryService.openUrl(widget.url),
-              ),
+              if (widget.url.isNotEmpty)
+                // Open in External Browser / App
+                IconButton(
+                  icon: const Icon(Icons.open_in_new_rounded, color: Colors.white),
+                  tooltip: "Open in external browser",
+                  onPressed: () => CloudinaryService.openUrl(widget.url),
+                ),
             ],
             const SizedBox(width: 8),
           ],

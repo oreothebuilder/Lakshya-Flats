@@ -54,6 +54,9 @@ class AppUser {
   final String? room;
   final String status;
   final DateTime createdAt;
+  final bool hasCompletedOnboardingTour;
+  final bool hasChangedDefaultPassword;
+  final bool hasDismissedPasswordNotice;
 
   AppUser({
     required this.uid,
@@ -67,6 +70,9 @@ class AppUser {
     this.room,
     this.status = 'Active',
     DateTime? createdAt,
+    this.hasCompletedOnboardingTour = false,
+    this.hasChangedDefaultPassword = true,
+    this.hasDismissedPasswordNotice = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
   bool get isAdmin => role == AppRole.admin;
@@ -84,15 +90,57 @@ class AppUser {
   bool get canViewDirectory => isAdmin || isManagement;
   bool get canOnboardStudent => isAdmin; // Only admin can onboard new students
 
+  AppUser copyWith({
+    String? uid,
+    String? email,
+    String? fullName,
+    String? phone,
+    AppRole? role,
+    String? studentId,
+    String? registrationNumber,
+    String? building,
+    String? room,
+    String? status,
+    DateTime? createdAt,
+    bool? hasCompletedOnboardingTour,
+    bool? hasChangedDefaultPassword,
+    bool? hasDismissedPasswordNotice,
+  }) {
+    return AppUser(
+      uid: uid ?? this.uid,
+      email: email ?? this.email,
+      fullName: fullName ?? this.fullName,
+      phone: phone ?? this.phone,
+      role: role ?? this.role,
+      studentId: studentId ?? this.studentId,
+      registrationNumber: registrationNumber ?? this.registrationNumber,
+      building: building ?? this.building,
+      room: room ?? this.room,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      hasCompletedOnboardingTour: hasCompletedOnboardingTour ?? this.hasCompletedOnboardingTour,
+      hasChangedDefaultPassword: hasChangedDefaultPassword ?? this.hasChangedDefaultPassword,
+      hasDismissedPasswordNotice: hasDismissedPasswordNotice ?? this.hasDismissedPasswordNotice,
+    );
+  }
+
   factory AppUser.fromFirestore({
     required String uid,
     required Map<String, dynamic> data,
     AppRole? fallbackRole,
   }) {
     final roleString = data['role']?.toString();
-    final role = roleString != null
-        ? AppRoleExtension.fromString(roleString)
-        : (fallbackRole ?? AppRole.student);
+    AppRole role;
+    if (roleString != null) {
+      role = AppRoleExtension.fromString(roleString);
+    } else if (data['studentId'] != null ||
+        data['registrationNumber'] != null ||
+        data['regNo'] != null ||
+        data['room'] != null) {
+      role = AppRole.student;
+    } else {
+      role = fallbackRole ?? AppRole.student;
+    }
 
     DateTime parsedCreated = DateTime.now();
     if (data['createdAt'] != null) {
@@ -103,12 +151,33 @@ class AppUser {
       }
     }
 
+    final bool tourCompleted = data['hasCompletedOnboardingTour'] == true;
+    final bool noticeDismissed = data['hasDismissedPasswordNotice'] == true;
+
+    // Determine if student has changed default password
+    bool passwordChanged = true;
+    if (role == AppRole.student) {
+      if (data['hasChangedDefaultPassword'] != null) {
+        passwordChanged = data['hasChangedDefaultPassword'] == true;
+      } else if (data['defaultPassword'] != null && data['defaultPassword'].toString().trim().isNotEmpty) {
+        passwordChanged = false;
+      }
+    }
+
+    final String resolvedFullName = (data['fullName'] != null && data['fullName'].toString().trim().isNotEmpty)
+        ? data['fullName'].toString().trim()
+        : ((data['name'] != null && data['name'].toString().trim().isNotEmpty)
+            ? data['name'].toString().trim()
+            : ((data['firstName'] != null && data['firstName'].toString().trim().isNotEmpty)
+                ? data['firstName'].toString().trim()
+                : (role == AppRole.admin
+                    ? 'Super Admin'
+                    : (role == AppRole.student ? 'Resident Student' : 'Staff Member'))));
+
     return AppUser(
       uid: uid,
       email: data['email']?.toString() ?? '',
-      fullName: data['fullName']?.toString() ??
-          data['name']?.toString() ??
-          (role == AppRole.admin ? 'Super Admin' : 'Staff Member'),
+      fullName: resolvedFullName,
       phone: data['phone']?.toString() ?? '',
       role: role,
       studentId: data['studentId']?.toString(),
@@ -118,6 +187,9 @@ class AppUser {
       room: data['room']?.toString(),
       status: data['status']?.toString() ?? 'Active',
       createdAt: parsedCreated,
+      hasCompletedOnboardingTour: tourCompleted,
+      hasChangedDefaultPassword: passwordChanged,
+      hasDismissedPasswordNotice: noticeDismissed,
     );
   }
 
@@ -134,6 +206,9 @@ class AppUser {
       if (room != null) 'room': room,
       'status': status,
       'createdAt': createdAt.toIso8601String(),
+      'hasCompletedOnboardingTour': hasCompletedOnboardingTour,
+      'hasChangedDefaultPassword': hasChangedDefaultPassword,
+      'hasDismissedPasswordNotice': hasDismissedPasswordNotice,
     };
   }
 }

@@ -79,6 +79,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
           backgroundColor: Colors.white,
           elevation: 0,
           scrolledUnderElevation: 1,
+          titleSpacing: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
             tooltip: "Back to Home",
@@ -99,26 +100,33 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Mess Menu & Timings",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Mess Menu & Timings",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                      ),
                     ),
-                  ),
-                  Text(
-                    "$messName • ${widget.currentUser?.building ?? 'Lakshya'}",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
+                    Text(
+                      "$messName • ${widget.currentUser?.building ?? 'Lakshya'}",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF64748B),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

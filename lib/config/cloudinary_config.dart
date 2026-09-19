@@ -15,6 +15,8 @@ class CloudinaryConfig {
   static const String folderMessMenu = "lakshya/mess_menu";
   static const String folderExpenseInvoices = "lakshya/expenses";
   static const String folderComplaints = "lakshya/complaints";
+  static const String folderBuildings = "lakshya/buildings";
+  static const String folderBuildingCatalog = "lakshya/buildings/catalog";
 
   /// Update credentials dynamically at runtime if needed
   static void configure({required String name, required String preset}) {

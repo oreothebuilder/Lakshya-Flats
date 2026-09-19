@@ -10,6 +10,7 @@ class StudentProfile {
   final String registrationNumber;
   final String course;
   final String branch;
+  final String hometownAddress;
   final String building;
   final String room;
   final String plan;
@@ -24,6 +25,9 @@ class StudentProfile {
   final String? collegeIdUrl;
   final String? govtIdUrl;
   final String? rentAgreementUrl;
+  final bool photoAddLater;
+  final bool collegeIdAddLater;
+  final bool govtIdAddLater;
   final String bedNumber;
   final Map<String, dynamic> additionalDocs;
   final List<String> inventory;
@@ -42,6 +46,7 @@ class StudentProfile {
     required this.registrationNumber,
     required this.course,
     required this.branch,
+    this.hometownAddress = '',
     required this.building,
     required this.room,
     this.bedNumber = '',
@@ -57,6 +62,9 @@ class StudentProfile {
     this.collegeIdUrl,
     this.govtIdUrl,
     this.rentAgreementUrl,
+    this.photoAddLater = false,
+    this.collegeIdAddLater = false,
+    this.govtIdAddLater = false,
     this.additionalDocs = const {},
     this.inventory = const [],
     this.notes = const [],
@@ -77,21 +85,25 @@ class StudentProfile {
       registrationNumber: data['registrationNumber'] ?? data['regNo'] ?? '',
       course: data['course'] ?? '',
       branch: data['branch'] ?? '',
-      building: data['building'] ?? 'Lakshya',
+      hometownAddress: data['hometownAddress']?.toString() ?? data['address']?.toString() ?? '',
+      building: data['building'] ?? '',
       room: data['room'] ?? '',
       bedNumber: data['bedNumber']?.toString() ?? data['bed']?.toString() ?? '',
-      plan: data['plan'] ?? 'Rent Only',
-      paymentFrequency: data['paymentFrequency'] ?? 'Pay Monthly',
-      monthlyRent: data['monthlyRent']?.toString() ?? '12,500',
-      securityDeposit: data['securityDeposit']?.toString() ?? '25,000',
+      plan: data['plan'] ?? '',
+      paymentFrequency: data['paymentFrequency'] ?? '',
+      monthlyRent: data['monthlyRent']?.toString() ?? '',
+      securityDeposit: data['securityDeposit']?.toString() ?? '',
       guardianName: data['guardianName'] ?? '',
       guardianPhone: data['guardianPhone'] ?? '',
-      guardianRelationship: data['guardianRelationship'] ?? 'Father',
-      dietaryPreference: data['dietaryPreference'] ?? 'Vegetarian',
+      guardianRelationship: data['guardianRelationship'] ?? '',
+      dietaryPreference: data['dietaryPreference'] ?? '',
       photoUrl: data['photoUrl'],
       collegeIdUrl: data['collegeIdUrl'],
       govtIdUrl: data['govtIdUrl'],
       rentAgreementUrl: data['rentAgreementUrl']?.toString(),
+      photoAddLater: data['photoAddLater'] == true,
+      collegeIdAddLater: data['collegeIdAddLater'] == true,
+      govtIdAddLater: data['govtIdAddLater'] == true,
       additionalDocs: Map<String, dynamic>.from(data['additionalDocs'] ?? {}),
       inventory: List<String>.from(data['inventory'] ?? []),
       notes: List<String>.from(data['notes'] ?? []),
@@ -115,6 +127,8 @@ class StudentProfile {
       'registrationNumber': registrationNumber,
       'course': course,
       'branch': branch,
+      'hometownAddress': hometownAddress,
+      'address': hometownAddress,
       'building': building,
       'room': room,
       'bedNumber': bedNumber,
@@ -130,6 +144,9 @@ class StudentProfile {
       'collegeIdUrl': collegeIdUrl,
       'govtIdUrl': govtIdUrl,
       'rentAgreementUrl': rentAgreementUrl,
+      'photoAddLater': photoAddLater,
+      'collegeIdAddLater': collegeIdAddLater,
+      'govtIdAddLater': govtIdAddLater,
       'additionalDocs': additionalDocs,
       'inventory': inventory,
       'notes': notes,
@@ -137,6 +154,80 @@ class StudentProfile {
       'status': status,
       'createdAt': createdAt.toIso8601String(),
     };
+  }
+
+  StudentProfile copyWith({
+    String? id,
+    String? studentId,
+    String? fullName,
+    String? firstName,
+    String? email,
+    String? phone,
+    String? registrationNumber,
+    String? course,
+    String? branch,
+    String? hometownAddress,
+    String? building,
+    String? room,
+    String? bedNumber,
+    String? plan,
+    String? paymentFrequency,
+    String? monthlyRent,
+    String? securityDeposit,
+    String? guardianName,
+    String? guardianPhone,
+    String? guardianRelationship,
+    String? dietaryPreference,
+    String? photoUrl,
+    String? collegeIdUrl,
+    String? govtIdUrl,
+    String? rentAgreementUrl,
+    bool? photoAddLater,
+    bool? collegeIdAddLater,
+    bool? govtIdAddLater,
+    Map<String, dynamic>? additionalDocs,
+    List<String>? inventory,
+    List<String>? notes,
+    List<Map<String, dynamic>>? installments,
+    String? status,
+    DateTime? createdAt,
+  }) {
+    return StudentProfile(
+      id: id ?? this.id,
+      studentId: studentId ?? this.studentId,
+      fullName: fullName ?? this.fullName,
+      firstName: firstName ?? this.firstName,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      registrationNumber: registrationNumber ?? this.registrationNumber,
+      course: course ?? this.course,
+      branch: branch ?? this.branch,
+      hometownAddress: hometownAddress ?? this.hometownAddress,
+      building: building ?? this.building,
+      room: room ?? this.room,
+      bedNumber: bedNumber ?? this.bedNumber,
+      plan: plan ?? this.plan,
+      paymentFrequency: paymentFrequency ?? this.paymentFrequency,
+      monthlyRent: monthlyRent ?? this.monthlyRent,
+      securityDeposit: securityDeposit ?? this.securityDeposit,
+      guardianName: guardianName ?? this.guardianName,
+      guardianPhone: guardianPhone ?? this.guardianPhone,
+      guardianRelationship: guardianRelationship ?? this.guardianRelationship,
+      dietaryPreference: dietaryPreference ?? this.dietaryPreference,
+      photoUrl: photoUrl ?? this.photoUrl,
+      collegeIdUrl: collegeIdUrl ?? this.collegeIdUrl,
+      govtIdUrl: govtIdUrl ?? this.govtIdUrl,
+      rentAgreementUrl: rentAgreementUrl ?? this.rentAgreementUrl,
+      photoAddLater: photoAddLater ?? this.photoAddLater,
+      collegeIdAddLater: collegeIdAddLater ?? this.collegeIdAddLater,
+      govtIdAddLater: govtIdAddLater ?? this.govtIdAddLater,
+      additionalDocs: additionalDocs ?? this.additionalDocs,
+      inventory: inventory ?? this.inventory,
+      notes: notes ?? this.notes,
+      installments: installments ?? this.installments,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+    );
   }
 
   String get displayBed {

@@ -10,7 +10,10 @@ class FirebaseAuthService {
   /// Stream of user authentication state changes
   Stream<User?> get authStateChanges {
     try {
-      return _auth.authStateChanges();
+      return _auth.authStateChanges().handleError((e) {
+        debugPrint("Auth state stream error: $e");
+        return null;
+      });
     } catch (e) {
       debugPrint("Auth state stream error: $e");
       return Stream.value(null);
@@ -247,6 +250,51 @@ class FirebaseAuthService {
     }
   }
 
+  /// Change user password after validating current password via re-authentication
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception("User is not signed in.");
+    }
+    final email = user.email;
+    if (email == null || email.trim().isEmpty) {
+      throw Exception("User account does not have an email address associated with it.");
+    }
+
+    // 1. Re-authenticate user with their current password to refresh credentials
+    // and prevent [firebase_auth/requires-recent-login] exceptions
+    final cred = EmailAuthProvider.credential(
+      email: email.trim(),
+      password: currentPassword.trim(),
+    );
+
+    try {
+      await user.reauthenticateWithCredential(cred);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        throw Exception("Current password is incorrect. Please try again.");
+      } else if (e.code == 'too-many-requests') {
+        throw Exception("Too many attempts. Please wait a few moments before trying again.");
+      }
+      throw Exception(e.message ?? "Failed to verify current password.");
+    }
+
+    // 2. Update to new password
+    try {
+      await user.updatePassword(newPassword.trim());
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'weak-password') {
+        throw Exception("New password is too weak. Please use at least 6 characters.");
+      } else if (e.code == 'requires-recent-login') {
+        throw Exception("Recent authentication required. Please sign out and log in again.");
+      }
+      throw Exception(e.message ?? "Failed to update password.");
+    }
+  }
+
   /// Sign Out current user
   Future<void> signOut() async {
     try {
@@ -274,6 +322,8 @@ class FirebaseAuthService {
           return "An account already exists for this email.";
         case 'weak-password':
           return "The password is too weak. Use at least 6 characters.";
+        case 'requires-recent-login':
+          return "Security check required: please verify your current password.";
         case 'too-many-requests':
           return "Too many attempts. Please wait a moment before trying again.";
         case 'network-request-failed':
@@ -282,6 +332,10 @@ class FirebaseAuthService {
           return error.message ?? "Authentication failed. Please verify your details.";
       }
     }
-    return error?.toString().replaceAll("Exception:", "").trim() ?? "An unexpected error occurred.";
+    String msg = error?.toString() ?? "An unexpected error occurred.";
+    if (msg.startsWith("Exception: ")) {
+      msg = msg.substring("Exception: ".length);
+    }
+    return msg;
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/admin_drawer.dart';
 import '../../models/user_role_model.dart';
@@ -8,6 +9,8 @@ import '../../models/student_profile_model.dart';
 import '../../services/firestore_service.dart';
 import 'dashboard_screen.dart';
 import 'building_space_screen.dart';
+import '../../widgets/app_toast.dart';
+import '../../widgets/building_photo_selector.dart';
 
 class BuildingsManagementScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -59,33 +62,7 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
   }
 
   void _showSnackbar(String msg, {bool isSuccess = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                msg,
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: isSuccess ? const Color(0xFF0D52CE) : const Color(0xFFDC2626),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.show(context, msg, isSuccess: isSuccess);
   }
 
   Color _getOccupancyColor(double rate) {
@@ -96,15 +73,21 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Add / Edit Building Modal (Photo, Name, Staff only)
+  // Add / Edit Building Modal (Seating Capacity, Rooms, Name, Category, Staff, Rent)
   // ---------------------------------------------------------------------------
   void _openBuildingEditorModal({BuildingModel? existing}) {
     final isEditing = existing != null;
 
     final nameController = TextEditingController(text: existing?.name ?? '');
+    final capacityController = TextEditingController(text: existing != null ? existing.totalCapacity.toString() : '100');
+    final roomsController = TextEditingController(text: existing != null ? existing.totalRooms.toString() : '50');
+    final rentController = TextEditingController(text: existing != null ? existing.startingRent.toStringAsFixed(0) : '12500');
+    final locationController = TextEditingController(text: existing?.campusLocation ?? 'Main Campus');
+    final addressController = TextEditingController(text: existing?.address ?? '');
     final customImageController = TextEditingController(text: existing?.imageUrl ?? '');
     final wardenNameController = TextEditingController(text: existing?.wardenName ?? '');
     final wardenPhoneController = TextEditingController(text: existing?.wardenPhone ?? '');
+    String selectedCategory = existing?.category ?? 'Boys Hostel';
     String selectedAsset = existing?.imageAsset ?? 'assets/buildings/Lakshya.png';
     String? selectedStaffId = existing?.staffId;
 
@@ -118,7 +101,7 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              height: MediaQuery.of(context).size.height * 0.82,
+              height: MediaQuery.of(context).size.height * 0.88,
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -159,7 +142,7 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isEditing ? "Edit Building" : "Add New Building",
+                                isEditing ? "Edit Building & Capacity" : "Add New Building",
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
@@ -168,8 +151,8 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                               ),
                               Text(
                                 isEditing
-                                    ? "Update photo, name, and assigned staff"
-                                    : "Register property into Lakshya system",
+                                    ? "Configure seats capacity, rooms, rent, and warden"
+                                    : "Register building with seating capacity into system",
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 12.5,
                                   color: const Color(0xFF64748B),
@@ -188,115 +171,244 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                   ),
                   const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-                  // Scrollable form fields: Photo, Name, Staff ONLY
+                  // Scrollable form fields
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 1. Building Name
-                          _buildFieldLabel("Building Name *"),
-                          TextField(
-                            controller: nameController,
-                            decoration: _inputDecoration("e.g. Lakshya, Livano, Shiv Villa"),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 14.5, fontWeight: FontWeight.w600),
+                          // 1. Building Name & Category
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFieldLabel("Building Name *"),
+                                    TextField(
+                                      controller: nameController,
+                                      decoration: _inputDecoration("e.g. Lakshya, Ishaan, Livano"),
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 14.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFieldLabel("Category"),
+                                    Container(
+                                      height: 48,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: selectedCategory,
+                                          isExpanded: true,
+                                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0D52CE), size: 18),
+                                          items: ['Boys Hostel', 'Girls Hostel', 'Co-Ed', 'Premium Flats']
+                                              .map((cat) => DropdownMenuItem(
+                                                    value: cat,
+                                                    child: Text(cat, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                                                  ))
+                                              .toList(),
+                                          onChanged: (val) {
+                                            if (val != null) setModalState(() => selectedCategory = val);
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 18),
 
-                          // 2. Select Building Photo from Catalog
-                          _buildFieldLabel("Select Building Photo (from assets catalog)"),
-                          SizedBox(
-                            height: 110,
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: BuildingModel.builtInAssets.length,
-                              separatorBuilder: (_, _) => const SizedBox(width: 10),
-                              itemBuilder: (context, idx) {
-                                final item = BuildingModel.builtInAssets[idx];
-                                final assetPath = item['asset']!;
-                                final isSelected = selectedAsset == assetPath;
-
-                                return GestureDetector(
-                                  onTap: () {
-                                    setModalState(() => selectedAsset = assetPath);
-                                  },
-                                  child: Container(
-                                    width: 100,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(
-                                        color: isSelected ? const Color(0xFF0D52CE) : const Color(0xFFE2E8F0),
-                                        width: isSelected ? 2.5 : 1,
+                          // 2. Capacity & Seating Configuration (PRIMARY USER REQUIREMENT)
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDF4),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFBBF7D0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFDCFCE7),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(Icons.event_seat_rounded, color: Color(0xFF16A34A), size: 18),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "Seats & Room Capacity Configuration",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13.5,
+                                        color: const Color(0xFF166534),
                                       ),
                                     ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Stack(
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Image.asset(
-                                            assetPath,
-                                            width: 100,
-                                            height: 110,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, _, _) => Container(
-                                              color: const Color(0xFFCBD5E1),
-                                              child: const Icon(Icons.apartment_rounded, color: Colors.white),
-                                            ),
-                                          ),
-                                          Positioned(
-                                            bottom: 0,
-                                            left: 0,
-                                            right: 0,
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
-                                              color: Colors.black.withValues(alpha: 0.65),
-                                              child: Text(
-                                                item['name']!,
-                                                textAlign: TextAlign.center,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: GoogleFonts.plusJakartaSans(
-                                                  color: Colors.white,
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
+                                          _buildFieldLabel("Total Seats (Capacity) *"),
+                                          TextField(
+                                            controller: capacityController,
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                            decoration: _inputDecoration("e.g. 90, 120").copyWith(
+                                              prefixIcon: const Icon(Icons.people_alt_rounded, size: 18, color: Color(0xFF16A34A)),
+                                              suffixText: "Seats",
+                                              suffixStyle: GoogleFonts.plusJakartaSans(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF166534),
                                               ),
                                             ),
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
                                           ),
-                                          if (isSelected)
-                                            Positioned(
-                                              top: 4,
-                                              right: 4,
-                                              child: Container(
-                                                padding: const EdgeInsets.all(3),
-                                                decoration: const BoxDecoration(
-                                                  color: Color(0xFF0D52CE),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Icon(Icons.check, color: Colors.white, size: 12),
-                                              ),
-                                            ),
                                         ],
                                       ),
                                     ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          _buildFieldLabel("Total Rooms *"),
+                                          TextField(
+                                            controller: roomsController,
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                            decoration: _inputDecoration("e.g. 45, 60").copyWith(
+                                              prefixIcon: const Icon(Icons.meeting_room_rounded, size: 18, color: Color(0xFF16A34A)),
+                                              suffixText: "Rooms",
+                                              suffixStyle: GoogleFonts.plusJakartaSans(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF166534),
+                                              ),
+                                            ),
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFFDCFCE7)),
                                   ),
-                                );
-                              },
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFF16A34A)),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          existing != null
+                                              ? "Current Occupancy: ${existing.occupiedCount} student(s) currently allocated. Live occupied seats automatically track active residents in the Student Directory."
+                                              : "Live Tracking: Once created, the occupied students counter automatically tracks active residents enrolled in this building from the Student Directory.",
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 11.5,
+                                            color: const Color(0xFF166534),
+                                            fontWeight: FontWeight.w600,
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 18),
 
-                          // Optional Remote Image URL
-                          _buildFieldLabel("Or Custom Image URL (optional)"),
+                          // 3. Financials & Campus Location
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFieldLabel("Starting Rent (₹ / month)"),
+                                    TextField(
+                                      controller: rentController,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                      decoration: _inputDecoration("e.g. 12500").copyWith(
+                                        prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18, color: Color(0xFF0D52CE)),
+                                      ),
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildFieldLabel("Campus Location"),
+                                    TextField(
+                                      controller: locationController,
+                                      decoration: _inputDecoration("e.g. Main Campus, North"),
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          _buildFieldLabel("Property Address (optional)"),
                           TextField(
-                            controller: customImageController,
-                            decoration: _inputDecoration("https://..."),
+                            controller: addressController,
+                            decoration: _inputDecoration("e.g. Plot 12, Main Residency Boulevard, Knowledge Park"),
                             style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                          ),
+                          const SizedBox(height: 18),
+
+                          // 4. Building Photo Selector (Catalog + Device Upload)
+                          BuildingPhotoSelector(
+                            initialAsset: selectedAsset,
+                            customImageController: customImageController,
+                            onAssetChanged: (newAsset) {
+                              setModalState(() => selectedAsset = newAsset);
+                            },
                           ),
                           const SizedBox(height: 20),
 
-                          // 3. Staff Assignment Section
+                          // 5. Staff Assignment Section
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -459,6 +571,19 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                                       return;
                                     }
 
+                                    final capacity = int.tryParse(capacityController.text.trim());
+                                    if (capacity == null || capacity <= 0) {
+                                      _showSnackbar("Please enter a valid total seating capacity (> 0)", isSuccess: false);
+                                      return;
+                                    }
+
+                                    final rooms = int.tryParse(roomsController.text.trim()) ?? (capacity ~/ 2).clamp(1, 999);
+                                    final rent = double.tryParse(rentController.text.trim()) ?? 12500.0;
+                                    final campus = locationController.text.trim().isNotEmpty
+                                        ? locationController.text.trim()
+                                        : 'Main Campus';
+                                    final address = addressController.text.trim();
+
                                     setModalState(() => isSaving = true);
 
                                     try {
@@ -467,7 +592,7 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                                           : 'Warden In-Charge';
                                       final phone = wardenPhoneController.text.trim().isNotEmpty
                                           ? wardenPhoneController.text.trim()
-                                          : '+91 9876543210';
+                                          : '';
                                       final customImg = customImageController.text.trim().isNotEmpty
                                           ? customImageController.text.trim()
                                           : null;
@@ -475,6 +600,12 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                                       if (isEditing) {
                                         final updated = existing.copyWith(
                                           name: name,
+                                          category: selectedCategory,
+                                          campusLocation: campus,
+                                          address: address,
+                                          totalCapacity: capacity,
+                                          totalRooms: rooms,
+                                          startingRent: rent,
                                           imageAsset: selectedAsset,
                                           imageUrl: customImg,
                                           wardenName: warden,
@@ -482,11 +613,17 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                                           staffId: selectedStaffId,
                                         );
                                         await _firestoreService.updateBuilding(existing.id, updated.toMap());
-                                        _showSnackbar("Building '${updated.name}' updated successfully!");
+                                        _showSnackbar("Building '${updated.name}' updated! Capacity set to $capacity seats.");
                                       } else {
                                         final newBld = BuildingModel(
                                           id: 'bld_${DateTime.now().millisecondsSinceEpoch}',
                                           name: name,
+                                          category: selectedCategory,
+                                          campusLocation: campus,
+                                          address: address,
+                                          totalCapacity: capacity,
+                                          totalRooms: rooms,
+                                          startingRent: rent,
                                           imageAsset: selectedAsset,
                                           imageUrl: customImg,
                                           wardenName: warden,
@@ -494,7 +631,7 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                                           staffId: selectedStaffId,
                                         );
                                         await _firestoreService.addBuilding(newBld);
-                                        _showSnackbar("New building '${newBld.name}' added successfully!");
+                                        _showSnackbar("New building '${newBld.name}' created with $capacity seats!");
                                       }
 
                                       if (ctx.mounted) {

@@ -4,8 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/user_role_model.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../services/firestore_service.dart';
-import '../../theme/app_colors.dart';
 import '../../widgets/user_drawer.dart';
+import '../../widgets/app_toast.dart';
 import 'payments_bills_screen.dart';
 import 'profile_screen.dart';
 import 'tickets_screen.dart';
@@ -31,16 +31,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (_studentId.isEmpty) return;
     await FirestoreService().markAllNotificationsAsRead(_studentId);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          "All notifications marked as read",
-          style: GoogleFonts.plusJakartaSans(),
-        ),
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    AppToast.showSuccess(context, "All notifications marked as read");
   }
 
   void _markAsRead(String id) async {

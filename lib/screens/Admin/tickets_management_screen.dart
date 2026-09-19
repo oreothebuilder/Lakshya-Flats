@@ -6,6 +6,7 @@ import '../../models/user_role_model.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/admin_drawer.dart';
 import 'dashboard_screen.dart';
+import '../../widgets/app_toast.dart';
 
 class TicketsManagementScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -303,31 +304,19 @@ class _TicketsManagementScreenState extends State<TicketsManagementScreen> {
                                       if (!mounted) return;
                                       final isNotified = currentStatus == ComplaintModel.statusUnderExecution ||
                                           currentStatus == ComplaintModel.statusResolved;
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            isNotified
-                                                ? "Ticket updated to \"$currentStatus\" • Notification sent to resident!"
-                                                : "Ticket updated to \"$currentStatus\"",
-                                            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-                                          ),
-                                          backgroundColor: isNotified ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
-                                          behavior: SnackBarBehavior.floating,
-                                          duration: const Duration(seconds: 3),
-                                        ),
+                                      AppToast.show(
+                                        context,
+                                        isNotified
+                                            ? "Ticket updated to \"$currentStatus\" • Notification sent to resident!"
+                                            : "Ticket updated to \"$currentStatus\"",
+                                        isSuccess: true,
                                       );
                                     } catch (e) {
                                       setModalState(() {
                                         isSubmitting = false;
                                       });
                                       if (!mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text("Error updating status: $e"),
-                                          backgroundColor: Colors.redAccent,
-                                          behavior: SnackBarBehavior.floating,
-                                        ),
-                                      );
+                                      AppToast.showError(context, "Error updating status: $e");
                                     }
                                   },
                             style: ElevatedButton.styleFrom(
@@ -1076,12 +1065,7 @@ class _TicketsManagementScreenState extends State<TicketsManagementScreen> {
                               tooltip: "Copy Phone (${ticket.studentPhone})",
                               onPressed: () {
                                 Clipboard.setData(ClipboardData(text: ticket.studentPhone));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text("Copied phone: ${ticket.studentPhone}"),
-                                    duration: const Duration(seconds: 1),
-                                  ),
-                                );
+                                AppToast.showSuccess(context, "Copied phone: ${ticket.studentPhone}");
                               },
                             ),
                         ],
@@ -1222,28 +1206,17 @@ class _TicketsManagementScreenState extends State<TicketsManagementScreen> {
                 if (mounted) {
                   final isNotified = targetStatus == ComplaintModel.statusUnderExecution ||
                       targetStatus == ComplaintModel.statusResolved;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        isNotified
-                            ? "Ticket marked as \"$targetStatus\" • Notification sent to resident!"
-                            : "Ticket marked as \"$targetStatus\"",
-                      ),
-                      backgroundColor: color,
-                      behavior: SnackBarBehavior.floating,
-                      duration: const Duration(seconds: 3),
-                    ),
+                  AppToast.show(
+                    context,
+                    isNotified
+                        ? "Ticket marked as \"$targetStatus\" • Notification sent to resident!"
+                        : "Ticket marked as \"$targetStatus\"",
+                    isSuccess: true,
                   );
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Error: $e"),
-                      backgroundColor: Colors.redAccent,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                  AppToast.showError(context, "Error: $e");
                 }
               }
             },

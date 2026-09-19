@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'config/cloudinary_config.dart';
+import 'services/navigation_service.dart';
 import 'screens/auth_gate.dart';
 import 'theme/app_colors.dart';
 
@@ -15,9 +16,11 @@ void main() async {
 
   // Initialize Firebase with configured platform options
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
     debugPrint("Firebase successfully initialized with lakshya-flats.");
   } catch (e) {
     debugPrint("Firebase initialization note: $e");
@@ -38,6 +41,7 @@ class LakshyaResidencyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       title: 'Lakshya Residency',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

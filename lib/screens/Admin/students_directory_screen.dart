@@ -5,9 +5,11 @@ import '../../widgets/admin_drawer.dart';
 import '../../models/student_profile_model.dart';
 import '../../models/user_role_model.dart';
 import '../../services/firestore_service.dart';
+import '../../services/email_service.dart';
 import '../student_onboarding_screen.dart';
 import 'student_profile_detail_screen.dart';
 import 'dashboard_screen.dart';
+import '../../widgets/app_toast.dart';
 
 class StudentsDirectoryScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -83,18 +85,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
   }
 
   void _showSnackbar(String msg, {bool isSuccess = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          msg,
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: Colors.white),
-        ),
-        backgroundColor: isSuccess ? const Color(0xFF003896) : const Color(0xFFDC2626),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppToast.show(context, msg, isSuccess: isSuccess);
   }
 
   void _openSendBillBottomSheet(StudentProfile student) {
@@ -268,21 +259,82 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                                 return;
                               }
                               setModalState(() => isSending = true);
+                              final billName = noteController.text.trim().isNotEmpty
+                                  ? noteController.text.trim()
+                                  : billType;
+                              final billId = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+                              final dueDate = DateTime.now().add(const Duration(days: 7));
+                              final isHostel = billType.toLowerCase().contains("deposit") ||
+                                  billType.toLowerCase().contains("rent") ||
+                                  billType.toLowerCase().contains("installment");
+                              final category = isHostel ? "Hostel rent/security deposit" : "Utility bill";
+
+                              setModalState(() => isSending = true);
                               try {
                                 await FirestoreService().issueBill({
                                   'studentId': student.id,
+                                  'studentDocId': student.id,
+                                  'studentUid': student.studentId.isNotEmpty ? student.studentId : student.id,
+                                  'userId': student.studentId.isNotEmpty ? student.studentId : student.id,
                                   'studentName': student.fullName,
                                   'phone': student.phone,
+                                  'studentPhone': student.phone,
                                   'building': student.building,
                                   'room': student.room,
+                                  'bed': student.bedNumber,
+                                  'bedNumber': student.bedNumber,
+                                  'regNo': student.registrationNumber,
+                                  'registrationNumber': student.registrationNumber,
                                   'billType': billType,
+                                  'billCategory': category,
+                                  'billingMonth': billName,
                                   'amount': amt,
                                   'paidAmount': 0.0,
-                                  'dueDate': Timestamp.fromDate(DateTime.now().add(const Duration(days: 7))),
+                                  'dueDate': Timestamp.fromDate(dueDate),
                                   'status': 'Pending',
-                                  'invoiceNo': 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-                                  'billingMonth': noteController.text.trim(),
+                                  'paymentStatus': 'Unpaid',
+                                  'invoiceNo': billId,
+                                  'avatarUrl': student.photoUrl ?? '',
+                                  'studentEmail': student.email,
+                                  'email': student.email,
                                 });
+
+                                // Dispatch student notification
+                                await FirestoreService().sendStudentNotification(
+                                  studentId: student.id,
+                                  studentUid: student.studentId.isNotEmpty ? student.studentId : student.id,
+                                  regNo: student.registrationNumber,
+                                  studentName: student.fullName,
+                                  title: "New Bill: $billName (₹${amt.toStringAsFixed(0)})",
+                                  message:
+                                      "A new $category for $billName (₹${amt.toStringAsFixed(0)}) has been issued for your Room ${student.room} (${student.building}). Due date: ${dueDate.day}/${dueDate.month}/${dueDate.year}.",
+                                  category: "Payment",
+                                  targetBuilding: student.building,
+                                  targetRoom: student.room,
+                                  metadata: {
+                                    'invoiceNo': billId,
+                                    'amount': amt,
+                                    'dueDate': dueDate.toIso8601String(),
+                                    'billCategory': category,
+                                    'billName': billName,
+                                  },
+                                );
+
+                                // Dispatch email if available
+                                if (student.email.isNotEmpty) {
+                                  EmailService().sendBillInvoiceEmail(
+                                    studentEmail: student.email,
+                                    studentName: student.fullName,
+                                    billName: billName,
+                                    billCategory: category,
+                                    amount: amt,
+                                    dueDate: dueDate,
+                                    invoiceNo: billId,
+                                    building: student.building,
+                                    room: student.room,
+                                  );
+                                }
+
                                 if (context.mounted) {
                                   Navigator.pop(context);
                                   _showSnackbar("Invoice of ₹${amt.toStringAsFixed(0)} issued for ${student.fullName}!");

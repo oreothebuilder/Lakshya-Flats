@@ -24,6 +24,19 @@ class BillModel {
   final String? paymentRemarks;
   final String? adminRemarks;
   final DateTime? submittedAt;
+  final String? paymentStatus;
+  final String? securityDepositStatus;
+  final DateTime? returnedAt;
+  final String? refundMode;
+  final String? refundRef;
+  final String? refundRemarks;
+  final String? receiptNo;
+  final DateTime? receiptIssuedAt;
+  final bool rejectionDismissed;
+  final DateTime? rejectedAt;
+  final String? bed;
+  final String? regNo;
+  final String? studentDocId;
 
   BillModel({
     required this.id,
@@ -49,21 +62,63 @@ class BillModel {
     this.paymentRemarks,
     this.adminRemarks,
     this.submittedAt,
+    this.paymentStatus,
+    this.securityDepositStatus,
+    this.returnedAt,
+    this.refundMode,
+    this.refundRef,
+    this.refundRemarks,
+    this.receiptNo,
+    this.receiptIssuedAt,
+    this.rejectionDismissed = false,
+    this.rejectedAt,
+    this.bed,
+    this.regNo,
+    this.studentDocId,
   }) : createdAt = createdAt ?? DateTime.now();
 
   double get balance => (amount - paidAmount).clamp(0.0, amount);
   bool get isPaid => (paidAmount >= amount && amount > 0) || status.toLowerCase() == 'paid';
   
   String? get utrNumber => transactionRef;
+
+  bool get isSecurityDeposit {
+    final lower = '$billType $billingMonth'.toLowerCase();
+    return lower.contains('security deposit') || lower.contains('deposit');
+  }
+
+  bool get isDepositReturned {
+    if (!isSecurityDeposit) return false;
+    final s = status.toLowerCase();
+    final ds = (securityDepositStatus ?? '').toLowerCase();
+    return ds == 'returned' || s == 'returned';
+  }
+
+  bool get isDepositHeld {
+    return isSecurityDeposit && (isPaid || status.toLowerCase() == 'paid') && !isDepositReturned;
+  }
+  
+  bool get isProofRejected {
+    final s = status.toLowerCase();
+    final ps = (paymentStatus ?? '').toLowerCase();
+    return s == 'proof rejected' || ps == 'proof rejected' || s == 'rejected' || ps == 'rejected';
+  }
+
+  bool get hasActiveRejectionWarning {
+    return isProofRejected && !rejectionDismissed;
+  }
   
   bool get isPendingVerification {
-    if (isPaid || status.toLowerCase() == 'paid') return false;
+    if (isPaid || status.toLowerCase() == 'paid' || isDepositReturned) return false;
     final s = status.toLowerCase();
-    return s == 'pending verification' || (transactionRef != null && transactionRef!.trim().isNotEmpty);
+    final ps = (paymentStatus ?? '').toLowerCase();
+    if (s == 'proof rejected' || ps == 'proof rejected') return false;
+    if (s == 'pending verification' || ps == 'pending verification') return true;
+    return transactionRef != null && transactionRef!.trim().isNotEmpty && s != 'pending';
   }
 
   bool get isDefaulter {
-    if (isPaid) return false;
+    if (isPaid || isPendingVerification || isDepositReturned) return false;
     if (status.toLowerCase() == 'defaulter') return true;
     final now = DateTime.now();
     // Overdue if today is past the end of the dueDate
@@ -71,7 +126,12 @@ class BillModel {
     return now.isAfter(endOfDueDate);
   }
 
+  bool get isPendingOnly {
+    return !isPaid && !isPendingVerification && !isDefaulter && !isDepositReturned;
+  }
+
   String get computedStatus {
+    if (isDepositReturned) return 'Returned';
     if (isPaid) return 'Paid';
     if (isPendingVerification) return 'Pending Verification';
     if (isDefaulter) return 'Defaulter';
@@ -79,7 +139,7 @@ class BillModel {
   }
 
   int get daysOverdue {
-    if (isPaid) return 0;
+    if (isPaid || isPendingVerification || isDepositReturned) return 0;
     final now = DateTime.now();
     final endOfDueDate = DateTime(dueDate.year, dueDate.month, dueDate.day, 23, 59, 59);
     if (now.isAfter(endOfDueDate)) {
@@ -156,6 +216,33 @@ class BillModel {
       }
     }
 
+    DateTime? parsedReturnedAt;
+    if (data['returnedAt'] != null) {
+      if (data['returnedAt'] is Timestamp) {
+        parsedReturnedAt = (data['returnedAt'] as Timestamp).toDate();
+      } else {
+        parsedReturnedAt = DateTime.tryParse(data['returnedAt'].toString());
+      }
+    }
+
+    DateTime? parsedReceiptIssuedAt;
+    if (data['receiptIssuedAt'] != null) {
+      if (data['receiptIssuedAt'] is Timestamp) {
+        parsedReceiptIssuedAt = (data['receiptIssuedAt'] as Timestamp).toDate();
+      } else {
+        parsedReceiptIssuedAt = DateTime.tryParse(data['receiptIssuedAt'].toString());
+      }
+    }
+
+    DateTime? parsedRejectedAt;
+    if (data['rejectedAt'] != null) {
+      if (data['rejectedAt'] is Timestamp) {
+        parsedRejectedAt = (data['rejectedAt'] as Timestamp).toDate();
+      } else {
+        parsedRejectedAt = DateTime.tryParse(data['rejectedAt'].toString());
+      }
+    }
+
     return BillModel(
       id: doc.id,
       studentId: data['studentId']?.toString() ?? '',
@@ -180,6 +267,19 @@ class BillModel {
       paymentRemarks: data['paymentRemarks']?.toString() ?? data['remarks']?.toString(),
       adminRemarks: data['adminRemarks']?.toString(),
       submittedAt: parsedSubmittedAt,
+      paymentStatus: data['paymentStatus']?.toString(),
+      securityDepositStatus: data['securityDepositStatus']?.toString(),
+      returnedAt: parsedReturnedAt,
+      refundMode: data['refundMode']?.toString(),
+      refundRef: data['refundRef']?.toString(),
+      refundRemarks: data['refundRemarks']?.toString(),
+      receiptNo: data['receiptNo']?.toString() ?? data['receiptNumber']?.toString(),
+      receiptIssuedAt: parsedReceiptIssuedAt,
+      rejectionDismissed: data['rejectionDismissed'] == true || data['rejectedPaymentDismissed'] == true,
+      rejectedAt: parsedRejectedAt,
+      bed: data['bed']?.toString() ?? data['bedNumber']?.toString(),
+      regNo: data['regNo']?.toString() ?? data['registrationNumber']?.toString(),
+      studentDocId: data['studentDocId']?.toString(),
     );
   }
 
@@ -209,6 +309,20 @@ class BillModel {
       'paymentRemarks': paymentRemarks,
       'adminRemarks': adminRemarks,
       if (submittedAt != null) 'submittedAt': Timestamp.fromDate(submittedAt!),
+      if (paymentStatus != null) 'paymentStatus': paymentStatus,
+      if (securityDepositStatus != null) 'securityDepositStatus': securityDepositStatus,
+      if (returnedAt != null) 'returnedAt': Timestamp.fromDate(returnedAt!),
+      if (refundMode != null) 'refundMode': refundMode,
+      if (refundRef != null) 'refundRef': refundRef,
+      if (refundRemarks != null) 'refundRemarks': refundRemarks,
+      if (receiptNo != null) 'receiptNo': receiptNo,
+      if (receiptIssuedAt != null) 'receiptIssuedAt': Timestamp.fromDate(receiptIssuedAt!),
+      'rejectionDismissed': rejectionDismissed,
+      if (rejectedAt != null) 'rejectedAt': Timestamp.fromDate(rejectedAt!),
+      if (bed != null) 'bed': bed,
+      if (regNo != null) 'regNo': regNo,
+      if (regNo != null) 'registrationNumber': regNo,
+      if (studentDocId != null) 'studentDocId': studentDocId,
     };
   }
 
@@ -236,6 +350,19 @@ class BillModel {
     String? paymentRemarks,
     String? adminRemarks,
     DateTime? submittedAt,
+    String? paymentStatus,
+    String? securityDepositStatus,
+    DateTime? returnedAt,
+    String? refundMode,
+    String? refundRef,
+    String? refundRemarks,
+    String? receiptNo,
+    DateTime? receiptIssuedAt,
+    bool? rejectionDismissed,
+    DateTime? rejectedAt,
+    String? bed,
+    String? regNo,
+    String? studentDocId,
   }) {
     return BillModel(
       id: id ?? this.id,
@@ -261,6 +388,19 @@ class BillModel {
       paymentRemarks: paymentRemarks ?? this.paymentRemarks,
       adminRemarks: adminRemarks ?? this.adminRemarks,
       submittedAt: submittedAt ?? this.submittedAt,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      securityDepositStatus: securityDepositStatus ?? this.securityDepositStatus,
+      returnedAt: returnedAt ?? this.returnedAt,
+      refundMode: refundMode ?? this.refundMode,
+      refundRef: refundRef ?? this.refundRef,
+      refundRemarks: refundRemarks ?? this.refundRemarks,
+      receiptNo: receiptNo ?? this.receiptNo,
+      receiptIssuedAt: receiptIssuedAt ?? this.receiptIssuedAt,
+      rejectionDismissed: rejectionDismissed ?? this.rejectionDismissed,
+      rejectedAt: rejectedAt ?? this.rejectedAt,
+      bed: bed ?? this.bed,
+      regNo: regNo ?? this.regNo,
+      studentDocId: studentDocId ?? this.studentDocId,
     );
   }
 }

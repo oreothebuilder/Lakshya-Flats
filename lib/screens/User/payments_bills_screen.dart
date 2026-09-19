@@ -11,6 +11,8 @@ import '../../services/cloudinary_service.dart';
 import '../../config/cloudinary_config.dart';
 import '../../widgets/document_viewer_modal.dart';
 import '../../widgets/user_drawer.dart';
+import '../../widgets/payment_receipt_dialog.dart';
+import '../../widgets/app_toast.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
 import 'user_home_screen.dart';
@@ -156,12 +158,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
               }
             } catch (e) {
               if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(
-                    content: Text("Error picking image: $e"),
-                    backgroundColor: Colors.redAccent,
-                  ),
-                );
+                AppToast.showError(ctx, "Error picking image: $e");
               }
             }
           }
@@ -182,12 +179,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
               }
             } catch (e) {
               if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(
-                    content: Text("Error picking PDF: $e"),
-                    backgroundColor: Colors.redAccent,
-                  ),
-                );
+                AppToast.showError(ctx, "Error picking PDF: $e");
               }
             }
           }
@@ -409,9 +401,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                                 InkWell(
                                   onTap: () {
                                     Clipboard.setData(const ClipboardData(text: "002105018921"));
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text("Account number copied!"), duration: Duration(seconds: 2), behavior: SnackBarBehavior.floating),
-                                    );
+                                    AppToast.showSuccess(context, "Account number copied!");
                                   },
                                   child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
                                 ),
@@ -437,9 +427,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                                 InkWell(
                                   onTap: () {
                                     Clipboard.setData(const ClipboardData(text: "ICIC0000021"));
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text("IFSC code copied!"), duration: Duration(seconds: 2), behavior: SnackBarBehavior.floating),
-                                    );
+                                    AppToast.showSuccess(context, "IFSC code copied!");
                                   },
                                   child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
                                 ),
@@ -477,13 +465,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                             TextButton.icon(
                               onPressed: () {
                                 Clipboard.setData(const ClipboardData(text: "lakshyastays@icici"));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text("UPI ID copied to clipboard!"),
-                                    duration: Duration(seconds: 2),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
+                                AppToast.showSuccess(context, "UPI ID copied to clipboard!");
                               },
                               icon: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
                               label: Text(
@@ -1037,30 +1019,12 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                               // Validation
                               if (selectedMethod == "Bank transfer") {
                                 if (pickedProofBytes == null && (currentProofUrl == null || currentProofUrl.isEmpty)) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        "Please attach a screenshot or PDF of your bank transfer receipt.",
-                                        style: GoogleFonts.plusJakartaSans(),
-                                      ),
-                                      backgroundColor: Colors.redAccent,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
+                                  AppToast.showError(context, "Please attach a screenshot or PDF of your bank transfer receipt.");
                                   return;
                                 }
                               } else if (selectedMethod == "UPI") {
                                 if (utr.isEmpty && pickedProofBytes == null && (currentProofUrl == null || currentProofUrl.isEmpty)) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        "Please upload a screenshot or PDF of your payment receipt.",
-                                        style: GoogleFonts.plusJakartaSans(),
-                                      ),
-                                      backgroundColor: Colors.redAccent,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
+                                  AppToast.showError(context, "Please upload a screenshot or PDF of your payment receipt.");
                                   return;
                                 }
                               } else {
@@ -1099,29 +1063,16 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
 
                                 if (!context.mounted) return;
                                 Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      selectedMethod == "Cash"
-                                          ? "Cash handover updated! Administration will verify physical cash and approve."
-                                          : "Payment proof submitted successfully! Administration will verify shortly.",
-                                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-                                    ),
-                                    backgroundColor: const Color(0xFF10B981),
-                                    behavior: SnackBarBehavior.floating,
-                                    duration: const Duration(seconds: 4),
-                                  ),
+                                AppToast.showSuccess(
+                                  context,
+                                  selectedMethod == "Cash"
+                                      ? "Cash handover updated! Administration will verify physical cash and approve."
+                                      : "Payment proof submitted successfully! Administration will verify shortly.",
                                 );
                               } catch (e) {
                                 setModalState(() => isSubmitting = false);
                                 if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text("Submission failed: $e", style: GoogleFonts.plusJakartaSans()),
-                                    backgroundColor: Colors.redAccent,
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
+                                AppToast.showError(context, "Submission failed: $e");
                               }
                             },
                       icon: isSubmitting
@@ -1195,177 +1146,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
   }
 
   void _openReceiptDialog(BillModel item) {
-    final receiptNo = item.transactionRef ?? item.invoiceNo;
-    final dateStr = item.paidDate != null && item.paidDate!.isNotEmpty
-        ? item.paidDate!
-        : _formatDate(item.createdAt);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: Colors.white,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(22.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Official Stamp Badge
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFDCFCE7),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.verified_rounded, color: Color(0xFF16A34A), size: 36),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "Fee Cleared Reward Voucher",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0F172A),
-                ),
-              ),
-              Text(
-                "Lakshya Student Residences",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  color: const Color(0xFF64748B),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // Reward Banner
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF86EFAC)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.stars_rounded, color: Color(0xFF16A34A), size: 16),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        "Resident In Good Standing • Zero Outstanding Dues",
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF15803D),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Column(
-                  children: [
-                    _buildPaymentInfoRow("Receipt No", receiptNo),
-                    const SizedBox(height: 8),
-                    _buildPaymentInfoRow("Invoice No", item.invoiceNo),
-                    const SizedBox(height: 8),
-                    _buildPaymentInfoRow("Date Paid", dateStr),
-                    const SizedBox(height: 8),
-                    _buildPaymentInfoRow("Bill Type", item.billType),
-                    if (item.billingMonth.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      _buildPaymentInfoRow("Period", item.billingMonth),
-                    ],
-                    if (item.paymentMethod != null && item.paymentMethod!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      _buildPaymentInfoRow("Payment Mode", item.paymentMethod!),
-                    ],
-                    if (item.adminRemarks != null && item.adminRemarks!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      _buildPaymentInfoRow("Verification Note", item.adminRemarks!),
-                    ],
-                    const SizedBox(height: 10),
-                    const Divider(height: 1, color: Color(0xFFCBD5E1)),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "Total Paid",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
-                          ),
-                        ),
-                        Text(
-                          _formatIndianCurrency(item.paidAmount > 0 ? item.paidAmount : item.amount),
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            color: const Color(0xFF16A34A),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (item.proofUrl != null && item.proofUrl!.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _viewFullScreenImage(item.proofUrl!),
-                    icon: const Icon(Icons.image_outlined, size: 16),
-                    label: Text(
-                      "View Attached Payment Proof",
-                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF2563EB),
-                      side: const BorderSide(color: Color(0xFF93C5FD)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: Text(
-                    "Close Receipt",
-                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    PaymentReceiptDialog.show(context, bill: item);
   }
 
   void _handleBackToHome() {
@@ -1400,6 +1181,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
           backgroundColor: Colors.white,
           elevation: 0,
           scrolledUnderElevation: 1,
+          titleSpacing: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
             tooltip: "Back to Home",
@@ -1420,28 +1202,35 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Payments & Bills",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Payments & Bills",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                      ),
                     ),
-                  ),
-                  Text(
-                    _user != null && _user!.building != null
-                        ? "${_user!.building} • Rm ${_user!.room ?? ''}"
-                        : "Resident Portal",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
+                    Text(
+                      _user != null && _user!.building != null
+                          ? "${_user!.building} • Rm ${_user!.room ?? ''}"
+                          : "Resident Portal",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF64748B),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -2046,17 +1835,23 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                           decoration: BoxDecoration(
                             color: bill.isPendingVerification
                                 ? const Color(0xFFFEF3C7)
-                                : (isOverdue ? const Color(0xFFFEE2E2) : const Color(0xFFEFF6FF)),
+                                : (bill.paymentStatus == 'Proof Rejected'
+                                    ? const Color(0xFFFEE2E2)
+                                    : (isOverdue ? const Color(0xFFFEE2E2) : const Color(0xFFEFF6FF))),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             bill.isPendingVerification
                                 ? "Pending Verification"
-                                : (isOverdue ? "Overdue" : "Upcoming"),
+                                : (bill.paymentStatus == 'Proof Rejected'
+                                    ? "Proof Rejected"
+                                    : (isOverdue ? "Overdue" : "Upcoming")),
                             style: GoogleFonts.plusJakartaSans(
                               color: bill.isPendingVerification
                                   ? const Color(0xFFD97706)
-                                  : (isOverdue ? const Color(0xFFDC2626) : const Color(0xFF2563EB)),
+                                  : (bill.paymentStatus == 'Proof Rejected'
+                                      ? const Color(0xFFDC2626)
+                                      : (isOverdue ? const Color(0xFFDC2626) : const Color(0xFF2563EB))),
                               fontSize: 10.5,
                               fontWeight: FontWeight.bold,
                             ),
@@ -2067,6 +1862,63 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                   ],
                 ),
               ),
+
+              if (bill.paymentStatus == 'Proof Rejected') ...[
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded, size: 16, color: Color(0xFFDC2626)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Proof Rejected: ${bill.adminRemarks?.isNotEmpty == true ? bill.adminRemarks : 'Please re-upload a clear screenshot or check your UTR'}",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFB91C1C),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (bill.isPendingVerification) ...[
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time_rounded, size: 16, color: Color(0xFFD97706)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          bill.isCash
+                              ? "Cash handover reported • Awaiting owner verification at hostel office"
+                              : "Payment proof submitted • Awaiting owner verification",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFB45309),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const Divider(color: Color(0xFFF1F5F9), height: 1, thickness: 1),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -2077,13 +1929,17 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                       child: Text(
                         bill.isPendingVerification
                             ? "UTR: ${bill.utrNumber ?? bill.transactionRef ?? 'Submitted'}"
-                            : (isOverdue ? "Immediate Action" : "To Be Paid"),
+                            : (bill.paymentStatus == 'Proof Rejected'
+                                ? "Re-submission Required"
+                                : (isOverdue ? "Immediate Action" : "To Be Paid")),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.plusJakartaSans(
                           color: bill.isPendingVerification
                               ? const Color(0xFFD97706)
-                              : (isOverdue ? const Color(0xFFDC2626) : const Color(0xFFEF4444)),
+                              : (bill.paymentStatus == 'Proof Rejected' || isOverdue
+                                  ? const Color(0xFFDC2626)
+                                  : const Color(0xFFEF4444)),
                           fontWeight: FontWeight.w800,
                           fontSize: 12.5,
                         ),
@@ -2098,7 +1954,9 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                         color: Colors.white,
                       ),
                       label: Text(
-                        bill.isPendingVerification ? "Update UTR / Proof" : "Pay / Submit Proof",
+                        bill.isPendingVerification
+                            ? "Update UTR / Proof"
+                            : (bill.paymentStatus == 'Proof Rejected' ? "Re-submit Proof" : "Pay / Submit Proof"),
                         style: GoogleFonts.plusJakartaSans(
                           fontWeight: FontWeight.w800,
                           fontSize: 11.5,
@@ -2107,7 +1965,9 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: bill.isPendingVerification
                             ? const Color(0xFFD97706)
-                            : const Color(0xFF1D4ED8),
+                            : (bill.paymentStatus == 'Proof Rejected'
+                                ? const Color(0xFFDC2626)
+                                : const Color(0xFF1D4ED8)),
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -2280,13 +2140,19 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFD1FAE5),
+                            color: bill.isDepositReturned
+                                ? const Color(0xFFEDE9FE)
+                                : (bill.isDepositHeld ? const Color(0xFFEDE9FE) : const Color(0xFFD1FAE5)),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            "Paid",
+                            bill.isDepositReturned
+                                ? "Deposit Returned"
+                                : (bill.isDepositHeld ? "Deposit Held" : "Paid"),
                             style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF065F46),
+                              color: (bill.isDepositReturned || bill.isDepositHeld)
+                                  ? const Color(0xFF6D28D9)
+                                  : const Color(0xFF065F46),
                               fontSize: 10.5,
                               fontWeight: FontWeight.bold,
                             ),
@@ -2297,6 +2163,35 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                   ],
                 ),
               ),
+
+              if (bill.isDepositReturned) ...[
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F3FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFDDD6FE)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.assignment_return_rounded, size: 16, color: Color(0xFF6D28D9)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Security deposit returned on ${bill.returnedAt != null ? _formatDate(bill.returnedAt!) : 'record'} via ${bill.refundMode ?? 'Bank transfer'}${bill.refundRef?.isNotEmpty == true ? ' (Ref: ${bill.refundRef})' : ''}",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF5B21B6),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const Divider(color: Color(0xFFF1F5F9), height: 1, thickness: 1),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -2307,15 +2202,27 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 16),
+                          Icon(
+                            bill.isDepositReturned
+                                ? Icons.assignment_return_rounded
+                                : (bill.isDepositHeld ? Icons.shield_rounded : Icons.check_circle_rounded),
+                            color: (bill.isDepositReturned || bill.isDepositHeld)
+                                ? const Color(0xFF6D28D9)
+                                : const Color(0xFF10B981),
+                            size: 16,
+                          ),
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
-                              "Paid Successfully",
+                              bill.isDepositReturned
+                                  ? "Deposit Refunded"
+                                  : (bill.isDepositHeld ? "Deposit Held by Property" : "Paid Successfully"),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.plusJakartaSans(
-                                color: const Color(0xFF10B981),
+                                color: (bill.isDepositReturned || bill.isDepositHeld)
+                                    ? const Color(0xFF6D28D9)
+                                    : const Color(0xFF10B981),
                                 fontWeight: FontWeight.w800,
                                 fontSize: 12.5,
                               ),

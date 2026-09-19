@@ -29,6 +29,7 @@ class FirestoreService {
   CollectionReference get _noticesRef => _db.collection('broadcast_notifications');
   CollectionReference get _draftsRef => _db.collection('onboarding_drafts');
   CollectionReference get _buildingsRef => _db.collection('buildings');
+  CollectionReference get _buildingCatalogRef => _db.collection('building_catalog_photos');
   CollectionReference get _staffRef => _db.collection('staff');
   CollectionReference get _adminTodosRef => _db.collection('admin_todos');
   CollectionReference get _expenseBucketsRef => _db.collection('expense_buckets');
@@ -44,6 +45,81 @@ class FirestoreService {
       ...data,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  /// Mark onboarding tour as completed for a user so it never appears again
+  Future<void> markTourCompleted(String uid, {String? studentId}) async {
+    try {
+      await _usersRef.doc(uid).set({
+        'hasCompletedOnboardingTour': true,
+        'tourCompletedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (studentId != null && studentId.isNotEmpty && studentId != uid) {
+        await _usersRef.doc(studentId).set({
+          'hasCompletedOnboardingTour': true,
+          'tourCompletedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        await _studentsRef.doc(studentId).set({
+          'hasCompletedOnboardingTour': true,
+          'tourCompletedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint("markTourCompleted error: $e");
+    }
+  }
+
+  /// Mark that student has replaced their default/temporary password with their own
+  Future<void> markPasswordChanged(String uid, {String? studentId}) async {
+    try {
+      await _usersRef.doc(uid).set({
+        'hasChangedDefaultPassword': true,
+        'hasDismissedPasswordNotice': true,
+        'defaultPassword': FieldValue.delete(),
+        'passwordChangedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (studentId != null && studentId.isNotEmpty && studentId != uid) {
+        await _usersRef.doc(studentId).set({
+          'hasChangedDefaultPassword': true,
+          'hasDismissedPasswordNotice': true,
+          'defaultPassword': FieldValue.delete(),
+          'passwordChangedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        await _studentsRef.doc(studentId).set({
+          'hasChangedDefaultPassword': true,
+          'hasDismissedPasswordNotice': true,
+          'defaultPassword': FieldValue.delete(),
+          'passwordChangedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint("markPasswordChanged error: $e");
+    }
+  }
+
+  /// Mark that student has dismissed the temporary password change security notice
+  Future<void> markPasswordNoticeDismissed(String uid, {String? studentId}) async {
+    try {
+      await _usersRef.doc(uid).set({
+        'hasDismissedPasswordNotice': true,
+        'passwordNoticeDismissedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (studentId != null && studentId.isNotEmpty && studentId != uid) {
+        await _usersRef.doc(studentId).set({
+          'hasDismissedPasswordNotice': true,
+          'passwordNoticeDismissedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        await _studentsRef.doc(studentId).set({
+          'hasDismissedPasswordNotice': true,
+          'passwordNoticeDismissedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint("markPasswordNoticeDismissed error: $e");
+    }
   }
 
   /// Permanently delete a student profile, personal notes subcollection,
@@ -268,7 +344,9 @@ class FirestoreService {
             continue;
           }
           final matchStudent = studentId.isNotEmpty &&
-              (b.studentId.toLowerCase() == studentId.toLowerCase() || b.id == studentId);
+              (b.studentId.toLowerCase() == studentId.toLowerCase() ||
+               b.id == studentId ||
+               (b.studentDocId != null && b.studentDocId!.toLowerCase() == studentId.toLowerCase()));
           final matchPhone = phone != null &&
               phone.isNotEmpty &&
               b.phone.isNotEmpty &&
@@ -279,7 +357,8 @@ class FirestoreService {
                   b.id.contains(email.toLowerCase()));
           final matchRegNo = regNo != null &&
               regNo.isNotEmpty &&
-              (b.invoiceNo.toLowerCase().contains(regNo.toLowerCase()) ||
+              ((b.regNo != null && b.regNo!.toLowerCase() == regNo.toLowerCase()) ||
+                  b.invoiceNo.toLowerCase().contains(regNo.toLowerCase()) ||
                   b.studentName.toLowerCase().contains(regNo.toLowerCase()));
 
           if (matchStudent || matchPhone || matchEmail || matchRegNo) {
@@ -327,37 +406,112 @@ class FirestoreService {
       payload['paymentRemarks'] = remarks.trim();
     }
     await _billsRef.doc(billId).update(payload);
+
+    // Notify Admin and Owner about submitted payment proof
+    try {
+      final billDoc = await _billsRef.doc(billId).get();
+      if (billDoc.exists) {
+        final b = BillModel.fromFirestore(billDoc);
+        final billTitle = b.billingMonth.isNotEmpty ? b.billingMonth : b.billType;
+        await notifyAdminPaymentAwaitingVerification(
+          billId: billId,
+          studentId: b.studentId,
+          studentName: b.studentName,
+          building: b.building,
+          room: b.room,
+          billTitle: billTitle,
+          amount: b.balance > 0 ? b.balance : b.amount,
+          paymentMode: paymentMode,
+          utrNumber: utrNumber,
+        );
+      }
+    } catch (e) {
+      debugPrint("Error notifying admin about payment proof: $e");
+    }
   }
 
   /// Admin verifies payment proof and marks the bill as fully or partially paid
-  Future<void> verifyAndMarkBillPaid(
+  /// Generates a strictly unique, non-repeating receipt number.
+  /// Uses a Firestore transaction on the system counter document 'system_counters/receipts'.
+  Future<String> generateUniqueReceiptNumber() async {
+    final counterRef = _db.collection('system_counters').doc('receipts');
+    final currentYear = DateTime.now().year;
+
+    try {
+      final receiptNo = await _db.runTransaction<String>((transaction) async {
+        final snapshot = await transaction.get(counterRef);
+        int currentSeq = 1000;
+        if (snapshot.exists && snapshot.data() != null) {
+          final data = snapshot.data()!;
+          if (data['lastSeq'] != null) {
+            currentSeq = (data['lastSeq'] as num).toInt();
+          }
+        }
+        final nextSeq = currentSeq + 1;
+        transaction.set(counterRef, {
+          'lastSeq': nextSeq,
+          'lastGeneratedAt': FieldValue.serverTimestamp(),
+          'prefix': 'LR-REC-$currentYear',
+        }, SetOptions(merge: true));
+
+        return "LR-REC-$currentYear-${nextSeq.toString().padLeft(6, '0')}";
+      });
+      return receiptNo;
+    } catch (e) {
+      debugPrint("Transaction for receipt number failed, using high-entropy fallback: $e");
+      final now = DateTime.now();
+      final rand = (1000 + (now.microsecondsSinceEpoch % 9000));
+      return "LR-REC-$currentYear-${now.millisecondsSinceEpoch.toString().substring(5)}-$rand";
+    }
+  }
+
+  /// Admin verifies payment proof and marks the bill as fully or partially paid,
+  /// issuing an official unique receipt number.
+  Future<String> verifyAndMarkBillPaid(
     String billId, {
     double? paidAmount,
     String? adminRemarks,
   }) async {
     final doc = await _billsRef.doc(billId).get();
-    if (!doc.exists) return;
+    if (!doc.exists) return '';
     final b = BillModel.fromFirestore(doc);
     final actualPaid = paidAmount ?? b.amount;
     final newBalance = (b.amount - actualPaid).clamp(0.0, double.infinity);
     final isFullyPaid = newBalance == 0;
 
-    await _billsRef.doc(billId).update({
+    // Guaranteed Unique Receipt Number: reuse existing if already assigned, otherwise generate new
+    String assignedReceiptNo = (b.receiptNo != null && b.receiptNo!.trim().isNotEmpty)
+        ? b.receiptNo!.trim()
+        : await generateUniqueReceiptNumber();
+
+    final updatePayload = <String, dynamic>{
       'paidAmount': actualPaid,
       'balance': newBalance,
       'isPaid': isFullyPaid,
       'status': isFullyPaid ? 'Paid' : 'Partial',
-      'paymentStatus': isFullyPaid ? 'Verified & Paid' : 'Partially Paid',
+      'paymentStatus': isFullyPaid ? 'Paid' : 'Partially Paid',
       'paidDate': DateTime.now().toIso8601String(),
       'adminRemarks': adminRemarks ?? 'Payment verified by Administrator',
+      'receiptNo': assignedReceiptNo,
+      'receiptIssuedAt': FieldValue.serverTimestamp(),
+      'rejectionDismissed': false,
+      'rejectedPaymentDismissed': false,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    };
+
+    // If this bill is a security deposit, mark deposit status as held
+    if (b.isSecurityDeposit) {
+      updatePayload['securityDepositStatus'] = 'held';
+    }
+
+    await _billsRef.doc(billId).update(updatePayload);
 
     // Record receipt in payments collection
     try {
       await _paymentsRef.add({
         'billId': billId,
         'invoiceNo': b.invoiceNo,
+        'receiptNo': assignedReceiptNo,
         'studentId': b.studentId,
         'studentName': b.studentName,
         'building': b.building,
@@ -375,20 +529,21 @@ class FirestoreService {
       debugPrint("Error recording payment receipt: $e");
     }
 
-    // Send student in-app notification confirming fee clearance reward
+    // Send student in-app notification confirming fee clearance reward with receipt number
     try {
       final billTitle = b.billingMonth.isNotEmpty ? b.billingMonth : b.billType;
       await sendStudentNotification(
         studentId: b.studentId,
         studentName: b.studentName,
         title: "Fee Payment Approved & Cleared! 🎉",
-        message: "Your payment of ₹${actualPaid.toStringAsFixed(0)} for $billTitle has been verified and marked as Paid. Your official payment receipt & zero-dues clearance voucher are now available.",
+        message: "Your payment of ₹${actualPaid.toStringAsFixed(0)} for $billTitle has been verified and marked as Paid. Official Receipt #$assignedReceiptNo has been issued.",
         category: "Payment",
         targetBuilding: b.building,
         targetRoom: b.room,
         metadata: {
           'billId': billId,
           'invoiceNo': b.invoiceNo,
+          'receiptNo': assignedReceiptNo,
           'status': 'Paid',
           'amount': actualPaid,
           'paidDate': DateTime.now().toIso8601String(),
@@ -396,6 +551,98 @@ class FirestoreService {
       );
     } catch (e) {
       debugPrint("Error sending fee payment notification: $e");
+    }
+
+    return assignedReceiptNo;
+  }
+
+  /// Admin marks a verified security deposit as returned when lock-in period ends
+  Future<void> markSecurityDepositReturned({
+    required String billId,
+    required String refundMode,
+    String? refundRef,
+    String? refundRemarks,
+    double? returnedAmount,
+  }) async {
+    final doc = await _billsRef.doc(billId).get();
+    if (!doc.exists) return;
+    final b = BillModel.fromFirestore(doc);
+    final actualAmount = returnedAmount ?? (b.paidAmount > 0 ? b.paidAmount : b.amount);
+
+    await _billsRef.doc(billId).update({
+      'securityDepositStatus': 'returned',
+      'status': 'Returned',
+      'paymentStatus': 'Deposit Returned',
+      'returnedAt': FieldValue.serverTimestamp(),
+      'refundMode': refundMode,
+      'refundRef': refundRef ?? '',
+      'refundRemarks': refundRemarks ?? 'Deposit returned upon end of lock-in period',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    try {
+      await sendStudentNotification(
+        studentId: b.studentId,
+        studentName: b.studentName,
+        title: "Security Deposit Refunded 💳",
+        message: "Your security deposit of ₹${actualAmount.toStringAsFixed(0)} has been processed and returned via $refundMode.${refundRemarks != null && refundRemarks.trim().isNotEmpty ? ' Remarks: $refundRemarks' : ''}",
+        category: "Payment",
+        targetBuilding: b.building,
+        targetRoom: b.room,
+        metadata: {
+          'billId': billId,
+          'invoiceNo': b.invoiceNo,
+          'status': 'Returned',
+          'refundMode': refundMode,
+          'refundRef': refundRef,
+          'returnedAt': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      debugPrint("Error sending deposit return notification: $e");
+    }
+  }
+
+  /// Notify admin and owner when a student submits payment proof awaiting verification
+  Future<void> notifyAdminPaymentAwaitingVerification({
+    required String billId,
+    required String studentId,
+    required String studentName,
+    required String building,
+    required String room,
+    required String billTitle,
+    required double amount,
+    required String paymentMode,
+    String? utrNumber,
+  }) async {
+    final payload = <String, dynamic>{
+      'title': "Payment Awaiting Verification 🔔",
+      'message': "$studentName ($building • Room $room) submitted payment proof for $billTitle (₹${amount.toStringAsFixed(0)} via $paymentMode).",
+      'category': "Payment Verification",
+      'billId': billId,
+      'studentId': studentId,
+      'studentName': studentName,
+      'building': building,
+      'room': room,
+      'amount': amount,
+      'paymentMode': paymentMode,
+      'utrNumber': utrNumber ?? '',
+      'targetAudience': 'Admin',
+      'priority': 'High',
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    try {
+      await _db.collection('admin_notifications').add(payload);
+    } catch (e) {
+      debugPrint("Error creating admin notification for payment proof: $e");
+    }
+
+    try {
+      await _noticesRef.add(payload);
+    } catch (e) {
+      debugPrint("Error writing to broadcast_notifications: $e");
     }
   }
 
@@ -412,6 +659,9 @@ class FirestoreService {
       'status': 'Pending',
       'paymentStatus': 'Proof Rejected',
       'adminRemarks': rejectionReason.trim(),
+      'rejectionDismissed': false,
+      'rejectedPaymentDismissed': false,
+      'rejectedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
@@ -420,8 +670,8 @@ class FirestoreService {
       await sendStudentNotification(
         studentId: b.studentId,
         studentName: b.studentName,
-        title: "Payment Proof Update Required",
-        message: "Your payment submission for $billTitle requires attention. Admin note: \"${rejectionReason.trim()}\". Please re-submit your payment proof or contact the administration office.",
+        title: "Payment Submission Rejected ⚠️",
+        message: "Your payment submission for $billTitle was rejected. Reason: \"${rejectionReason.trim()}\". Please review details and re-submit your payment proof.",
         category: "Payment",
         targetBuilding: b.building,
         targetRoom: b.room,
@@ -429,11 +679,40 @@ class FirestoreService {
           'billId': billId,
           'invoiceNo': b.invoiceNo,
           'status': 'Pending',
+          'paymentStatus': 'Proof Rejected',
+          'rejectionReason': rejectionReason.trim(),
         },
       );
     } catch (e) {
       debugPrint("Error sending rejection notification: $e");
     }
+  }
+
+  /// Student dismisses payment rejection warning on their dashboard.
+  /// Once dismissed, it will never show up on the dashboard again.
+  Future<void> dismissBillRejection(String billId) async {
+    try {
+      await _billsRef.doc(billId).update({
+        'rejectionDismissed': true,
+        'rejectedPaymentDismissed': true,
+        'dismissedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint("Error dismissing bill rejection: $e");
+    }
+  }
+
+  /// Stream active rejected bills for a student that have not been dismissed yet
+  Stream<List<BillModel>> getActiveRejectedBillsStream(String studentId) {
+    return _billsRef
+        .where('studentId', isEqualTo: studentId)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => BillModel.fromFirestore(doc))
+          .where((bill) => bill.hasActiveRejectionWarning)
+          .toList();
+    });
   }
 
   // =========================================================================
@@ -648,14 +927,24 @@ class FirestoreService {
     String? targetBuilding,
     String? targetRoom,
     String? studentName,
+    String? studentUid,
+    String? regNo,
     Map<String, dynamic>? metadata,
   }) async {
+    final effectiveUid = (studentUid != null && studentUid.isNotEmpty) ? studentUid : studentId;
     final payload = <String, dynamic>{
       'title': title,
       'message': message,
       'category': category,
       'targetAudience': 'Individual Student',
       'targetStudentId': studentId,
+      'targetStudentUid': effectiveUid,
+      'targetRegNo': regNo ?? '',
+      'selectedStudentIds': [
+        if (studentId.isNotEmpty) studentId,
+        if (effectiveUid.isNotEmpty && effectiveUid != studentId) effectiveUid,
+        if (regNo != null && regNo.isNotEmpty) regNo,
+      ],
       'targetStudentName': studentName ?? '',
       'targetBuilding': targetBuilding,
       'targetRoom': targetRoom,
@@ -677,6 +966,13 @@ class FirestoreService {
         await _usersRef.doc(studentId).collection('notifications').add(payload);
       } catch (e) {
         debugPrint("Notice writing to student subcollection error: $e");
+      }
+    }
+    if (effectiveUid.isNotEmpty && effectiveUid != studentId) {
+      try {
+        await _usersRef.doc(effectiveUid).collection('notifications').add(payload);
+      } catch (e) {
+        debugPrint("Notice writing to studentUid subcollection error: $e");
       }
     }
   }
@@ -787,8 +1083,20 @@ class FirestoreService {
                 if (aud.contains('all student') || aud.isEmpty) return true;
 
                 // 2. Specific student match
-                if (studentId.isNotEmpty && selectedStudents.contains(studentId)) return true;
-                if (regNo != null && regNo.isNotEmpty && selectedStudents.contains(regNo)) return true;
+                final targetStudentId = (n['targetStudentId'] ?? '').toString();
+                final targetStudentUid = (n['targetStudentUid'] ?? '').toString();
+                final targetReg = (n['targetRegNo'] ?? '').toString();
+                if (studentId.isNotEmpty &&
+                    (selectedStudents.contains(studentId) ||
+                     targetStudentId == studentId ||
+                     targetStudentUid == studentId)) {
+                  return true;
+                }
+                if (regNo != null && regNo.isNotEmpty &&
+                    (selectedStudents.contains(regNo) ||
+                     targetReg.toLowerCase() == regNo.toLowerCase())) {
+                  return true;
+                }
 
                 // 3. Building match
                 if (building != null && building.isNotEmpty) {
@@ -961,10 +1269,71 @@ class FirestoreService {
     return await _managementRef.doc(uid).get();
   }
 
-  /// Resolve an AppUser by checking staff/admin collection first, then student users collection
+  /// Resolve an AppUser by checking admin bootstrap first, then student users collection, then staff/management collection
   Future<AppUser?> getAppUser(String uid, {String? emailHint}) async {
     try {
-      // 1. Check management_users collection
+      // 1. Primary Admin auto-bootstrap fallback
+      if (emailHint != null && isPrimaryAdminEmail(emailHint)) {
+        await bootstrapPrimaryAdmin(uid, emailHint);
+        return AppUser(
+          uid: uid,
+          email: emailHint,
+          fullName: "Sudhanshu (Super Admin)",
+          role: AppRole.admin,
+        );
+      }
+
+      // 2. Check users (students) collection by uid
+      final userDoc = await _usersRef.doc(uid).get();
+      Map<String, dynamic>? studentData;
+
+      if (userDoc.exists && userDoc.data() != null) {
+        final rawData = userDoc.data() as Map<String, dynamic>;
+        final hasProfileData = (rawData['fullName'] != null && rawData['fullName'].toString().trim().isNotEmpty) ||
+            (rawData['name'] != null && rawData['name'].toString().trim().isNotEmpty) ||
+            rawData['studentId'] != null ||
+            rawData['registrationNumber'] != null ||
+            rawData['regNo'] != null;
+
+        if (hasProfileData) {
+          studentData = rawData;
+        } else {
+          // Document exists by uid but is only a metadata placeholder (e.g. created by markPasswordNoticeDismissed/tour)
+          // Look up the full student profile by emailHint or findStudentByRegNoOrEmail
+          if (emailHint != null && emailHint.isNotEmpty) {
+            final fullProfile = await findStudentByRegNoOrEmail(emailHint);
+            if (fullProfile != null) {
+              studentData = {
+                ...fullProfile,
+                ...rawData, // preserve updated flags like hasDismissedPasswordNotice
+              };
+              // Merge full profile into doc(uid)
+              await _usersRef.doc(uid).set(studentData, SetOptions(merge: true));
+            }
+          }
+        }
+      } else if (emailHint != null && emailHint.isNotEmpty) {
+        // Document doesn't exist by uid yet; lookup student profile by email / regNo
+        final fullProfile = await findStudentByRegNoOrEmail(emailHint);
+        if (fullProfile != null) {
+          studentData = fullProfile;
+          // Sync full profile into doc(uid) for subsequent direct lookups
+          await _usersRef.doc(uid).set(studentData, SetOptions(merge: true));
+        }
+      }
+
+      if (studentData != null) {
+        final roleStr = studentData['role']?.toString().toLowerCase().trim();
+        if (roleStr != 'admin' && roleStr != 'management' && roleStr != 'staff') {
+          return AppUser.fromFirestore(
+            uid: uid,
+            data: studentData,
+            fallbackRole: AppRole.student,
+          );
+        }
+      }
+
+      // 3. Check management_users collection
       final mgmtDoc = await _managementRef.doc(uid).get();
       if (mgmtDoc.exists && mgmtDoc.data() != null) {
         return AppUser.fromFirestore(
@@ -986,38 +1355,20 @@ class FirestoreService {
         }
       }
 
-      // 2. Check users (students) collection by uid
-      final userDoc = await _usersRef.doc(uid).get();
-      if (userDoc.exists && userDoc.data() != null) {
-        return AppUser.fromFirestore(
-          uid: uid,
-          data: userDoc.data() as Map<String, dynamic>,
-          fallbackRole: AppRole.student,
-        );
-      }
-
-      // Check by email in users collection
+      // 4. Check staff collection fallback
       if (emailHint != null && emailHint.isNotEmpty) {
-        final query = await _usersRef.where('email', isEqualTo: emailHint.toLowerCase().trim()).limit(1).get();
-        if (query.docs.isNotEmpty) {
-          final doc = query.docs.first;
-          return AppUser.fromFirestore(
+        final staffQuery = await _staffRef.where('email', isEqualTo: emailHint.toLowerCase().trim()).limit(1).get();
+        if (staffQuery.docs.isNotEmpty) {
+          final sData = staffQuery.docs.first.data() as Map<String, dynamic>;
+          return AppUser(
             uid: uid,
-            data: doc.data() as Map<String, dynamic>,
-            fallbackRole: AppRole.student,
+            email: emailHint,
+            fullName: sData['name']?.toString() ?? 'Staff Member',
+            phone: sData['phone']?.toString() ?? '',
+            role: AppRole.management,
+            status: sData['status']?.toString() ?? 'Active',
           );
         }
-      }
-
-      // 3. Fallback: If email is primary admin (sudhansu1906), auto-bootstrap admin profile
-      if (emailHint != null && isPrimaryAdminEmail(emailHint)) {
-        await bootstrapPrimaryAdmin(uid, emailHint);
-        return AppUser(
-          uid: uid,
-          email: emailHint,
-          fullName: "Sudhanshu (Super Admin)",
-          role: AppRole.admin,
-        );
       }
 
       return null;
@@ -1139,6 +1490,28 @@ class FirestoreService {
         .snapshots();
   }
 
+  /// Delete a personal note from subcollection and/or student document notes array
+  Future<void> deletePersonalNote(String studentId, {String? noteDocId, String? noteText}) async {
+    if (noteDocId != null && noteDocId.isNotEmpty) {
+      try {
+        await _usersRef.doc(studentId).collection('personal_notes').doc(noteDocId).delete();
+      } catch (e) {
+        debugPrint("Error deleting personal note doc: $e");
+      }
+    }
+
+    if (noteText != null && noteText.isNotEmpty) {
+      try {
+        await _usersRef.doc(studentId).update({
+          'notes': FieldValue.arrayRemove([noteText]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        debugPrint("Error removing note from student array: $e");
+      }
+    }
+  }
+
   /// Update room amenities / inventory provided to student
   Future<void> updateStudentAmenities(String studentId, List<String> inventory) async {
     await _usersRef.doc(studentId).set({
@@ -1166,6 +1539,20 @@ class FirestoreService {
   Future<void> updateStudentDocuments(String studentId, Map<String, dynamic> docData) async {
     await _usersRef.doc(studentId).set({
       ...docData,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  /// Upload document that was marked 'Add Later', automatically clearing the AddLater flag
+  Future<void> uploadStudentAddLaterDocument(
+    String studentId, {
+    required String docKey,
+    required String url,
+    required String addLaterKey,
+  }) async {
+    await _usersRef.doc(studentId).set({
+      docKey: url,
+      addLaterKey: false,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -1241,6 +1628,44 @@ class FirestoreService {
   /// Delete a building
   Future<void> deleteBuilding(String id) async {
     await _buildingsRef.doc(id).delete();
+  }
+
+  /// Stream of custom building photos added to the catalog
+  Stream<List<Map<String, dynamic>>> getBuildingCatalogPhotosStream() {
+    return _buildingCatalogRef
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>? ?? {};
+              return {
+                'id': doc.id,
+                'name': data['name']?.toString() ?? 'Custom Building',
+                'imageUrl': data['imageUrl']?.toString() ?? '',
+                'createdAt': data['createdAt'],
+              };
+            }).toList())
+        .handleError((err) {
+      debugPrint("getBuildingCatalogPhotosStream error: $err");
+      return <Map<String, dynamic>>[];
+    });
+  }
+
+  /// Add a custom photo to the building catalog
+  Future<String> addBuildingCatalogPhoto({
+    required String name,
+    required String imageUrl,
+  }) async {
+    final docRef = await _buildingCatalogRef.add({
+      'name': name.trim().isEmpty ? 'Custom Building' : name.trim(),
+      'imageUrl': imageUrl.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return docRef.id;
+  }
+
+  /// Delete a custom photo from the building catalog
+  Future<void> deleteBuildingCatalogPhoto(String id) async {
+    await _buildingCatalogRef.doc(id).delete();
   }
 
   // =========================================================================
