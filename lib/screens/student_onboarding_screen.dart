@@ -48,79 +48,43 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   bool _isCustomPackageInstallments = false;
 
   String _selectedRentTerm = "Complete Year (July to May)";
+  DateTime? _leaseStartDate;
+  DateTime? _leaseEndDate;
 
-  static const List<Map<String, String>> _rentTermOptions = [
-    {
-      "title": "Complete Year (July to May)",
-      "badge": "11 Months",
-      "rule": "11 month fee irrespective of late joining",
-      "monthlySchedule": "1st month rent on date of joining and then from the first of the month",
-    },
-    {
-      "title": "1 Semester Only (July – December)",
-      "badge": "6 Months",
-      "rule": "6 month fee irrespective of late joining",
-      "monthlySchedule": "1st month rent on date of joining and then from the first of the month",
-    },
-    {
-      "title": "Summer Break (May – June)",
-      "badge": "2 Months",
-      "rule": "2 month fee irrespective of late joining",
-      "monthlySchedule": "1st month rent on date of joining and then from the first of the month",
-    },
-    {
-      "title": "Winter Break (December)",
-      "badge": "1 Month",
-      "rule": "1 month fee irrespective of late joining",
-      "monthlySchedule": "Rent on date of joining",
-    },
-  ];
-
-  int _getRentTermMonths(String term) {
-    if (term.contains("Summer")) return 2;
-    if (term.contains("Winter")) return 1;
-    if (term.contains("Semester") || term.contains("Sem")) return 6;
-    return 11;
+  String _formatDateDDMMYYYY(DateTime d) {
+    final dayStr = d.day.toString().padLeft(2, '0');
+    final monthStr = d.month.toString().padLeft(2, '0');
+    return "$dayStr/$monthStr/${d.year}";
   }
 
-  String _getRentTermShortName(String term) {
-    if (term.contains("Summer")) return "Summer Break";
-    if (term.contains("Winter")) return "Winter Break";
-    if (term.contains("Semester") || term.contains("Sem")) return "1 Semester";
-    return "11-Month Annual";
-  }
-
-  String _getRentTermLockInDescription(String term) {
-    if (term.contains("Summer")) {
-      return "Summer Break (May – June) • 2 Months Lock-in (irrespective of late joining)";
+  int _calculateLeaseMonths() {
+    final start = _leaseStartDate ?? DateTime(DateTime.now().year, 7, 15);
+    final end = _leaseEndDate ?? DateTime(DateTime.now().year + 1, 6, 15);
+    if (end.isBefore(start)) return 1;
+    int months = (end.year - start.year) * 12 + (end.month - start.month);
+    if (end.day > start.day) {
+      months += 1;
     }
-    if (term.contains("Winter")) {
-      return "Winter Break (December) • 1 Month Lock-in (irrespective of late joining)";
+    if (start.day == 1 && end.day >= 28) {
+      final nextDay = end.add(const Duration(days: 1));
+      if (nextDay.day == 1) {
+        months = (end.year - start.year) * 12 + (end.month - start.month) + 1;
+      }
     }
-    if (term.contains("Semester") || term.contains("Sem")) {
-      return "1 Semester Only (July – December) • 6 Months Lock-in (irrespective of late joining)";
-    }
-    return "Complete Year (July to May) • 11 Months Lock-in (irrespective of late joining)";
-  }
-
-  String _getRentTermMonthlyScheduleNote(String term) {
-    if (term.contains("Summer")) {
-      return "2 month fee irrespective of late joining — 1st month rent on date of joining and then from the first of the month";
-    }
-    if (term.contains("Winter")) {
-      return "1 month fee irrespective of late joining — rent due on date of joining";
-    }
-    if (term.contains("Semester") || term.contains("Sem")) {
-      return "6 month fee irrespective of late joining — 1st month rent on date of joining and then from the first of the month";
-    }
-    return "11 month fee irrespective of late joining — 1st month rent on date of joining and then from the first of the month";
+    return months <= 0 ? 1 : months;
   }
 
   String _getLockInPeriod() {
     if (_selectedPlan == "Full Package") {
       return "Academic calendar of MUJ — Commencement of odd semester to last exam of even semester (excluding winter and summer break)";
     } else {
-      return _getRentTermLockInDescription(_selectedRentTerm);
+      final startStr = _leaseStartDate != null
+          ? _formatDateDDMMYYYY(_leaseStartDate!)
+          : "15/07/${DateTime.now().year}";
+      final endStr = _leaseEndDate != null
+          ? _formatDateDDMMYYYY(_leaseEndDate!)
+          : "15/06/${DateTime.now().year + 1}";
+      return "$startStr – $endStr";
     }
   }
 
@@ -200,18 +164,20 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     final monthStr = now.month.toString().padLeft(2, '0');
     final dateStr = "$dayStr/$monthStr/${now.year}";
 
-    final int termMonths = _selectedPlan == "Rent Only" ? _getRentTermMonths(_selectedRentTerm) : 10;
-    final endDate = DateTime(now.year, now.month + termMonths, now.day);
-    final endDayStr = endDate.day.toString().padLeft(2, '0');
-    final endMonthStr = endDate.month.toString().padLeft(2, '0');
-    final endDateStr = "$endDayStr/$endMonthStr/${endDate.year}";
+    final int termMonths = _selectedPlan == "Rent Only" ? _calculateLeaseMonths() : 10;
+    final startDateStr = _selectedPlan == "Rent Only"
+        ? (_leaseStartDate != null ? _formatDateDDMMYYYY(_leaseStartDate!) : "15/07/${now.year}")
+        : dateStr;
+    final endDateStr = _selectedPlan == "Rent Only"
+        ? (_leaseEndDate != null ? _formatDateDDMMYYYY(_leaseEndDate!) : "15/06/${now.year + 1}")
+        : "$dayStr/$monthStr/${now.year + 1}";
 
-    final rentalTerm = _selectedPlan == "Rent Only" ? _selectedRentTerm : "Academic calendar of MUJ";
+    final rentalTerm = _selectedPlan == "Rent Only" ? _getLockInPeriod() : "Academic calendar of MUJ";
     final lockInPeriod = _getLockInPeriod();
 
     return RentalAgreementData(
       agreementDate: dateStr,
-      commencementDate: dateStr,
+      commencementDate: startDateStr,
       endingDate: endDateStr,
       studentFullName: _fullNameController.text.trim().isNotEmpty ? _fullNameController.text.trim() : "Resident",
       mobileNumber: _mobileController.text.trim(),
@@ -316,19 +282,17 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
 
     if (_selectedPlan == "Rent Only") {
       int monthlyRent = int.tryParse(_monthlyRentController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 12500;
-      final termMonths = _getRentTermMonths(_selectedRentTerm);
+      final termMonths = _calculateLeaseMonths();
 
       if (_paymentFrequency == "Pay Monthly") {
         count = termMonths;
         for (int i = 1; i <= count; i++) {
           final instDate = (i == 1)
-              ? now // 1st month rent on date of joining
+              ? now // 1st month rent on date of onboarding
               : DateTime(now.year, now.month + (i - 1), 1); // then from 1st of the month
           final dayStr = instDate.day.toString().padLeft(2, '0');
           final monthStr = instDate.month.toString().padLeft(2, '0');
-          final title = count == 1
-              ? "Rent (${_getRentTermShortName(_selectedRentTerm)})"
-              : "Month $i Rent (${_getRentTermShortName(_selectedRentTerm)})";
+          final title = "Month $i Rent";
           _installments.add(<String, String>{
             "title": title,
             "amount": "$monthlyRent",
@@ -345,13 +309,13 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         for (int i = 1; i <= count; i++) {
           int currentInst = (i == 1) ? (instAmount + remainder) : instAmount;
           final instDate = (i == 1)
-              ? now // Due on date of joining
+              ? now // Due on date of onboarding
               : DateTime(now.year, now.month + (i - 1) * stepMonths, 1);
           final dayStr = instDate.day.toString().padLeft(2, '0');
           final monthStr = instDate.month.toString().padLeft(2, '0');
           final title = count == 1
-              ? "Full Term Fee (${_getRentTermShortName(_selectedRentTerm)})"
-              : "Installment $i (${_getRentTermShortName(_selectedRentTerm)})";
+              ? "Full Term Rent"
+              : "Installment $i";
           _installments.add(<String, String>{
             "title": title,
             "amount": "$currentInst",
@@ -889,8 +853,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         'room': room,
         'bedNumber': bedNumber,
         'plan': _selectedPlan,
-        'rentalTerm': _selectedRentTerm,
+        'rentalTerm': _selectedPlan == "Rent Only" ? _getLockInPeriod() : _selectedRentTerm,
         'lockInPeriod': _getLockInPeriod(),
+        'leaseStartDate': _leaseStartDate != null ? _formatDateDDMMYYYY(_leaseStartDate!) : null,
+        'leaseEndDate': _leaseEndDate != null ? _formatDateDDMMYYYY(_leaseEndDate!) : null,
         'paymentFrequency': _paymentFrequency,
         'monthlyRent': _monthlyRentController.text.trim(),
         'securityDeposit': _securityDepositController.text.trim(),
@@ -1549,6 +1515,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       'selectedBuilding': _selectedBuilding,
       'selectedPlan': _selectedPlan,
       'selectedRentTerm': _selectedRentTerm,
+      'leaseStartDate': _leaseStartDate?.toIso8601String(),
+      'leaseEndDate': _leaseEndDate?.toIso8601String(),
       'paymentFrequency': _paymentFrequency,
       'packageInstallmentType': _packageInstallmentType,
       'monthlyRent': _monthlyRentController.text,
@@ -1608,6 +1576,16 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       }
       _selectedPlan = draft['selectedPlan'] ?? "Rent Only";
       _selectedRentTerm = draft['selectedRentTerm'] ?? "Complete Year (July to May)";
+      if (draft['leaseStartDate'] != null) {
+        _leaseStartDate = DateTime.tryParse(draft['leaseStartDate'].toString());
+      } else {
+        _leaseStartDate = null;
+      }
+      if (draft['leaseEndDate'] != null) {
+        _leaseEndDate = DateTime.tryParse(draft['leaseEndDate'].toString());
+      } else {
+        _leaseEndDate = null;
+      }
       _paymentFrequency = draft['paymentFrequency'] ?? "Pay Monthly";
       _packageInstallmentType = draft['packageInstallmentType'] ?? "Single";
       _monthlyRentController.text = draft['monthlyRent'] ?? "12,500";
@@ -1658,6 +1636,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     _bedNumberController.clear();
     _selectedBuilding = null;
     _selectedPlan = "Rent Only";
+    _leaseStartDate = null;
+    _leaseEndDate = null;
     _paymentFrequency = "Pay Monthly";
     _profilePhotoBytes = null;
     _profilePhotoUrl = null;
@@ -3045,126 +3025,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         const SizedBox(height: 20),
 
         if (_selectedPlan == "Rent Only") ...[
-          Text(
-            "Rental Term / Lock-in Period *",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF0F172A),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // 4 Rental Term Cards
-          Column(
-            children: _rentTermOptions.map((opt) {
-              final isSelected = _selectedRentTerm == opt['title'];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedRentTerm = opt['title']!;
-                      _generateInstallmentsFromStep3();
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(14),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFFEFF6FF) : Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isSelected ? const Color(0xFF0056D2) : const Color(0xFFE2E8F0),
-                        width: isSelected ? 1.8 : 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected ? const Color(0xFF0056D2) : const Color(0xFF94A3B8),
-                              width: 2,
-                            ),
-                            color: isSelected ? const Color(0xFF0056D2) : Colors.transparent,
-                          ),
-                          child: isSelected
-                              ? const Center(
-                                  child: Icon(Icons.circle, size: 8, color: Colors.white),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      opt['title']!,
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: isSelected ? const Color(0xFF0056D2) : const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? const Color(0xFFDBEAFE) : const Color(0xFFF1F5F9),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      opt['badge']!,
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: isSelected ? const Color(0xFF0056D2) : const Color(0xFF475569),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                opt['rule']!,
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: isSelected ? const Color(0xFF1E40AF) : const Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 10),
-
-          Text(
-            "Payment Frequency *",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF0F172A),
-            ),
-          ),
-          const SizedBox(height: 12),
+          _buildInputLabel("Payment Frequency *"),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -3230,53 +3092,145 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
 
-          // Dynamic Schedule Banner
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFBBF7D0)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.event_available_rounded, size: 18, color: Color(0xFF16A34A)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _paymentFrequency == "Pay Monthly"
-                            ? "Monthly Schedule ($_selectedRentTerm)"
-                            : "Full Term Upfront ($_selectedRentTerm)",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF166534),
+          _buildInputLabel("Lease Period *"),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () async {
+                    final initial = _leaseStartDate ?? DateTime(DateTime.now().year, 7, 15);
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: initial,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2035),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _leaseStartDate = picked;
+                        if (_leaseEndDate != null && _leaseEndDate!.isBefore(_leaseStartDate!)) {
+                          _leaseEndDate = _leaseStartDate!.add(const Duration(days: 330));
+                        }
+                        _generateInstallmentsFromStep3();
+                      });
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 54,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_today_outlined,
+                          size: 19,
+                          color: Color(0xFF64748B),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _paymentFrequency == "Pay Monthly"
-                            ? _getRentTermMonthlyScheduleNote(_selectedRentTerm)
-                            : "Full ${_getRentTermMonths(_selectedRentTerm)} month(s) fee payable irrespective of late joining.",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11.5,
-                          color: const Color(0xFF15803D),
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                "From",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                              ),
+                              Text(
+                                _leaseStartDate != null ? _formatDateDDMMYYYY(_leaseStartDate!) : "DD/MM/YYYY",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _leaseStartDate != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: InkWell(
+                  onTap: () async {
+                    final initial = _leaseEndDate ?? (_leaseStartDate?.add(const Duration(days: 330)) ?? DateTime(DateTime.now().year + 1, 6, 15));
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: initial,
+                      firstDate: _leaseStartDate ?? DateTime(2020),
+                      lastDate: DateTime(2035),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _leaseEndDate = picked;
+                        _generateInstallmentsFromStep3();
+                      });
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 54,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_today_outlined,
+                          size: 19,
+                          color: Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                "To",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                              ),
+                              Text(
+                                _leaseEndDate != null ? _formatDateDDMMYYYY(_leaseEndDate!) : "DD/MM/YYYY",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _leaseEndDate != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
 
           if (_paymentFrequency == "Whole Year") ...[
             _buildInputLabel("Number of Installments"),
@@ -3290,7 +3244,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 prefixIcon: Icons.format_list_numbered_rounded,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
           ],
 
           _buildInputLabel("Monthly Rent (₹) *"),
@@ -3298,6 +3252,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           TextField(
             controller: _monthlyRentController,
             keyboardType: TextInputType.number,
+            onChanged: (_) => _generateInstallmentsFromStep3(),
             decoration: _buildInputDecoration(
               hintText: "₹ 12,500",
               prefixIcon: Icons.currency_rupee_rounded,
@@ -3579,7 +3534,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Term / Lock-in Period",
+                    "Lock-in Period",
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 13,
                       color: const Color(0xFF64748B),
