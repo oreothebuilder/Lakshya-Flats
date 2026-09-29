@@ -10,6 +10,7 @@ import '../../services/firestore_service.dart';
 import 'student_profile_detail_screen.dart';
 import '../../widgets/app_toast.dart';
 import '../../widgets/building_photo_selector.dart';
+import '../../services/mess_menu_service.dart';
 
 class BuildingSpaceScreen extends StatefulWidget {
   final BuildingModel building;
@@ -133,7 +134,6 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
     final nameController = TextEditingController(text: existing.name);
     final capacityController = TextEditingController(text: existing.totalCapacity.toString());
     final roomsController = TextEditingController(text: existing.totalRooms.toString());
-    final rentController = TextEditingController(text: existing.startingRent.toStringAsFixed(0));
     final locationController = TextEditingController(text: existing.campusLocation);
     final addressController = TextEditingController(text: existing.address);
     final customImageController = TextEditingController(text: existing.imageUrl ?? '');
@@ -142,6 +142,25 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
     String selectedCategory = existing.category;
     String selectedAsset = existing.imageAsset;
     String? selectedStaffId = existing.staffId;
+
+    // Mess facility options: 'none', 'create', 'existing'
+    final messService = MessMenuService();
+    String messOption = 'none';
+    String selectedExistingMess = messService.availableMesses.isNotEmpty ? messService.availableMesses.first : 'Univ Homes';
+    final newMessNameController = TextEditingController();
+
+    if (existing.messName != null && existing.messName!.trim().isNotEmpty) {
+      final mName = existing.messName!.trim();
+      if (mName.toLowerCase() == 'no mess') {
+        messOption = 'none';
+      } else if (messService.availableMesses.contains(mName)) {
+        messOption = 'existing';
+        selectedExistingMess = mName;
+      } else {
+        messOption = 'create';
+        newMessNameController.text = mName;
+      }
+    }
 
     bool isSaving = false;
 
@@ -189,26 +208,13 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                         ),
                         const SizedBox(width: 14),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Edit ${existing.name} & Capacity",
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF0F172A),
-                                ),
-                              ),
-                              Text(
-                                "Configure seats capacity, rooms, rent, and details",
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 12.5,
-                                  color: const Color(0xFF64748B),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            "Edit ${existing.name} & Capacity",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF0F172A),
+                            ),
                           ),
                         ),
                         IconButton(
@@ -396,40 +402,12 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                           ),
                           const SizedBox(height: 18),
 
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildFieldLabel("Starting Rent (₹ / month)"),
-                                    TextField(
-                                      controller: rentController,
-                                      keyboardType: TextInputType.number,
-                                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                                      decoration: _inputDecoration("e.g. 12500").copyWith(
-                                        prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18, color: Color(0xFF0D52CE)),
-                                      ),
-                                      style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w600),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildFieldLabel("Campus Location"),
-                                    TextField(
-                                      controller: locationController,
-                                      decoration: _inputDecoration("e.g. Main Campus, North"),
-                                      style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w600),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                          // Campus Location & Property Address
+                          _buildFieldLabel("Campus Location"),
+                          TextField(
+                            controller: locationController,
+                            decoration: _inputDecoration("e.g. Main Campus, North"),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 14),
 
@@ -441,13 +419,252 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                           ),
                           const SizedBox(height: 18),
 
-                          // Building Photo Selector (Catalog + Device Upload)
+                          // Building Photo (Direct Device Upload)
                           BuildingPhotoSelector(
                             initialAsset: selectedAsset,
                             customImageController: customImageController,
                             onAssetChanged: (newAsset) {
                               setModalState(() => selectedAsset = newAsset);
                             },
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Mess Facility Configuration
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.restaurant_rounded, color: Color(0xFF0D52CE), size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "Mess Facility",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  "Assign meal/mess service for residents of this building",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    color: const Color(0xFF64748B),
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+
+                                // Option 1: No Mess
+                                InkWell(
+                                  onTap: () => setModalState(() => messOption = 'none'),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: messOption == 'none' ? const Color(0xFFEFF6FF) : Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: messOption == 'none' ? const Color(0xFF0D52CE) : const Color(0xFFCBD5E1),
+                                        width: messOption == 'none' ? 1.5 : 1.0,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          messOption == 'none' ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                                          color: messOption == 'none' ? const Color(0xFF0D52CE) : const Color(0xFF94A3B8),
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "No Mess",
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: const Color(0xFF0F172A),
+                                                ),
+                                              ),
+                                              Text(
+                                                "No mess facility linked to this building",
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 11,
+                                                  color: const Color(0xFF64748B),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+
+                                // Option 2: Create New Mess
+                                InkWell(
+                                  onTap: () => setModalState(() => messOption = 'create'),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: messOption == 'create' ? const Color(0xFFEFF6FF) : Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: messOption == 'create' ? const Color(0xFF0D52CE) : const Color(0xFFCBD5E1),
+                                        width: messOption == 'create' ? 1.5 : 1.0,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          messOption == 'create' ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                                          color: messOption == 'create' ? const Color(0xFF0D52CE) : const Color(0xFF94A3B8),
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "Create New Mess",
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: const Color(0xFF0F172A),
+                                                ),
+                                              ),
+                                              Text(
+                                                "Set up a new mess schedule for this building",
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 11,
+                                                  color: const Color(0xFF64748B),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (messOption == 'create') ...[
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                                    child: TextField(
+                                      controller: newMessNameController,
+                                      decoration: _inputDecoration("Enter New Mess Name (e.g. Lakshya Dining)").copyWith(
+                                        prefixIcon: const Icon(Icons.add_business_rounded, size: 18, color: Color(0xFF0D52CE)),
+                                      ),
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+
+                                // Option 3: Assign an Existing Mess
+                                InkWell(
+                                  onTap: () => setModalState(() => messOption = 'existing'),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: messOption == 'existing' ? const Color(0xFFEFF6FF) : Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: messOption == 'existing' ? const Color(0xFF0D52CE) : const Color(0xFFCBD5E1),
+                                        width: messOption == 'existing' ? 1.5 : 1.0,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          messOption == 'existing' ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                                          color: messOption == 'existing' ? const Color(0xFF0D52CE) : const Color(0xFF94A3B8),
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "Assign an Existing Mess",
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: const Color(0xFF0F172A),
+                                                ),
+                                              ),
+                                              Text(
+                                                "Connect to an already configured mess service",
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 11,
+                                                  color: const Color(0xFF64748B),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (messOption == 'existing') ...[
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: messService.availableMesses.contains(selectedExistingMess)
+                                              ? selectedExistingMess
+                                              : (messService.availableMesses.isNotEmpty ? messService.availableMesses.first : null),
+                                          isExpanded: true,
+                                          items: messService.availableMesses.map((m) {
+                                            return DropdownMenuItem(
+                                              value: m,
+                                              child: Text(
+                                                m,
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: const Color(0xFF0F172A),
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) {
+                                              setModalState(() => selectedExistingMess = val);
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 20),
 
@@ -619,11 +836,27 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                                     }
 
                                     final rooms = int.tryParse(roomsController.text.trim()) ?? (capacity ~/ 2).clamp(1, 999);
-                                    final rent = double.tryParse(rentController.text.trim()) ?? 12500.0;
                                     final campus = locationController.text.trim().isNotEmpty
                                         ? locationController.text.trim()
                                         : 'Main Campus';
                                     final address = addressController.text.trim();
+
+                                    // Resolve mess assignment
+                                    String assignedMess = 'No Mess';
+                                    if (messOption == 'create') {
+                                      final newMess = newMessNameController.text.trim();
+                                      if (newMess.isEmpty) {
+                                        _showSnackbar("Please enter a name for the new mess", isSuccess: false);
+                                        return;
+                                      }
+                                      setModalState(() => isSaving = true);
+                                      await messService.createMess(newMess);
+                                      assignedMess = newMess;
+                                    } else if (messOption == 'existing') {
+                                      assignedMess = selectedExistingMess;
+                                    } else {
+                                      assignedMess = 'No Mess';
+                                    }
 
                                     setModalState(() => isSaving = true);
 
@@ -638,6 +871,8 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                                           ? customImageController.text.trim()
                                           : null;
 
+                                      messService.setBuildingMess(name, assignedMess);
+
                                       final updated = existing.copyWith(
                                         name: name,
                                         category: selectedCategory,
@@ -645,12 +880,13 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                                         address: address,
                                         totalCapacity: capacity,
                                         totalRooms: rooms,
-                                        startingRent: rent,
+                                        startingRent: existing.startingRent,
                                         imageAsset: selectedAsset,
                                         imageUrl: customImg,
                                         wardenName: warden,
                                         wardenPhone: phone,
                                         staffId: selectedStaffId,
+                                        messName: assignedMess,
                                       );
                                       await _firestoreService.updateBuilding(existing.id, updated.toMap());
                                       _showSnackbar("Building '${updated.name}' updated! Capacity set to $capacity seats.");
@@ -1084,7 +1320,7 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                                           borderRadius: BorderRadius.circular(8),
                                         ),
                                         child: Text(
-                                          "Room ${student.room.isNotEmpty ? student.room : 'N/A'}${student.bedNumber.isNotEmpty ? ' • Bed ${student.bedNumber}' : ''}",
+                                          "${student.displayRoomOnly.toLowerCase().startsWith('room') ? '' : 'Room '}${student.displayRoomAndBed}",
                                           style: GoogleFonts.plusJakartaSans(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w800,

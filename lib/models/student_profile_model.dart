@@ -8,6 +8,7 @@ class StudentProfile {
   final String email;
   final String phone;
   final String registrationNumber;
+  final String dob;
   final String course;
   final String branch;
   final String hometownAddress;
@@ -44,6 +45,7 @@ class StudentProfile {
     required this.email,
     required this.phone,
     required this.registrationNumber,
+    this.dob = '',
     required this.course,
     required this.branch,
     this.hometownAddress = '',
@@ -83,6 +85,7 @@ class StudentProfile {
       email: data['email'] ?? '',
       phone: data['phone'] ?? '',
       registrationNumber: data['registrationNumber'] ?? data['regNo'] ?? '',
+      dob: data['dob']?.toString() ?? data['dateOfBirth']?.toString() ?? '',
       course: data['course'] ?? '',
       branch: data['branch'] ?? '',
       hometownAddress: data['hometownAddress']?.toString() ?? data['address']?.toString() ?? '',
@@ -125,6 +128,8 @@ class StudentProfile {
       'email': email,
       'phone': phone,
       'registrationNumber': registrationNumber,
+      'dob': dob,
+      'dateOfBirth': dob,
       'course': course,
       'branch': branch,
       'hometownAddress': hometownAddress,
@@ -164,6 +169,7 @@ class StudentProfile {
     String? email,
     String? phone,
     String? registrationNumber,
+    String? dob,
     String? course,
     String? branch,
     String? hometownAddress,
@@ -200,6 +206,7 @@ class StudentProfile {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       registrationNumber: registrationNumber ?? this.registrationNumber,
+      dob: dob ?? this.dob,
       course: course ?? this.course,
       branch: branch ?? this.branch,
       hometownAddress: hometownAddress ?? this.hometownAddress,
@@ -231,20 +238,46 @@ class StudentProfile {
   }
 
   String get displayBed {
-    if (bedNumber.trim().isNotEmpty) return bedNumber.trim();
-    if (room.toLowerCase().contains('bed')) {
-      final parts = room.split(',');
-      if (parts.length > 1) return parts.last.trim();
+    if (bedNumber.trim().isNotEmpty) {
+      final b = bedNumber.trim();
+      if (b.toLowerCase().startsWith('bed')) return b;
+      return "Bed $b";
     }
-    return "Bed 1";
+    if (room.toLowerCase().contains('bed')) {
+      final parts = room.split(RegExp(r'[,•-]'));
+      if (parts.length > 1) {
+        final b = parts.last.trim();
+        if (b.toLowerCase().startsWith('bed')) return b;
+        return "Bed $b";
+      }
+    }
+    return "";
   }
 
   String get displayRoomOnly {
     if (room.toLowerCase().contains('bed')) {
-      final parts = room.split(',');
+      final parts = room.split(RegExp(r'[,•-]'));
       return parts.first.trim();
     }
     return room.isNotEmpty ? room : "Room N/A";
+  }
+
+  String get displayRoomAndBed {
+    final r = displayRoomOnly;
+    final b = displayBed;
+    if (r.isNotEmpty && b.isNotEmpty) {
+      return "$r • $b";
+    } else if (r.isNotEmpty) {
+      return r;
+    }
+    return b.isNotEmpty ? b : "Room & Bed Assigned";
+  }
+
+  String get displayRollNo {
+    if (registrationNumber.trim().isNotEmpty) {
+      return registrationNumber.trim();
+    }
+    return studentId.isNotEmpty ? studentId : id;
   }
 
   String get initials {

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/building_model.dart';
 import '../services/cloudinary_service.dart';
@@ -39,6 +40,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   final TextEditingController _hometownAddressController = TextEditingController();
   final TextEditingController _roomNumberController = TextEditingController();
   final TextEditingController _bedNumberController = TextEditingController();
+  final TextEditingController _dobController = TextEditingController();
+  DateTime? _selectedDob;
 
   // Step 3 Lease Configuration Controllers & State
   String _selectedPlan = "Rent Only"; // "Rent Only" or "Full Package"
@@ -55,6 +58,36 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     final dayStr = d.day.toString().padLeft(2, '0');
     final monthStr = d.month.toString().padLeft(2, '0');
     return "$dayStr/$monthStr/${d.year}";
+  }
+
+  Future<void> _pickDateOfBirth() async {
+    final now = DateTime.now();
+    final initial = _selectedDob ?? DateTime(now.year - 19, 1, 1);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1980),
+      lastDate: DateTime(now.year - 14, 12, 31),
+      helpText: "SELECT DATE OF BIRTH",
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF0056D2),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedDob = picked;
+        _dobController.text = _formatDateDDMMYYYY(picked);
+      });
+    }
   }
 
   int _calculateLeaseMonths() {
@@ -183,6 +216,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       mobileNumber: _mobileController.text.trim(),
       email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : "student@university.edu",
       regNumber: _regNoController.text.trim().isNotEmpty ? _regNoController.text.trim() : "N/A",
+      dob: _dobController.text.trim(),
       course: _courseController.text.trim(),
       branch: _branchController.text.trim(),
       hometownAddress: _hometownAddressController.text.trim(),
@@ -262,6 +296,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     _hometownAddressController.dispose();
     _roomNumberController.dispose();
     _bedNumberController.dispose();
+    _dobController.dispose();
     _monthlyRentController.dispose();
     _securityDepositController.dispose();
     _yearInstallmentsController.dispose();
@@ -844,6 +879,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         'firstName': firstName,
         'email': email,
         'phone': phone,
+        'dob': _dobController.text.trim(),
+        'dateOfBirth': _dobController.text.trim(),
         'registrationNumber': regNo,
         'course': course,
         'branch': branch,
@@ -852,6 +889,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         'building': building,
         'room': room,
         'bedNumber': bedNumber,
+        'bed': bedNumber,
         'plan': _selectedPlan,
         'rentalTerm': _selectedPlan == "Rent Only" ? _getLockInPeriod() : _selectedRentTerm,
         'lockInPeriod': _getLockInPeriod(),
@@ -980,14 +1018,37 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       }
 
       // 3. Register user with default password (firstName@regNo) in Auth
+      UserCredential? cred;
       try {
-        await FirebaseAuthService().createStudentAuthAccount(
+        cred = await FirebaseAuthService().createStudentAuthAccount(
           email: email,
           password: defaultPassword,
         );
       } catch (authErr) {
         debugPrint("Auth notice: $authErr");
       }
+
+      final authUid = cred?.user?.uid;
+      if (authUid != null && authUid.isNotEmpty) {
+        try {
+          await FirestoreService().saveStudentProfile(studentId, {
+            'authUid': authUid,
+          });
+        } catch (linkErr) {
+          debugPrint("saveStudentProfile authUid link notice: $linkErr");
+        }
+      }
+
+      // Also persist registration lookup mapping for instant unauthenticated resolution
+      await FirestoreService().saveRegistrationLookup(
+        studentId: studentId,
+        email: email,
+        regNo: regNo,
+        fullName: fullName,
+        firstName: firstName,
+        defaultPassword: defaultPassword,
+        authUid: authUid,
+      );
 
       // 4. Send official account credentials email via EmailService
       try {
@@ -1507,6 +1568,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       'fullName': _fullNameController.text,
       'mobile': _mobileController.text,
       'email': _emailController.text,
+      'dob': _dobController.text,
+      'dateOfBirth': _dobController.text,
       'regNo': _regNoController.text,
       'course': _courseController.text,
       'branch': _branchController.text,
@@ -1562,6 +1625,18 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       _fullNameController.text = draft['fullName'] ?? "";
       _mobileController.text = draft['mobile'] ?? "";
       _emailController.text = draft['email'] ?? "";
+      _dobController.text = draft['dob'] ?? draft['dateOfBirth'] ?? "";
+      if (_dobController.text.isNotEmpty) {
+        final parts = _dobController.text.split('/');
+        if (parts.length == 3) {
+          final d = int.tryParse(parts[0]);
+          final m = int.tryParse(parts[1]);
+          final y = int.tryParse(parts[2]);
+          if (d != null && m != null && y != null) {
+            _selectedDob = DateTime(y, m, d);
+          }
+        }
+      }
       _regNoController.text = draft['regNo'] ?? "";
       _courseController.text = draft['course'] ?? "";
       _branchController.text = draft['branch'] ?? "";
@@ -1628,6 +1703,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     _fullNameController.clear();
     _mobileController.clear();
     _emailController.clear();
+    _dobController.clear();
+    _selectedDob = null;
     _regNoController.clear();
     _courseController.clear();
     _branchController.clear();
@@ -2313,12 +2390,31 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         ),
         const SizedBox(height: 18),
 
-        _buildInputLabel("College Registration Number *"),
+        _buildInputLabel("Date of Birth *"),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _pickDateOfBirth,
+          borderRadius: BorderRadius.circular(12),
+          child: IgnorePointer(
+            child: TextField(
+              controller: _dobController,
+              readOnly: true,
+              decoration: _buildInputDecoration(
+                hintText: "DD/MM/YYYY (Compulsory)",
+                prefixIcon: Icons.cake_outlined,
+                suffixIcon: Icons.calendar_today_rounded,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        _buildInputLabel("College Roll Number *"),
         const SizedBox(height: 6),
         TextField(
           controller: _regNoController,
           decoration: _buildInputDecoration(
-            hintText: "Registration or Roll number (Compulsory)",
+            hintText: "Enter College Roll number (Compulsory)",
             prefixIcon: Icons.badge_outlined,
           ),
         ),
@@ -2380,8 +2476,12 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 _showSnackbar("Please enter a valid email address", isSuccess: false);
                 return;
               }
+              if (_dobController.text.trim().isEmpty) {
+                _showSnackbar("Please select student's Date of Birth", isSuccess: false);
+                return;
+              }
               if (_regNoController.text.trim().isEmpty) {
-                _showSnackbar("Please enter College Registration Number", isSuccess: false);
+                _showSnackbar("Please enter College Roll Number", isSuccess: false);
                 return;
               }
               if (_courseController.text.trim().isEmpty) {
@@ -2749,12 +2849,12 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildInputLabel("Bed Number"),
+                  _buildInputLabel("Bed Number *"),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _bedNumberController,
                     decoration: _buildInputDecoration(
-                      hintText: "e.g. Bed 1 / A",
+                      hintText: "e.g. Bed 1 / A (Mandatory)",
                       suffixIcon: Icons.bed_outlined,
                     ),
                   ),
@@ -2815,6 +2915,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     }
                     if (_roomNumberController.text.trim().isEmpty) {
                       _showSnackbar("Please enter a room number", isSuccess: false);
+                      return;
+                    }
+                    if (_bedNumberController.text.trim().isEmpty) {
+                      _showSnackbar("Please enter a bed number (e.g. Bed 1 / A)", isSuccess: false);
                       return;
                     }
                     setState(() {
@@ -4986,7 +5090,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                           children: [
                             _buildSummaryRow("Student Name", fullName),
                             const Divider(height: 16, color: Color(0xFFE2E8F0)),
-                            _buildSummaryRow("Registration No.", regNo),
+                            _buildSummaryRow("College Roll No.", regNo),
                             const Divider(height: 16, color: Color(0xFFE2E8F0)),
                             _buildSummaryRow("Course", _courseController.text),
                             const Divider(height: 16, color: Color(0xFFE2E8F0)),

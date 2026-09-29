@@ -87,5 +87,21 @@ void main() {
       expect(matches('Rameshwaram', 'Rameshwaram Residency'), isTrue);
       expect(matches('Lakshya', 'Ishaan'), isFalse);
     });
+
+    test('BuildingModel supports messName in toMap and copyWith', () {
+      final bld = BuildingModel(
+        id: 'bld_123',
+        name: 'Univ Homes North',
+        messName: 'Univ Homes Mess',
+      );
+
+      expect(bld.messName, 'Univ Homes Mess');
+      final map = bld.toMap();
+      expect(map['messName'], 'Univ Homes Mess');
+
+      final updated = bld.copyWith(messName: 'No Mess');
+      expect(updated.messName, 'No Mess');
+      expect(updated.toMap()['messName'], 'No Mess');
+    });
   });
 }

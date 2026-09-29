@@ -6,6 +6,7 @@ import 'User/user_home_screen.dart';
 import 'Admin/dashboard_screen.dart';
 import 'onboarding_screen.dart';
 import '../services/firebase_auth_service.dart';
+import '../services/push_notification_service.dart';
 import '../widgets/app_toast.dart';
 
 enum LoginRole { user, manager }
@@ -77,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (identifier.isEmpty) {
       _showNotification(
         _selectedRole == LoginRole.user
-            ? "Please enter your Email ID or Student Registration Number."
+            ? "Please enter your Student Email or College Roll No."
             : "Please enter your management email address.",
         isSuccess: false,
       );
@@ -96,6 +97,18 @@ class _LoginScreenState extends State<LoginScreen> {
         identifier: identifier,
         password: password,
       );
+
+      // Register device for FCM Push Notifications
+      try {
+        await PushNotificationService().registerUser(
+          uid: appUser.uid,
+          role: appUser.role.name,
+          building: appUser.building,
+          studentId: appUser.studentId,
+        );
+      } catch (e) {
+        debugPrint("FCM registration on login error: $e");
+      }
 
       if (!mounted) return;
 
@@ -605,11 +618,11 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 24),
 
-        // Email ID / Reg No Field
+        // Student Email or College Roll No Field
         Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            "Student Email or Registration Number",
+            "Student Email or College Roll No.",
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13.5,
               fontWeight: FontWeight.w700,
@@ -629,7 +642,7 @@ class _LoginScreenState extends State<LoginScreen> {
           decoration: InputDecoration(
             filled: true,
             fillColor: inputBgColor,
-            hintText: "e.g. REG101 or student@university.edu",
+            hintText: "Enter College Roll No. or Email",
             hintStyle: GoogleFonts.plusJakartaSans(
               fontSize: 14,
               color: const Color(0xFF94A3B8),

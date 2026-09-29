@@ -210,6 +210,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             _studentId,
             building: widget.currentUser?.building,
             regNo: widget.currentUser?.registrationNumber,
+            userCreatedAt: widget.currentUser?.createdAt,
           ),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {

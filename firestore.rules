@@ -16,7 +16,8 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email == 'sudhansu1906@gmail.com'
+        request.auth.token.email == 'sudhansu1906@gmail.com' ||
+        request.auth.token.email == 'adititulsyan388@gmail.com'
       );
     }
 
@@ -24,14 +25,35 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function isAdminOrManagement() {
-      return isSuperAdmin() || (
-        isAuthenticated() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (getUserDoc().role == 'admin' || getUserDoc().role == 'management') &&
+    function getMgmtDoc() {
+      return get(/databases/$(database)/documents/management_users/$(request.auth.uid)).data;
+    }
+
+    function isManagementUser() {
+      return exists(/databases/$(database)/documents/management_users/$(request.auth.uid)) &&
+        (getMgmtDoc().role == 'admin' || getMgmtDoc().role == 'management' || getMgmtDoc().role == 'staff') &&
+        getMgmtDoc().status != 'Inactive' &&
+        getMgmtDoc().status != 'Suspended';
+    }
+
+    function isUserAdmin() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (getUserDoc().role == 'admin' || getUserDoc().role == 'management' || getUserDoc().role == 'staff') &&
         getUserDoc().status != 'Inactive' &&
-        getUserDoc().status != 'Suspended'
-      );
+        getUserDoc().status != 'Suspended';
+    }
+
+    function isAdminOrManagement() {
+      return isSuperAdmin() || (isAuthenticated() && (isUserAdmin() || isManagementUser()));
+    }
+
+    // =========================================================================
+    // 0. Registration Lookup (Public resolution for Registration Number -> Email)
+    // =========================================================================
+
+    match /registration_lookup/{identifier} {
+      allow read: if true;
+      allow write: if isAuthenticated();
     }
 
     // =========================================================================
@@ -39,10 +61,10 @@ service cloud.firestore {
     // =========================================================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdminOrManagement();
+      allow read: if isAuthenticated();
       allow create: if isOwner(userId) || isAdminOrManagement();
       allow update: if isAdminOrManagement() || (
-        isOwner(userId) &&
+        (isOwner(userId) || (isAuthenticated() && (resource.data.email == request.auth.token.email || resource.data.authUid == request.auth.uid))) &&
         // Students cannot elevate role, alter fee structures, or self-assign rooms
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'status', 'monthlyRent', 'securityDeposit', 'room', 'building', 'plan'
@@ -50,13 +72,31 @@ service cloud.firestore {
       );
       allow delete: if isAdminOrManagement();
 
-      // Subcollections (personal notes, student notifications)
+      // Subcollections (personal notes, student notifications, personal todos)
       match /personal_notes/{noteId} {
         allow read, write: if isOwner(userId) || isAdminOrManagement();
       }
-      match /notifications/{notifId} {
-        allow read, write: if isOwner(userId) || isAdminOrManagement();
+      match /personal_todos/{todoId} {
+        allow read, write: if isAuthenticated() && (
+          isOwner(userId) ||
+          isAdminOrManagement() ||
+          userId == 'default_admin' ||
+          request.auth.uid == userId
+        );
       }
+      match /notifications/{notifId} {
+        allow read, write: if isOwner(userId) ||
+                              (isAuthenticated() && (
+                                get(/databases/$(database)/documents/users/$(userId)).data.email == request.auth.token.email ||
+                                get(/databases/$(database)/documents/users/$(userId)).data.authUid == request.auth.uid
+                              )) ||
+                              isAdminOrManagement();
+      }
+    }
+
+    // Students collection fallback
+    match /students/{studentId} {
+      allow read, write: if isAuthenticated();
     }
 
     // =========================================================================
@@ -64,26 +104,20 @@ service cloud.firestore {
     // =========================================================================
 
     match /bills/{billId} {
-      allow read: if isAdminOrManagement() || (
-        isAuthenticated() && resource.data.studentId == request.auth.uid
-      );
+      allow read: if isAuthenticated();
       allow create: if isAdminOrManagement();
       allow update: if isAdminOrManagement() || (
         isAuthenticated() &&
-        resource.data.studentId == request.auth.uid &&
         // Residents can only submit payment proof and transition to Pending Verification
         request.resource.data.status != 'Paid' &&
         request.resource.data.amount == resource.data.amount &&
-        request.resource.data.paidAmount == resource.data.paidAmount &&
-        request.resource.data.studentId == resource.data.studentId
+        request.resource.data.paidAmount == resource.data.paidAmount
       );
       allow delete: if isAdminOrManagement();
     }
 
     match /payments/{paymentId} {
-      allow read: if isAdminOrManagement() || (
-        isAuthenticated() && resource.data.studentId == request.auth.uid
-      );
+      allow read: if isAuthenticated();
       allow write: if isAdminOrManagement();
     }
 
@@ -92,14 +126,10 @@ service cloud.firestore {
     // =========================================================================
 
     match /complaints/{complaintId} {
-      allow read: if isAdminOrManagement() || (
-        isAuthenticated() && resource.data.studentId == request.auth.uid
-      );
-      allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
       allow update: if isAdminOrManagement() || (
         isAuthenticated() &&
-        resource.data.studentId == request.auth.uid &&
-        request.resource.data.studentId == resource.data.studentId &&
         // Residents cannot edit administrative feedback or resolve tickets themselves
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['adminRemarks', 'resolvedAt'])
       );
@@ -160,7 +190,11 @@ service cloud.firestore {
     }
 
     match /admin_todos/{todoId} {
-      allow read, write: if isAdminOrManagement();
+      allow read, write: if isAdminOrManagement() || isAuthenticated();
+    }
+
+    match /personal_todos/{todoId} {
+      allow read, write: if isAuthenticated();
     }
 
     match /management_users/{userId} {
@@ -169,6 +203,23 @@ service cloud.firestore {
 
     match /onboarding_drafts/{draftId} {
       allow read, write: if isAdminOrManagement();
+    }
+
+    match /system_counters/{counterId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /mail/{mailId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /email_logs/{logId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /system_config/{configId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminOrManagement();
     }
   }
 }

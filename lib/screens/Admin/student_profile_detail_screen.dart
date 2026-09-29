@@ -41,6 +41,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
 
   bool _isSendingNote = false;
   bool _isUploadingDoc = false;
+  bool _isHeaderCardExpanded = true;
 
   static const Color primaryBlue = Color(0xFF003896);
   static const Color primaryDark = Color(0xFF0F172A);
@@ -90,15 +91,18 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
   // ===========================================================================
 
   Widget _buildTopHeader() {
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    final showDetailsCard = _isHeaderCardExpanded && !isKeyboardOpen;
+
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: EdgeInsets.fromLTRB(16, isKeyboardOpen ? 8 : 14, 16, showDetailsCard ? 16 : 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: Profile photo, Name, Status Badge, Edit Button
+          // Row 1: Profile photo, Name, Status Badge, Edit Button & Collapse Toggle
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               GestureDetector(
                 onTap: () => _openImageFullscreen(
@@ -108,7 +112,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                 child: Hero(
                   tag: "student_photo_${_student.id}",
                   child: CircleAvatar(
-                    radius: 38,
+                    radius: isKeyboardOpen ? 20 : 34,
                     backgroundColor: const Color(0xFFE8F0FE),
                     backgroundImage: _student.photoUrl != null && _student.photoUrl!.isNotEmpty
                         ? NetworkImage(_student.photoUrl!)
@@ -118,7 +122,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                             _student.initials,
                             style: GoogleFonts.plusJakartaSans(
                               color: primaryBlue,
-                              fontSize: 22,
+                              fontSize: isKeyboardOpen ? 14 : 20,
                               fontWeight: FontWeight.bold,
                             ),
                           )
@@ -126,7 +130,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,15 +141,17 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                           child: Text(
                             _student.fullName.isNotEmpty ? _student.fullName : "Student Resident",
                             style: GoogleFonts.plusJakartaSans(
-                              fontSize: 20,
+                              fontSize: isKeyboardOpen ? 16 : 19,
                               fontWeight: FontWeight.w800,
                               color: primaryDark,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
                             color: const Color(0xFFDCFCE7),
                             borderRadius: BorderRadius.circular(8),
@@ -153,7 +159,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                           child: Text(
                             _student.status,
                             style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                               color: const Color(0xFF15803D),
                             ),
@@ -161,36 +167,36 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
 
                     // Building and Bed Number Banner
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: const Color(0xFFEFF6FF),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: const Color(0xFFBFDBFE)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.domain_rounded, size: 15, color: primaryBlue),
-                          const SizedBox(width: 6),
+                          const Icon(Icons.domain_rounded, size: 13, color: primaryBlue),
+                          const SizedBox(width: 5),
                           Text(
                             _student.building,
                             style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12.5,
+                              fontSize: 11.5,
                               fontWeight: FontWeight.bold,
                               color: primaryBlue,
                             ),
                           ),
-                          const Text("  •  ", style: TextStyle(color: Color(0xFF93C5FD))),
-                          const Icon(Icons.bed_rounded, size: 15, color: primaryBlue),
-                          const SizedBox(width: 5),
+                          const Text("  •  ", style: TextStyle(color: Color(0xFF93C5FD), fontSize: 11)),
+                          const Icon(Icons.bed_rounded, size: 13, color: primaryBlue),
+                          const SizedBox(width: 4),
                           Text(
-                            "${_student.displayRoomOnly} (${_student.displayBed})",
+                            _student.displayRoomAndBed,
                             style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12.5,
+                              fontSize: 11.5,
                               fontWeight: FontWeight.w700,
                               color: primaryBlue,
                             ),
@@ -201,18 +207,41 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                   ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.edit_note_rounded, color: primaryBlue, size: 26),
-                tooltip: "Edit Profile Information",
-                onPressed: _openEditProfileDialog,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_note_rounded, color: primaryBlue, size: 24),
+                    tooltip: "Edit Profile Information",
+                    onPressed: _openEditProfileDialog,
+                  ),
+                  if (!isKeyboardOpen)
+                    IconButton(
+                      icon: Icon(
+                        _isHeaderCardExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                        color: const Color(0xFF64748B),
+                        size: 24,
+                      ),
+                      tooltip: _isHeaderCardExpanded ? "Collapse Details" : "Expand Details",
+                      onPressed: () {
+                        setState(() {
+                          _isHeaderCardExpanded = !_isHeaderCardExpanded;
+                        });
+                      },
+                    ),
+                ],
               ),
             ],
           ),
 
-          const SizedBox(height: 18),
-
-          // Contact Details & Reg No Row
-          Container(
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            child: showDetailsCard
+                ? Column(
+                    children: [
+                      const SizedBox(height: 14),
+                      Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: bgSurface,
@@ -280,79 +309,70 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                 ),
                 const Divider(height: 18, color: Color(0xFFE2E8F0)),
 
-                // Tenant ID & College Reg No Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: () {
-                          final sid = _student.studentId.isNotEmpty ? _student.studentId : _student.id;
-                          Clipboard.setData(ClipboardData(text: sid));
-                          _showSnackbar("Tenant ID copied: $sid");
-                        },
-                        child: Row(
+                // College Roll No Row
+                InkWell(
+                  onTap: () {
+                    final rollNo = _student.displayRollNo;
+                    Clipboard.setData(ClipboardData(text: rollNo));
+                    _showSnackbar("College Roll No. copied: $rollNo");
+                  },
+                  child: Row(
+                    children: [
+                      const Icon(Icons.badge_outlined, size: 16, color: primaryBlue),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.tag_rounded, size: 16, color: primaryBlue),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Tenant ID",
-                                  style: GoogleFonts.plusJakartaSans(fontSize: 10, color: textMuted),
-                                ),
-                                Text(
-                                  _student.studentId.isNotEmpty ? _student.studentId : _student.id,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: primaryBlue,
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              "College Roll No.",
+                              style: GoogleFonts.plusJakartaSans(fontSize: 10, color: textMuted),
+                            ),
+                            Text(
+                              _student.displayRollNo.isNotEmpty ? _student.displayRollNo : "N/A",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: primaryDark,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () {
-                          Clipboard.setData(ClipboardData(text: _student.registrationNumber));
-                          _showSnackbar("Registration No. copied: ${_student.registrationNumber}");
-                        },
-                        child: Row(
-                          children: [
-                            const Icon(Icons.badge_outlined, size: 16, color: textMuted),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "College Reg No",
-                                  style: GoogleFonts.plusJakartaSans(fontSize: 10, color: textMuted),
-                                ),
-                                Text(
-                                  _student.registrationNumber.isNotEmpty ? _student.registrationNumber : "N/A",
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: primaryDark,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                      Icon(Icons.copy_rounded, size: 14, color: textMuted.withValues(alpha: 0.6)),
+                    ],
+                  ),
                 ),
                 const Divider(height: 18, color: Color(0xFFE2E8F0)),
 
-                // Course & Branch Row
+                // Date of Birth & Course Row
                 Row(
                   children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.cake_outlined, size: 16, color: primaryBlue),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Date of Birth",
+                                style: GoogleFonts.plusJakartaSans(fontSize: 10, color: textMuted),
+                              ),
+                              Text(
+                                _student.dob.isNotEmpty ? _student.dob : "Not provided",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: _student.dob.isNotEmpty ? primaryDark : textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                     Expanded(
                       child: Row(
                         children: [
@@ -418,9 +438,13 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
             ),
           ),
         ],
-      ),
-    );
-  }
+      )
+    : const SizedBox.shrink(),
+  ),
+],
+),
+);
+}
 
   // ===========================================================================
   // 5 NAVIGATION BUTTONS BELOW HEADER
@@ -2311,29 +2335,31 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
   // ===========================================================================
 
   Widget _buildNotesSection() {
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     return Column(
       children: [
-        // Informational Header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          color: const Color(0xFFEFF6FF),
-          child: Row(
-            children: [
-              const Icon(Icons.info_outline_rounded, size: 18, color: primaryBlue),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  "Personal messages sent here remain in the chat and are visible to both the student and admin.",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    color: const Color(0xFF1E40AF),
-                    fontWeight: FontWeight.w500,
+        // Informational Header (hidden when keyboard is open to preserve vertical space)
+        if (!isKeyboardOpen)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: const Color(0xFFEFF6FF),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, size: 16, color: primaryBlue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Personal messages sent here remain in the chat and are visible to both the student and admin.",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11.5,
+                      color: const Color(0xFF1E40AF),
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
 
         // Chat Message Thread Stream
         Expanded(
@@ -2416,6 +2442,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
 
               return ListView.builder(
                 controller: _notesScrollController,
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.all(16),
                 itemCount: allNotes.length,
                 itemBuilder: (context, index) {
@@ -2537,57 +2564,56 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
 
         // Message Composer
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: isKeyboardOpen ? 6 : 10),
           decoration: const BoxDecoration(
             color: Colors.white,
             border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
           ),
-          child: SafeArea(
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _noteInputController,
-                    maxLines: null,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: "Send a personal note to ${_student.firstName}...",
-                      hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: textMuted),
-                      filled: true,
-                      fillColor: bgSurface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: const BorderSide(color: primaryBlue, width: 1.5),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _noteInputController,
+                  maxLines: 4,
+                  minLines: 1,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    hintText: "Send a personal note to ${_student.firstName}...",
+                    hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: textMuted),
+                    filled: true,
+                    fillColor: bgSurface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                     ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: const BorderSide(color: primaryBlue, width: 1.5),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _isSendingNote ? null : _sendPersonalNote,
-                  icon: _isSendingNote
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: primaryBlue),
-                        )
-                      : const Icon(Icons.send_rounded, color: primaryBlue, size: 24),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFEFF6FF),
-                    padding: const EdgeInsets.all(12),
-                  ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _isSendingNote ? null : _sendPersonalNote,
+                icon: _isSendingNote
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: primaryBlue),
+                      )
+                    : const Icon(Icons.send_rounded, color: primaryBlue, size: 24),
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  padding: const EdgeInsets.all(12),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ],
@@ -3736,6 +3762,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
   void _openEditProfileDialog() {
     final nameCtrl = TextEditingController(text: _student.fullName);
     final phoneCtrl = TextEditingController(text: _student.phone);
+    final dobCtrl = TextEditingController(text: _student.dob);
     final emailCtrl = TextEditingController(text: _student.email);
     final regCtrl = TextEditingController(text: _student.registrationNumber);
     final courseCtrl = TextEditingController(text: _student.course);
@@ -3830,12 +3857,62 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                   children: [
                     Expanded(child: _buildTextField("Phone Number", phoneCtrl)),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildTextField("Registration No", regCtrl)),
+                    Expanded(child: _buildTextField("College Roll No.", regCtrl)),
                   ],
                 ),
                 const SizedBox(height: 12),
 
                 _buildTextField("Email ID", emailCtrl),
+                const SizedBox(height: 12),
+
+                // Date of Birth Field
+                Text("Date of Birth", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: () async {
+                    DateTime initial = DateTime(2004, 1, 1);
+                    if (dobCtrl.text.isNotEmpty) {
+                      final parts = dobCtrl.text.split('/');
+                      if (parts.length == 3) {
+                        final d = int.tryParse(parts[0]);
+                        final m = int.tryParse(parts[1]);
+                        final y = int.tryParse(parts[2]);
+                        if (d != null && m != null && y != null) {
+                          initial = DateTime(y, m, d);
+                        }
+                      }
+                    }
+                    final picked = await showDatePicker(
+                      context: modalCtx,
+                      initialDate: initial,
+                      firstDate: DateTime(1980),
+                      lastDate: DateTime.now().subtract(const Duration(days: 365 * 14)),
+                      helpText: "SELECT DATE OF BIRTH",
+                    );
+                    if (picked != null) {
+                      final dayStr = picked.day.toString().padLeft(2, '0');
+                      final monthStr = picked.month.toString().padLeft(2, '0');
+                      setModalState(() {
+                        dobCtrl.text = "$dayStr/$monthStr/${picked.year}";
+                      });
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: IgnorePointer(
+                    child: TextFormField(
+                      controller: dobCtrl,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        hintText: "DD/MM/YYYY",
+                        filled: true,
+                        fillColor: bgSurface,
+                        suffixIcon: const Icon(Icons.calendar_today_rounded, size: 20, color: primaryBlue),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 12),
 
                 Row(
@@ -3862,6 +3939,8 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                         'room': roomCtrl.text.trim(),
                         'bedNumber': bedCtrl.text.trim(),
                         'phone': phoneCtrl.text.trim(),
+                        'dob': dobCtrl.text.trim(),
+                        'dateOfBirth': dobCtrl.text.trim(),
                         'email': emailCtrl.text.trim(),
                         'registrationNumber': regCtrl.text.trim(),
                         'course': courseCtrl.text.trim(),
@@ -3880,6 +3959,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                           firstName: updatedFields['fullName']!.split(' ').first,
                           email: updatedFields['email']!,
                           phone: updatedFields['phone']!,
+                          dob: updatedFields['dob'] ?? _student.dob,
                           registrationNumber: updatedFields['registrationNumber']!,
                           course: updatedFields['course']!,
                           branch: updatedFields['branch']!,
@@ -4065,7 +4145,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                   children: [
                     const TextSpan(text: "Are you sure you want to permanently delete the resident profile of "),
                     TextSpan(
-                      text: "${_student.fullName} (${_student.registrationNumber})",
+                      text: "${_student.fullName} (${_student.displayRollNo})",
                       style: const TextStyle(fontWeight: FontWeight.w800, color: primaryDark),
                     ),
                     const TextSpan(text: " from "),

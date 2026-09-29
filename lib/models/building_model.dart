@@ -15,6 +15,7 @@ class BuildingModel {
   final String wardenName;
   final String wardenPhone;
   final String? staffId;
+  final String? messName; // Optional assigned mess name, or null/'No Mess'
   final List<String> amenities;
   final String description;
   final DateTime createdAt;
@@ -35,6 +36,7 @@ class BuildingModel {
     this.wardenName = 'Warden In-Charge',
     this.wardenPhone = '',
     this.staffId,
+    this.messName,
     this.amenities = const [
       'High-Speed Wi-Fi',
       'AC Rooms',
@@ -101,6 +103,7 @@ class BuildingModel {
       wardenName: data['wardenName']?.toString() ?? 'Warden In-Charge',
       wardenPhone: data['wardenPhone']?.toString() ?? '',
       staffId: data['staffId']?.toString(),
+      messName: data['messName']?.toString(),
       amenities: (data['amenities'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
           const [
             'High-Speed Wi-Fi',
@@ -133,6 +136,7 @@ class BuildingModel {
       'wardenName': wardenName,
       'wardenPhone': wardenPhone,
       'staffId': staffId,
+      'messName': messName,
       'amenities': amenities,
       'description': description,
       'createdAt': Timestamp.fromDate(createdAt),
@@ -155,6 +159,7 @@ class BuildingModel {
     String? wardenName,
     String? wardenPhone,
     String? staffId,
+    String? messName,
     List<String>? amenities,
     String? description,
     DateTime? createdAt,
@@ -175,6 +180,7 @@ class BuildingModel {
       wardenName: wardenName ?? this.wardenName,
       wardenPhone: wardenPhone ?? this.wardenPhone,
       staffId: staffId ?? this.staffId,
+      messName: messName ?? this.messName,
       amenities: amenities ?? this.amenities,
       description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,

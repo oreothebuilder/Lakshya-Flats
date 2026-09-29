@@ -28,18 +28,15 @@ final List<OnboardingItem> onboardingItems = [
     title: "All-Inclusive Amenities",
     description:
         "Mess, laundry, pick & drop, and electricity—everything you need in one package.",
-    networkImageUrl:
-        "https://images.unsplash.com/photo-1540518614846-7eded433c457?q=80&w=1000&auto=format&fit=crop",
+    imagePath: "assets/images/onboarding_living_room.jpg",
   ),
   OnboardingItem(
     title: "Join the Community",
     description:
         "Sign up to view your room details, rent agreement, and start your stress-free campus living experience.",
-    networkImageUrl: "",
+    imagePath: "assets/images/onboarding_bedroom.jpg",
     isSplitLayout: true,
-    splitTopImage:
-        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000&auto=format&fit=crop",
-    splitBottomImage:
-        "https://images.unsplash.com/photo-1617806118233-18e1de247200?q=80&w=1000&auto=format&fit=crop",
+    splitTopImage: "assets/images/onboarding_bedroom.jpg",
+    splitBottomImage: "assets/images/onboarding_balcony.jpg",
   ),
 ];

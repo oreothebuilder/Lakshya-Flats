@@ -52,10 +52,23 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   void initState() {
     super.initState();
     _activeUser = widget.currentUser;
+    _refreshActiveUser();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToActiveMeal();
       _checkFirstTimeUser();
     });
+  }
+
+  Future<void> _refreshActiveUser() async {
+    final uid = widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      final updated = await FirestoreService().getAppUser(uid, emailHint: widget.currentUser?.email);
+      if (updated != null && mounted) {
+        setState(() {
+          _activeUser = updated;
+        });
+      }
+    }
   }
 
   @override
@@ -78,7 +91,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       TourStep(
         targetKey: _profileCardKey,
         title: "Resident Room Details",
-        description: "Check your allocated building, room number, contact information, and current residency status at a glance.",
+        description: "Check your allocated building, room and bed number, contact information, and residency status at a glance.",
         icon: Icons.domain_rounded,
         category: "Resident Info",
         borderRadius: BorderRadius.circular(24),
@@ -669,7 +682,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     ),
                   ),
                   Text(
-                    "${_activeUser?.building ?? widget.currentUser?.building ?? 'Lakshya'} • ${_activeUser?.room ?? widget.currentUser?.room ?? 'Resident'}",
+                    "${_activeUser?.building ?? widget.currentUser?.building ?? 'Lakshya'} • ${_activeUser?.displayRoomAndBed ?? widget.currentUser?.displayRoomAndBed ?? 'Resident'}",
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.plusJakartaSans(
@@ -689,6 +702,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               _activeUser?.uid ?? widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
               building: _activeUser?.building ?? widget.currentUser?.building,
               regNo: _activeUser?.registrationNumber ?? widget.currentUser?.registrationNumber,
+              userCreatedAt: _activeUser?.createdAt ?? widget.currentUser?.createdAt,
             ),
             builder: (context, notifSnapshot) {
               final notifs = notifSnapshot.data ?? [];
@@ -967,8 +981,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                "ROOM & STATUS",
+                                               Text(
+                                                "ROOM & BED",
                                                 style: GoogleFonts.plusJakartaSans(
                                                   fontSize: 9,
                                                   fontWeight: FontWeight.w800,
@@ -976,8 +990,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                                   letterSpacing: 0.5,
                                                 ),
                                               ),
+                                              const SizedBox(height: 1),
                                               Text(
-                                                (_activeUser ?? widget.currentUser)?.room ?? "Active",
+                                                (_activeUser ?? widget.currentUser)?.displayRoomAndBed ?? "Assigned",
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                                 style: GoogleFonts.plusJakartaSans(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w700,
@@ -1008,6 +1025,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '',
                   building: widget.currentUser?.building,
                   regNo: widget.currentUser?.registrationNumber,
+                  userCreatedAt: widget.currentUser?.createdAt,
                 ),
                 builder: (context, notifSnapshot) {
                   final notifs = notifSnapshot.data ?? [];
@@ -1213,8 +1231,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 builder: (context, _) {
                   final menuService = MessMenuService();
                   final currentDayName = menuService.getCurrentDayName();
-                  final messName = menuService.resolveMessForBuilding(widget.currentUser?.building);
-                  final todayMenu = menuService.getTodayMenu(messName);
+                  final isNoMess = menuService.isBuildingNoMess(widget.currentUser?.building);
+                  final messName = isNoMess
+                      ? "No Mess Facility"
+                      : menuService.resolveMessForBuilding(widget.currentUser?.building);
+                  final todayMenu = isNoMess ? null : menuService.getTodayMenu(messName);
 
                   String getMealImage(MealType type) {
                     switch (type) {
@@ -1229,7 +1250,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     }
                   }
 
-                  final meals = todayMenu?.meals ?? [];
+                  final meals = todayMenu?.meals
+                      .where((m) => m.items.any((item) => item.trim().isNotEmpty))
+                      .toList() ?? [];
 
                   return Container(
                     key: _messMenuKey,
@@ -1319,26 +1342,105 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        // Horizontal scrollable meal tiles
-                        SizedBox(
-                          height: 180,
-                          child: SingleChildScrollView(
-                            controller: _mealScrollController,
-                            scrollDirection: Axis.horizontal,
-                            physics: const BouncingScrollPhysics(),
+                        // Horizontal scrollable meal tiles or empty state
+                        if (isNoMess)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
                             child: Row(
-                              children: meals.map((meal) {
-                                return _buildMealTile(
-                                  title: meal.title,
-                                  time: meal.timeSlot,
-                                  menu: meal.items.join(", "),
-                                  imagePath: getMealImage(meal.type),
-                                  isActive: _getActiveMeal() == meal.title,
-                                );
-                              }).toList(),
+                              children: [
+                                const Icon(Icons.no_meals_rounded, color: Color(0xFF94A3B8), size: 28),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "No Mess Facility Assigned",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        "No meal service is linked to your building.",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 12,
+                                          color: const Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else if (meals.isEmpty)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.restaurant_rounded, color: Color(0xFFCBD5E1), size: 28),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "No Meals Scheduled Today",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        "Check the weekly menu schedule for upcoming meals.",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 12,
+                                          color: const Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          SizedBox(
+                            height: 180,
+                            child: SingleChildScrollView(
+                              controller: _mealScrollController,
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: Row(
+                                children: meals.map((meal) {
+                                  return _buildMealTile(
+                                    title: meal.title,
+                                    time: meal.timeSlot,
+                                    menu: meal.items.where((i) => i.trim().isNotEmpty).join(", "),
+                                    imagePath: getMealImage(meal.type),
+                                    isActive: _getActiveMeal() == meal.title,
+                                  );
+                                }).toList(),
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                   );

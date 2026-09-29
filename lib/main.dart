@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'config/cloudinary_config.dart';
 import 'services/navigation_service.dart';
+import 'services/push_notification_service.dart';
 import 'screens/auth_gate.dart';
 import 'theme/app_colors.dart';
 
@@ -24,6 +25,13 @@ void main() async {
     debugPrint("Firebase successfully initialized with lakshya-flats.");
   } catch (e) {
     debugPrint("Firebase initialization note: $e");
+  }
+
+  // Initialize Push Notification Service (FCM & Local Notifications)
+  try {
+    await PushNotificationService().initialize();
+  } catch (e) {
+    debugPrint("Push notification initialization error: $e");
   }
 
   SystemChrome.setSystemUIOverlayStyle(

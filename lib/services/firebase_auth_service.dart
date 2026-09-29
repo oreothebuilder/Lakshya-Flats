@@ -53,7 +53,13 @@ class FirebaseAuthService {
       return clean.toLowerCase();
     }
 
-    // Treat as student registration number - lookup student in Firestore
+    // 1. Fast, unauthenticated check in registration_lookup
+    final lookup = await FirestoreService().getRegistrationLookup(clean);
+    if (lookup != null && lookup['email'] != null && lookup['email'].toString().isNotEmpty) {
+      return lookup['email'].toString().toLowerCase().trim();
+    }
+
+    // 2. Treat as student registration number - lookup student in Firestore
     final studentData = await FirestoreService().findStudentByRegNoOrEmail(clean);
     if (studentData != null && studentData['email'] != null && studentData['email'].toString().isNotEmpty) {
       return studentData['email'].toString().toLowerCase().trim();
@@ -98,15 +104,22 @@ class FirebaseAuthService {
         }
       } else if (authError.code == 'user-not-found' || authError.code == 'invalid-credential') {
         // Resident student auto-provisioning fallback:
-        // Check if student profile exists in Firestore (saved during admin onboarding)
-        final studentData = await FirestoreService().findStudentByRegNoOrEmail(resolvedEmail);
+        // Check registration_lookup first (works unauthenticated), then users collection
+        var studentData = await FirestoreService().getRegistrationLookup(resolvedEmail);
+        studentData ??= await FirestoreService().findStudentByRegNoOrEmail(resolvedEmail);
+
         if (studentData != null) {
           final rawFirst = (studentData['firstName'] ?? '').toString().trim();
           final rawReg = (studentData['registrationNumber'] ?? studentData['regNo'] ?? '').toString().trim();
           final defaultFormulaPassword = "$rawFirst@$rawReg".trim();
           final storedDefaultPassword = (studentData['defaultPassword'] ?? defaultFormulaPassword).toString().trim();
 
-          if (password.trim() == storedDefaultPassword || password.trim() == defaultFormulaPassword) {
+          final isPasswordCorrect = password.trim() == storedDefaultPassword ||
+              password.trim() == defaultFormulaPassword ||
+              (storedDefaultPassword.isNotEmpty && password.trim().toLowerCase() == storedDefaultPassword.toLowerCase()) ||
+              (defaultFormulaPassword.isNotEmpty && password.trim().toLowerCase() == defaultFormulaPassword.toLowerCase());
+
+          if (isPasswordCorrect) {
             try {
               credential = await _auth.createUserWithEmailAndPassword(
                 email: resolvedEmail,

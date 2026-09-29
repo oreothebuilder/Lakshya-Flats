@@ -12,6 +12,7 @@ class RentalAgreementData {
   final String mobileNumber;
   final String email;
   final String regNumber;
+  final String dob;
   final String course;
   final String branch;
   final String hometownAddress;
@@ -48,6 +49,7 @@ class RentalAgreementData {
     required this.mobileNumber,
     required this.email,
     required this.regNumber,
+    this.dob = '',
     required this.course,
     required this.branch,
     required this.hometownAddress,

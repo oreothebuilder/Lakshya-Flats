@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lakshya_residency/models/bill_model.dart';
 import 'package:lakshya_residency/models/mess_menu_model.dart';
+import 'package:lakshya_residency/models/user_role_model.dart';
+import 'package:lakshya_residency/models/student_profile_model.dart';
 
 void main() {
   group('BillModel Integration & Verification Tests', () {
@@ -34,7 +36,8 @@ void main() {
         billType: 'Utility bills',
         amount: 2500,
         paidAmount: 0,
-        status: 'Pending',
+        status: 'Pending Verification',
+        paymentStatus: 'Pending Verification',
         dueDate: DateTime.now().add(const Duration(days: 2)),
         invoiceNo: 'INV-2026-002',
         transactionRef: '123456789012',
@@ -166,6 +169,112 @@ void main() {
       expect(restored.days.length, 1);
       expect(restored.days[0].dayName, 'Sunday');
       expect(restored.days[0].meals[0].items, ['Chole Bhature']);
+    });
+  });
+
+  group('Room & Bed Assignment and Display Tests', () {
+    test('AppUser parses and formats room and bed numbers correctly', () {
+      final user = AppUser(
+        uid: 'user_001',
+        email: 'hardikx07@gmail.com',
+        fullName: 'Hardik Tomar',
+        role: AppRole.student,
+        building: 'Shivalya',
+        room: '101',
+        bedNumber: '1',
+      );
+
+      expect(user.displayBed, 'Bed 1');
+      expect(user.displayRoomOnly, '101');
+      expect(user.displayRoomAndBed, '101 • Bed 1');
+    });
+
+    test('AppUser handles already prefixed Bed numbers without duplicate Bed', () {
+      final user = AppUser(
+        uid: 'user_002',
+        email: 'resident@lakshya.com',
+        fullName: 'Resident User',
+        role: AppRole.student,
+        building: 'Ishaan',
+        room: '12',
+        bedNumber: 'Bed 2',
+      );
+
+      expect(user.displayBed, 'Bed 2');
+      expect(user.displayRoomOnly, '12');
+      expect(user.displayRoomAndBed, '12 • Bed 2');
+    });
+
+    test('AppUser extracts bed from combined room string if bedNumber is omitted', () {
+      final user = AppUser(
+        uid: 'user_003',
+        email: 'student@lakshya.com',
+        fullName: 'Student Three',
+        role: AppRole.student,
+        building: 'Tirupati',
+        room: 'Room 6 - Bed A',
+      );
+
+      expect(user.displayBed, 'Bed A');
+      expect(user.displayRoomOnly, 'Room 6');
+      expect(user.displayRoomAndBed, 'Room 6 • Bed A');
+    });
+
+    test('AppUser.fromFirestore correctly extracts bedNumber and bed keys', () {
+      final user1 = AppUser.fromFirestore(
+        uid: 'uid_1',
+        data: {
+          'fullName': 'Hardik Tomar',
+          'email': 'hardikx07@gmail.com',
+          'building': 'Shivalya',
+          'room': '101',
+          'bedNumber': '1',
+        },
+      );
+      expect(user1.bedNumber, '1');
+      expect(user1.displayRoomAndBed, '101 • Bed 1');
+
+      final user2 = AppUser.fromFirestore(
+        uid: 'uid_2',
+        data: {
+          'fullName': 'Testing Resident',
+          'email': 'test@gmail.com',
+          'building': 'Lakshya',
+          'room': '204',
+          'bed': '2',
+        },
+      );
+      expect(user2.bedNumber, '2');
+      expect(user2.displayRoomAndBed, '204 • Bed 2');
+    });
+
+    test('StudentProfile formats displayRoomAndBed correctly', () {
+      final profile = StudentProfile(
+        id: 'STU-568225-149',
+        studentId: 'STU-568225-149',
+        fullName: 'Hardik Tomar',
+        firstName: 'Hardik',
+        email: 'hardikx07@gmail.com',
+        phone: '7417739939',
+        registrationNumber: '2427030069',
+        course: 'Btech',
+        branch: 'CSE',
+        building: 'Shivalya',
+        room: '101',
+        bedNumber: '1',
+        plan: 'Full Package',
+        paymentFrequency: 'Pay Monthly',
+        monthlyRent: '12,500',
+        securityDeposit: '25,000',
+        guardianName: 'Guardian',
+        guardianPhone: '9968612114',
+        guardianRelationship: 'Father',
+        dietaryPreference: 'Vegetarian',
+      );
+
+      expect(profile.displayBed, 'Bed 1');
+      expect(profile.displayRoomOnly, '101');
+      expect(profile.displayRoomAndBed, '101 • Bed 1');
     });
   });
 }

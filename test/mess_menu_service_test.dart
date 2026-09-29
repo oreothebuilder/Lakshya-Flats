@@ -59,5 +59,68 @@ void main() {
       expect(sunMenu, isNotNull);
       expect(sunMenu!.dayName, "Sunday");
     });
+
+    test('createMess dynamically creates a new mess schedule and adds to availableMesses', () async {
+      final initialMessesCount = service.availableMesses.length;
+      await service.createMess("Lakshya Grand Mess");
+
+      expect(service.availableMesses, contains("Lakshya Grand Mess"));
+      expect(service.availableMesses.length, initialMessesCount + 1);
+
+      final grandMenu = service.getDayMenuByName("Lakshya Grand Mess", "Monday");
+      expect(grandMenu, isNotNull);
+      expect(grandMenu!.meals.length, 4);
+    });
+
+    test('setBuildingMess dynamically maps building to mess and recognizes No Mess', () {
+      service.setBuildingMess("Emerald Heights", "Lakshya Grand Mess");
+      expect(service.resolveMessForBuilding("Emerald Heights"), "Lakshya Grand Mess");
+      expect(service.isBuildingNoMess("Emerald Heights"), isFalse);
+
+      service.setBuildingMess("Diamond Tower", "No Mess");
+      expect(service.isBuildingNoMess("Diamond Tower"), isTrue);
+    });
+
+    test('Blank meal slots are completely omitted when filtered for customer portal', () {
+      // Simulate day menu where evening snack is empty (0 items)
+      final dayMenu = DayMenu(
+        dayName: "Monday",
+        shortDay: "Mon",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "08:00 AM", icon: "🌅", items: ["Poha", "Tea"]),
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "01:00 PM", icon: "🍱", items: ["Dal", "Roti", "Rice"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM", icon: "☕", items: []), // Empty
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "08:00 PM", icon: "🍲", items: ["Paneer", "Roti"]),
+        ],
+      );
+
+      final activeMeals = dayMenu.meals
+          .where((m) => m.items.any((item) => item.trim().isNotEmpty))
+          .toList();
+
+      expect(activeMeals.length, 3);
+      expect(activeMeals.map((m) => m.type), isNot(contains(MealType.snacks)));
+      expect(activeMeals.map((m) => m.title).toList(), ["Breakfast", "Lunch", "Dinner"]);
+
+      // Simulate next day where breakfast is empty
+      final nextDayMenu = DayMenu(
+        dayName: "Tuesday",
+        shortDay: "Tue",
+        meals: [
+          MealInfo(type: MealType.breakfast, title: "Breakfast", timeSlot: "08:00 AM", icon: "🌅", items: ["   "]), // Whitespace only
+          MealInfo(type: MealType.lunch, title: "Lunch", timeSlot: "01:00 PM", icon: "🍱", items: ["Rajma", "Rice"]),
+          MealInfo(type: MealType.snacks, title: "Evening Snacks", timeSlot: "05:00 PM", icon: "☕", items: ["Samosa", "Chai"]),
+          MealInfo(type: MealType.dinner, title: "Dinner", timeSlot: "08:00 PM", icon: "🍲", items: ["Khichdi"]),
+        ],
+      );
+
+      final nextActiveMeals = nextDayMenu.meals
+          .where((m) => m.items.any((item) => item.trim().isNotEmpty))
+          .toList();
+
+      expect(nextActiveMeals.length, 3);
+      expect(nextActiveMeals.map((m) => m.type), isNot(contains(MealType.breakfast)));
+      expect(nextActiveMeals.map((m) => m.title).toList(), ["Lunch", "Evening Snacks", "Dinner"]);
+    });
   });
 }

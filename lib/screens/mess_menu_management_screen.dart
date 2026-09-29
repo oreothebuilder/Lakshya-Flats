@@ -93,6 +93,102 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
     );
   }
 
+  void _openAddMessDialog() {
+    final controller = TextEditingController();
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.restaurant_rounded, color: Color(0xFF0056D2), size: 20),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                "Create New Mess",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Create a new 7-day mess schedule to assign to hostel buildings.",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12.5,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: "e.g. Ishaan Mess, Royal Dining",
+                  hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF94A3B8)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+              child: Text(
+                "Cancel",
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      final name = controller.text.trim();
+                      if (name.isEmpty) return;
+                      setDialogState(() => isSaving = true);
+                      await _menuService.createMess(name);
+                      if (mounted) {
+                        setState(() => _selectedMess = name);
+                      }
+                      if (dialogCtx.mounted) {
+                        Navigator.pop(dialogCtx);
+                      }
+                      if (mounted) {
+                        AppToast.showSuccess(context, "Mess '$name' created successfully!");
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0056D2),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: isSaving
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text("Create Mess", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dayMenu = _menuService.getDayMenu(_selectedMess, _selectedDayShort);
@@ -157,7 +253,7 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                "SELECT HOSTEL BUILDING",
+                "SELECT HOSTEL BUILDING / MESS",
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
@@ -168,15 +264,45 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
             ),
             const SizedBox(height: 10),
 
-            // Hostel Building Filter Chips
+            // Hostel Building Filter Chips + Add Mess Chip
             SizedBox(
               height: 42,
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
-                itemCount: _menuService.availableMesses.length,
+                itemCount: _menuService.availableMesses.length + (widget.isAdmin ? 1 : 0),
                 separatorBuilder: (context, index) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
+                  // Add Mess chip at the end
+                  if (index == _menuService.availableMesses.length) {
+                    return GestureDetector(
+                      onTap: _openAddMessDialog,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0xFF93C5FD), width: 1.2),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.add_rounded, size: 16, color: Color(0xFF0056D2)),
+                            const SizedBox(width: 4),
+                            Text(
+                              "Add Mess",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0056D2),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
                   final messName = _menuService.availableMesses[index];
                   final isSelected = messName == _selectedMess;
                   return GestureDetector(
@@ -455,6 +581,26 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
                           ),
                         ),
                       ),
+                      if (!meal.items.any((i) => i.trim().isNotEmpty)) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                          ),
+                          child: Text(
+                            "EMPTY (HIDDEN)",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF64748B),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -481,60 +627,77 @@ class _MessMenuManagementScreenState extends State<MessMenuManagementScreen> {
           // Items Chips Container
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 10,
-              children: meal.items.map((item) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.restaurant_menu_rounded,
-                        size: 13,
-                        color: Color(0xFF64748B),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        item,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1E293B),
+            child: meal.items.any((i) => i.trim().isNotEmpty)
+                ? Wrap(
+                    spacing: 8,
+                    runSpacing: 10,
+                    children: meal.items.where((i) => i.trim().isNotEmpty).map((item) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
-                      ),
-                      if (widget.isAdmin) ...[
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () {
-                            _menuService.removeMealItem(
-                              _selectedMess,
-                              _selectedDayShort,
-                              meal.type,
-                              item,
-                            );
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.only(left: 2),
-                            child: Icon(
-                              Icons.close_rounded,
-                              size: 14,
-                              color: Color(0xFF94A3B8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.restaurant_menu_rounded,
+                              size: 13,
+                              color: Color(0xFF64748B),
                             ),
+                            const SizedBox(width: 6),
+                            Text(
+                              item,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF1E293B),
+                              ),
+                            ),
+                            if (widget.isAdmin) ...[
+                              const SizedBox(width: 4),
+                              GestureDetector(
+                                onTap: () {
+                                  _menuService.removeMealItem(
+                                    _selectedMess,
+                                    _selectedDayShort,
+                                    meal.type,
+                                    item,
+                                  );
+                                },
+                                child: const Padding(
+                                  padding: EdgeInsets.only(left: 2),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    size: 14,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  )
+                : Row(
+                    children: [
+                      const Icon(Icons.visibility_off_outlined, size: 16, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "No menu items added (hidden from residents' portal)",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: const Color(0xFF94A3B8),
                           ),
                         ),
-                      ],
+                      ),
                     ],
                   ),
-                );
-              }).toList(),
-            ),
           ),
         ],
       ),
@@ -610,7 +773,11 @@ class _EditMessMenuBottomSheetState extends State<_EditMessMenuBottomSheet> {
   void _saveChanges() {
     for (var meal in widget.dayMenu.meals) {
       final newTime = _timeControllers[meal.type]?.text.trim() ?? meal.timeSlot;
-      final newItems = _mealItems[meal.type] ?? meal.items;
+      final rawItems = _mealItems[meal.type] ?? meal.items;
+      final newItems = rawItems
+          .map((i) => i.trim())
+          .where((i) => i.isNotEmpty)
+          .toList();
 
       widget.menuService.updateMealTimeSlot(
         widget.messName,
@@ -727,9 +894,26 @@ class _EditMessMenuBottomSheetState extends State<_EditMessMenuBottomSheet> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          if (items.isNotEmpty) ...[
+                            InkWell(
+                              onTap: () => setState(() => items.clear()),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                child: Text(
+                                  "Clear All",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFFDC2626),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           SizedBox(
-                            width: 145,
+                            width: 135,
                             height: 38,
                             child: TextField(
                               controller: _timeControllers[meal.type],
@@ -752,30 +936,51 @@ class _EditMessMenuBottomSheetState extends State<_EditMessMenuBottomSheet> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Existing Items Chips with remove button
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: items.map((item) {
-                          return Chip(
-                            label: Text(
-                              item,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                      // Existing Items Chips with remove button or empty notice
+                      if (items.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.visibility_off_outlined, size: 14, color: Color(0xFF94A3B8)),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  "Slot empty — will not appear on residents' apps.",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    fontStyle: FontStyle.italic,
+                                    color: const Color(0xFF94A3B8),
+                                  ),
+                                ),
                               ),
-                            ),
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () {
-                              setState(() {
-                                items.remove(item);
-                              });
-                            },
-                            backgroundColor: Colors.white,
-                            side: const BorderSide(color: Color(0xFFCBD5E1)),
-                          );
-                        }).toList(),
-                      ),
+                            ],
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: items.map((item) {
+                            return Chip(
+                              label: Text(
+                                item,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              deleteIcon: const Icon(Icons.close, size: 14),
+                              onDeleted: () {
+                                setState(() {
+                                  items.remove(item);
+                                });
+                              },
+                              backgroundColor: Colors.white,
+                              side: const BorderSide(color: Color(0xFFCBD5E1)),
+                            );
+                          }).toList(),
+                        ),
                       const SizedBox(height: 10),
 
                       // Add Item Text Field

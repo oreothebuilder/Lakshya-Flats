@@ -34,6 +34,9 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FirestoreService().cleanupDuplicateStudentProfiles();
+    });
     if (widget.initialBuilding != null && widget.initialBuilding!.isNotEmpty) {
       // Find matching item or set directly
       for (final b in _buildings) {
@@ -69,16 +72,16 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
         }
       }
 
-      // Search Query Filter
+      // Search Query Filter: matches student name or college roll no
       if (_searchQuery.isNotEmpty) {
-        final query = _searchQuery.toLowerCase();
+        final query = _searchQuery.toLowerCase().trim();
         final matchesName = student.fullName.toLowerCase().contains(query);
+        final matchesRollNo = student.registrationNumber.toLowerCase().contains(query);
         final matchesRoom = student.room.toLowerCase().contains(query);
         final matchesPhone = student.phone.toLowerCase().contains(query);
         final matchesEmail = student.email.toLowerCase().contains(query);
-        final matchesReg = student.registrationNumber.toLowerCase().contains(query);
         final matchesStudentId = student.studentId.toLowerCase().contains(query) || student.id.toLowerCase().contains(query);
-        return matchesName || matchesRoom || matchesPhone || matchesEmail || matchesReg || matchesStudentId;
+        return matchesName || matchesRollNo || matchesRoom || matchesPhone || matchesEmail || matchesStudentId;
       }
 
       return true;
@@ -482,18 +485,18 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
+                                color: const Color(0xFFEFF6FF),
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                border: Border.all(color: const Color(0xFFBFDBFE)),
                               ),
                               child: Text(
-                                student.studentId.isNotEmpty ? student.studentId : student.id,
+                                student.displayRollNo,
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF334155),
+                                  color: const Color(0xFF1D4ED8),
                                   letterSpacing: 0.3,
                                 ),
                               ),
@@ -501,7 +504,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                "${student.building} • ${student.room}",
+                                "${student.building} • ${student.displayRoomAndBed}",
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.plusJakartaSans(
@@ -679,7 +682,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                     });
                   },
                   decoration: InputDecoration(
-                    hintText: "Search name, ID (STU-...), room, phone, reg no...",
+                    hintText: "Search by student name or roll no...",
                     hintStyle: GoogleFonts.plusJakartaSans(fontSize: 14, color: Colors.grey[500]),
                     border: InputBorder.none,
                   ),
@@ -798,6 +801,85 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
               child: StreamBuilder<List<StudentProfile>>(
                 stream: FirestoreService().getStudentsStream(),
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    final err = snapshot.error.toString();
+                    return Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(18),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFEF2F2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.cloud_off_rounded, size: 48, color: Color(0xFFDC2626)),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              "Database Connection Failed",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "Unable to load student records from Cloud Firestore.",
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: SelectableText(
+                                err.contains("permission-denied")
+                                    ? "Permission Denied: Your account doesn't have read permission in Firestore rules."
+                                    : (err.contains("unavailable")
+                                        ? "Firestore service is unavailable. Please check internet connection."
+                                        : "Details: $err"),
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFB91C1C),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {});
+                              },
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: Text(
+                                "Retry Connection",
+                                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF003896),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
                   if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                     return const Center(
                       child: CircularProgressIndicator(color: Color(0xFF003896)),

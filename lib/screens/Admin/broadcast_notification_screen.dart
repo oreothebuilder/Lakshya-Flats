@@ -7,6 +7,7 @@ import '../../services/firestore_service.dart';
 import '../../models/student_profile_model.dart';
 import '../../models/bill_model.dart';
 import '../../models/broadcast_notice_model.dart';
+import '../../services/push_notification_service.dart';
 
 class BroadcastAudience {
   static const String allStudents = "All students";
@@ -841,6 +842,22 @@ class _BroadcastNotificationScreenState extends State<BroadcastNotificationScree
                 debugPrint("Notice cloud save error: $e");
               }
 
+              // 3. Dispatch Push Notification (Android/iOS banner pop-up even when app is closed)
+              try {
+                PushNotificationService().sendBroadcastPushNotification(
+                  title: heading,
+                  body: description,
+                  audience: audienceSummary,
+                  selectedBuildings: _selectedBuildings.toList(),
+                  selectedStudentIds: _selectedStudentIds.toList(),
+                  category: heading.toLowerCase().contains('defaulter') || heading.toLowerCase().contains('fee')
+                      ? 'Payment'
+                      : (heading.toLowerCase().contains('mess') ? 'Mess' : 'General'),
+                );
+              } catch (e) {
+                debugPrint("Push notification broadcast error: $e");
+              }
+
               _showSnackbar("Broadcast notification sent successfully to $recipientCount recipients!");
             },
             style: ElevatedButton.styleFrom(
@@ -1203,7 +1220,7 @@ class _BroadcastNotificationScreenState extends State<BroadcastNotificationScree
                     },
                     style: GoogleFonts.plusJakartaSans(fontSize: 13.5),
                     decoration: InputDecoration(
-                      hintText: "Search by name, room, or registration number...",
+                      hintText: "Search by student name or roll no...",
                       hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF94A3B8)),
                       prefixIcon: const Icon(Icons.search_rounded, size: 20, color: Color(0xFF64748B)),
                       suffixIcon: _studentSearchQuery.isNotEmpty
@@ -1299,7 +1316,7 @@ class _BroadcastNotificationScreenState extends State<BroadcastNotificationScree
                                   ),
                                 ),
                                 subtitle: Text(
-                                  "Room ${student.room} • ${student.building} • ${student.registrationNumber}",
+                                  "${student.building} • ${student.displayRoomAndBed}${student.registrationNumber.isNotEmpty ? ' • Roll No: ${student.registrationNumber}' : ''}",
                                   style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
                                 ),
                                 trailing: isSelected

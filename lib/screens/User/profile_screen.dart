@@ -255,8 +255,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _branch = studentData['branch'].toString();
         _branchController.text = _branch;
       }
-      if (studentData['dob'] != null && studentData['dob'].toString().isNotEmpty) {
-        _dob = studentData['dob'].toString();
+      final dobVal = studentData['dob']?.toString() ?? studentData['dateOfBirth']?.toString() ?? '';
+      if (dobVal.isNotEmpty) {
+        _dob = dobVal;
         _dobController.text = _dob;
       }
       final addr = studentData['hometownAddress']?.toString() ?? studentData['address']?.toString() ?? '';
@@ -412,6 +413,75 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showSnackbar("Error uploading document: $e", isSuccess: false);
     } finally {
       if (mounted) setState(() => _isUploadingDoc = false);
+    }
+  }
+
+  Future<void> _pickAndUpdateDateOfBirth() async {
+    DateTime initial = DateTime(2004, 1, 1);
+    if (_dob.isNotEmpty) {
+      final parts = _dob.split('/');
+      if (parts.length == 3) {
+        final d = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final y = int.tryParse(parts[2]);
+        if (d != null && m != null && y != null) {
+          initial = DateTime(y, m, d);
+        }
+      }
+    }
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1980),
+      lastDate: DateTime(now.year - 14, 12, 31),
+      helpText: "SELECT DATE OF BIRTH",
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF1D4ED8),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      final dayStr = picked.day.toString().padLeft(2, '0');
+      final monthStr = picked.month.toString().padLeft(2, '0');
+      final newDob = "$dayStr/$monthStr/${picked.year}";
+      setState(() {
+        _dob = newDob;
+        _dobController.text = newDob;
+      });
+
+      try {
+        final updates = {
+          'dob': newDob,
+          'dateOfBirth': newDob,
+        };
+        if (_studentDocId.isNotEmpty) {
+          await FirebaseFirestore.instance.collection('users').doc(_studentDocId).set(updates, SetOptions(merge: true));
+        }
+        if (_studentId.isNotEmpty && _studentId != _studentDocId) {
+          await FirebaseFirestore.instance.collection('users').doc(_studentId).set(updates, SetOptions(merge: true));
+        }
+        final authUser = FirebaseAuthService().currentUser;
+        if (authUser != null && authUser.uid != _studentDocId && authUser.uid != _studentId) {
+          await FirebaseFirestore.instance.collection('users').doc(authUser.uid).set(updates, SetOptions(merge: true));
+        }
+        if (mounted) {
+          _showSnackbar("Date of Birth updated successfully!", isSuccess: true);
+        }
+      } catch (e) {
+        debugPrint("Error updating DOB: $e");
+        if (mounted) {
+          _showSnackbar("Failed to save Date of Birth: $e", isSuccess: false);
+        }
+      }
     }
   }
 
@@ -937,7 +1007,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const Icon(Icons.apartment_rounded, color: Colors.white70, size: 14),
                           const SizedBox(width: 6),
                           Text(
-                            "${_building.isNotEmpty ? _building : 'Lakshya'} • Room ${_room.isNotEmpty ? _room : 'N/A'}${_bed.isNotEmpty ? ' ($_bed)' : ''}",
+                            "${_building.isNotEmpty ? _building : 'Lakshya'} • Room ${_room.isNotEmpty ? _room : 'N/A'}${_bed.isNotEmpty ? ' • ' + (_bed.toLowerCase().startsWith('bed') ? _bed : 'Bed ' + _bed) : ''}",
                             style: GoogleFonts.plusJakartaSans(
                               color: Colors.white.withValues(alpha: 0.85),
                               fontSize: 13,
@@ -1000,7 +1070,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 14),
                       _buildInfoField("Phone Number", _phoneController, _phone, false, keyboardType: TextInputType.phone),
                       const SizedBox(height: 14),
-                      _buildInfoField("Date of Birth", _dobController, _dob, false),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Date of Birth",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                              InkWell(
+                                onTap: _pickAndUpdateDateOfBirth,
+                                borderRadius: BorderRadius.circular(6),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _dob.isEmpty ? Icons.add_circle_outline_rounded : Icons.edit_outlined,
+                                        size: 14,
+                                        color: const Color(0xFF1D4ED8),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _dob.isEmpty ? "Add DOB" : "Edit",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF1D4ED8),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          InkWell(
+                            onTap: _pickAndUpdateDateOfBirth,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    _dob.isNotEmpty ? _dob : "Not provided (Tap to add)",
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: _dob.isNotEmpty ? const Color(0xFF0F172A) : const Color(0xFF2563EB),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Icon(
+                                    Icons.calendar_month_outlined,
+                                    size: 16,
+                                    color: _dob.isNotEmpty ? const Color(0xFF64748B) : const Color(0xFF2563EB),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 14),
                       _buildInfoField("College Registration Number", _regController, _reg, false),
                       const SizedBox(height: 14),
@@ -1051,7 +1190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           _buildStayBox("Building", _building.isNotEmpty ? _building : "Lakshya"),
                           _buildStayBox("Room No.", _room.isNotEmpty ? _room : "N/A"),
-                          _buildStayBox("Bed Type", _bed.isNotEmpty ? _bed : "Standard"),
+                          _buildStayBox("Bed Number", _bed.isNotEmpty ? (_bed.toLowerCase().startsWith('bed') ? _bed : 'Bed $_bed') : "Assigned"),
                           _buildStayBox("Move-in Date", _moveInDate.isNotEmpty ? _moveInDate : "Active"),
                         ],
                       ),

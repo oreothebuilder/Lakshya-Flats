@@ -17,7 +17,20 @@ class MessMenuService extends ChangeNotifier {
 
   Map<String, MessSchedule> get schedules => _schedules;
 
-  List<String> get availableMesses => ["Univ Homes", "Rameshwaram", "Shivalay"];
+  List<String> get availableMesses {
+    final list = _schedules.keys.toList();
+    for (final def in ["Univ Homes", "Rameshwaram", "Shivalay"]) {
+      if (!list.contains(def)) list.add(def);
+    }
+    return list;
+  }
+
+  final Map<String, String> _buildingMessMap = {};
+
+  void setBuildingMess(String buildingName, String messName) {
+    _buildingMessMap[buildingName.trim()] = messName.trim();
+    notifyListeners();
+  }
 
   void _listenToFirestore() {
     if (_isListening) return;
@@ -44,6 +57,21 @@ class MessMenuService extends ChangeNotifier {
       }, onError: (err) {
         debugPrint("MessMenuService firestore listen error: $err");
       });
+
+      // Also listen to buildings collection to dynamically track building-to-mess mapping
+      FirebaseFirestore.instance.collection('buildings').snapshots().listen((bSnap) {
+        for (var doc in bSnap.docs) {
+          final data = doc.data();
+          final bName = data['name']?.toString() ?? doc.id;
+          final mName = data['messName']?.toString();
+          if (mName != null && mName.isNotEmpty) {
+            _buildingMessMap[bName] = mName;
+          }
+        }
+        notifyListeners();
+      }, onError: (err) {
+        debugPrint("MessMenuService building mapping listen error: $err");
+      });
     } catch (e) {
       debugPrint("MessMenuService firestore init error: $e");
     }
@@ -65,6 +93,7 @@ class MessMenuService extends ChangeNotifier {
 
   Future<void> _saveScheduleToFirestore(String messName) async {
     try {
+      if (Firebase.apps.isEmpty) return;
       final schedule = _schedules[messName];
       if (schedule != null) {
         await FirebaseFirestore.instance
@@ -123,10 +152,106 @@ class MessMenuService extends ChangeNotifier {
 
   String resolveMessForBuilding(String? building) {
     if (building == null || building.trim().isEmpty) return "Univ Homes";
-    final b = building.toLowerCase();
-    if (b.contains("rameshwaram")) return "Rameshwaram";
-    if (b.contains("shivalay")) return "Shivalay";
+    final b = building.trim();
+
+    // Check dynamic mapping from buildings collection first
+    if (_buildingMessMap.containsKey(b)) {
+      final assigned = _buildingMessMap[b]!;
+      if (assigned.isNotEmpty && assigned.toLowerCase() != 'no mess') {
+        return assigned;
+      }
+      if (assigned.toLowerCase() == 'no mess') return "No Mess";
+    }
+    for (final entry in _buildingMessMap.entries) {
+      if (entry.key.toLowerCase() == b.toLowerCase()) {
+        final assigned = entry.value;
+        if (assigned.isNotEmpty && assigned.toLowerCase() != 'no mess') {
+          return assigned;
+        }
+        if (assigned.toLowerCase() == 'no mess') return "No Mess";
+      }
+    }
+
+    // Heuristics fallback
+    final bLower = b.toLowerCase();
+    for (final mess in availableMesses) {
+      if (bLower.contains(mess.toLowerCase())) return mess;
+    }
+
     return "Univ Homes";
+  }
+
+  bool isBuildingNoMess(String? building) {
+    if (building == null || building.trim().isEmpty) return false;
+    final b = building.trim();
+    final assigned = _buildingMessMap[b] ??
+        _buildingMessMap.entries
+            .firstWhere(
+              (e) => e.key.toLowerCase() == b.toLowerCase(),
+              orElse: () => const MapEntry('', ''),
+            )
+            .value;
+    return assigned.trim().toLowerCase() == 'no mess';
+  }
+
+  Future<void> createMess(String rawName) async {
+    final messName = rawName.trim();
+    if (messName.isEmpty) return;
+    if (_schedules.containsKey(messName)) return;
+
+    final days = _createDefaultWeekDays(messName);
+    final schedule = MessSchedule(messName: messName, days: days);
+    _schedules[messName] = schedule;
+    notifyListeners();
+    await _saveScheduleToFirestore(messName);
+  }
+
+  List<DayMenu> _createDefaultWeekDays(String messName) {
+    const daysMeta = [
+      {"full": "Monday", "short": "Mon"},
+      {"full": "Tuesday", "short": "Tue"},
+      {"full": "Wednesday", "short": "Wed"},
+      {"full": "Thursday", "short": "Thu"},
+      {"full": "Friday", "short": "Fri"},
+      {"full": "Saturday", "short": "Sat"},
+      {"full": "Sunday", "short": "Sun"},
+    ];
+    return daysMeta.map((dm) {
+      return DayMenu(
+        dayName: dm["full"]!,
+        shortDay: dm["short"]!,
+        meals: [
+          MealInfo(
+            type: MealType.breakfast,
+            title: "Breakfast",
+            timeSlot: "07:30 AM - 09:30 AM",
+            icon: "🌅",
+            items: ["Poha", "Tea"],
+          ),
+          MealInfo(
+            type: MealType.lunch,
+            title: "Lunch",
+            timeSlot: "12:30 PM - 02:30 PM",
+            icon: "☀️",
+            items: ["Dal", "Sabzi", "Roti", "Rice"],
+          ),
+          MealInfo(
+            type: MealType.snacks,
+            title: "Evening Snacks",
+            timeSlot: "05:00 PM - 06:00 PM",
+            icon: "☕",
+            items: ["Biscuits / Snacks", "Tea"],
+          ),
+          MealInfo(
+            type: MealType.dinner,
+            title: "Dinner",
+            timeSlot: "07:30 PM - 09:30 PM",
+            icon: "🌙",
+            items: ["Paneer Sabzi", "Dal", "Roti", "Rice"],
+          ),
+        ],
+      );
+    }).toList();
   }
 
   MessSchedule? getSchedule(String messName) {

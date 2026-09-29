@@ -53,16 +53,20 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
       listenable: MessMenuService(),
       builder: (context, _) {
         final messService = MessMenuService();
-        final messName = messService.resolveMessForBuilding(widget.currentUser?.building);
-        final dayMenu = messService.getDayMenuByName(messName, _selectedDay);
-        final selectedMeals = dayMenu != null
-            ? dayMenu.meals.map((m) => {
-                "emoji": m.icon,
-                "type": m.title,
-                "time": m.timeSlot,
-                "items": m.items.join(", "),
-              }).toList()
-            : const <Map<String, String>>[];
+        final isNoMess = messService.isBuildingNoMess(widget.currentUser?.building);
+        final messName = isNoMess
+            ? "No Mess Facility"
+            : messService.resolveMessForBuilding(widget.currentUser?.building);
+        final dayMenu = isNoMess ? null : messService.getDayMenuByName(messName, _selectedDay);
+        final activeMeals = (dayMenu?.meals ?? [])
+            .where((m) => m.items.any((item) => item.trim().isNotEmpty))
+            .toList();
+        final selectedMeals = activeMeals.map((m) => {
+            "emoji": m.icon,
+            "type": m.title,
+            "time": m.timeSlot,
+            "items": m.items.where((i) => i.trim().isNotEmpty).join(", "),
+          }).toList();
         final isTodaySelected =
             _selectedDay.toLowerCase() == MessMenuService().getCurrentDayName().toLowerCase();
 
@@ -270,7 +274,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            "Lakshya Mess",
+                            messName,
                             style: GoogleFonts.plusJakartaSans(
                               color: Colors.white,
                               fontSize: 22,
@@ -382,7 +386,74 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
               const SizedBox(height: 24),
 
               // Meals List View
-              ListView.builder(
+              if (isNoMess)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.no_meals_rounded, size: 48, color: Color(0xFF94A3B8)),
+                      const SizedBox(height: 12),
+                      Text(
+                        "No Mess Facility Assigned",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "No mess facility has been assigned to ${widget.currentUser?.building ?? 'your building'}.",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else if (selectedMeals.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.restaurant_rounded, size: 48, color: Color(0xFFCBD5E1)),
+                      const SizedBox(height: 12),
+                      Text(
+                        "No Meals Scheduled",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "There are no scheduled meals for $_selectedDay.",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: selectedMeals.length,

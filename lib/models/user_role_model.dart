@@ -52,6 +52,8 @@ class AppUser {
   final String? registrationNumber;
   final String? building;
   final String? room;
+  final String? bedNumber;
+  final String? dob;
   final String status;
   final DateTime createdAt;
   final bool hasCompletedOnboardingTour;
@@ -68,6 +70,8 @@ class AppUser {
     this.registrationNumber,
     this.building,
     this.room,
+    this.bedNumber,
+    this.dob,
     this.status = 'Active',
     DateTime? createdAt,
     this.hasCompletedOnboardingTour = false,
@@ -90,6 +94,57 @@ class AppUser {
   bool get canViewDirectory => isAdmin || isManagement;
   bool get canOnboardStudent => isAdmin; // Only admin can onboard new students
 
+  /// Clean display helpers for Room and Bed
+  String get displayBed {
+    if (bedNumber != null && bedNumber!.trim().isNotEmpty) {
+      final b = bedNumber!.trim();
+      if (b.toLowerCase().startsWith('bed')) {
+        return b;
+      }
+      return 'Bed $b';
+    }
+    if (room != null && room!.toLowerCase().contains('bed')) {
+      final parts = room!.split(RegExp(r'[,•-]'));
+      if (parts.length > 1) {
+        final b = parts.last.trim();
+        if (b.toLowerCase().startsWith('bed')) return b;
+        return 'Bed $b';
+      }
+    }
+    return '';
+  }
+
+  String get displayRoomOnly {
+    if (room != null && room!.trim().isNotEmpty) {
+      if (room!.toLowerCase().contains('bed')) {
+        final parts = room!.split(RegExp(r'[,•-]'));
+        return parts.first.trim();
+      }
+      return room!.trim();
+    }
+    return '';
+  }
+
+  String get displayRoomAndBed {
+    final r = displayRoomOnly;
+    final b = displayBed;
+    if (r.isNotEmpty && b.isNotEmpty) {
+      return '$r • $b';
+    } else if (r.isNotEmpty) {
+      return r;
+    } else if (b.isNotEmpty) {
+      return b;
+    }
+    return 'Assigned';
+  }
+
+  String get displayRollNo {
+    if (registrationNumber != null && registrationNumber!.trim().isNotEmpty) {
+      return registrationNumber!.trim();
+    }
+    return studentId ?? uid;
+  }
+
   AppUser copyWith({
     String? uid,
     String? email,
@@ -100,6 +155,8 @@ class AppUser {
     String? registrationNumber,
     String? building,
     String? room,
+    String? bedNumber,
+    String? dob,
     String? status,
     DateTime? createdAt,
     bool? hasCompletedOnboardingTour,
@@ -116,6 +173,8 @@ class AppUser {
       registrationNumber: registrationNumber ?? this.registrationNumber,
       building: building ?? this.building,
       room: room ?? this.room,
+      bedNumber: bedNumber ?? this.bedNumber,
+      dob: dob ?? this.dob,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       hasCompletedOnboardingTour: hasCompletedOnboardingTour ?? this.hasCompletedOnboardingTour,
@@ -185,6 +244,8 @@ class AppUser {
           data['regNo']?.toString(),
       building: data['building']?.toString(),
       room: data['room']?.toString(),
+      bedNumber: data['bedNumber']?.toString() ?? data['bed']?.toString(),
+      dob: data['dob']?.toString() ?? data['dateOfBirth']?.toString(),
       status: data['status']?.toString() ?? 'Active',
       createdAt: parsedCreated,
       hasCompletedOnboardingTour: tourCompleted,
@@ -204,6 +265,9 @@ class AppUser {
       if (registrationNumber != null) 'registrationNumber': registrationNumber,
       if (building != null) 'building': building,
       if (room != null) 'room': room,
+      if (bedNumber != null) 'bedNumber': bedNumber,
+      if (dob != null) 'dob': dob,
+      if (dob != null) 'dateOfBirth': dob,
       'status': status,
       'createdAt': createdAt.toIso8601String(),
       'hasCompletedOnboardingTour': hasCompletedOnboardingTour,

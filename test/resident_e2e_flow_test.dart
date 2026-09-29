@@ -53,7 +53,8 @@ void main() {
       // Submitting empty credentials triggers validation snackbar
       await tester.tap(find.text('Sign In'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Please enter your Email ID'), findsOneWidget);
+      expect(find.textContaining('Please enter your Student Email'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 3));
 
       // Enter student credentials
       final textFields = find.byType(TextField);

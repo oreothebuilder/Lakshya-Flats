@@ -29,8 +29,11 @@ class _PersonalTodoScreenState extends State<PersonalTodoScreen> {
   bool _isAdding = false;
 
   String get _adminUid {
-    final uid = widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid;
-    return (uid != null && uid.isNotEmpty) ? uid : 'default_admin';
+    final authUid = FirebaseAuthService().currentUser?.uid;
+    if (authUid != null && authUid.isNotEmpty) return authUid;
+    final uid = widget.currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) return uid;
+    return 'default_admin';
   }
 
   @override

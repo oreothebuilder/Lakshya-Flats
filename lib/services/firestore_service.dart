@@ -14,6 +14,7 @@ import '../models/expense_bucket_model.dart';
 import '../models/expense_model.dart';
 import '../models/personal_todo_model.dart';
 import 'email_service.dart';
+import 'push_notification_service.dart';
 
 class FirestoreService {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
@@ -34,6 +35,7 @@ class FirestoreService {
   CollectionReference get _adminTodosRef => _db.collection('admin_todos');
   CollectionReference get _expenseBucketsRef => _db.collection('expense_buckets');
   CollectionReference get _expensesRef => _db.collection('expenses');
+  CollectionReference get _regLookupRef => _db.collection('registration_lookup');
 
   // =========================================================================
   // 1. STUDENT PROFILES & DIRECTORY
@@ -147,8 +149,35 @@ class FirestoreService {
       }
     }
 
-    // 3. Delete student user profile document
+    // 3. Find linked authUid and regNo if present
+    String? authUid;
+    String? regNo;
+    try {
+      final doc = await _usersRef.doc(studentId).get();
+      if (doc.exists && doc.data() is Map) {
+        final d = doc.data() as Map<String, dynamic>;
+        authUid = d['authUid']?.toString();
+        regNo = (d['registrationNumber'] ?? d['regNo'])?.toString();
+      }
+    } catch (_) {}
+
+    // 4. Delete canonical student document
     await _usersRef.doc(studentId).delete();
+
+    // 5. Delete linked auth document if separate
+    if (authUid != null && authUid.isNotEmpty && authUid != studentId) {
+      try {
+        await _usersRef.doc(authUid).delete();
+      } catch (_) {}
+    }
+
+    // 6. Delete registration lookup mapping
+    if (regNo != null && regNo.isNotEmpty) {
+      try {
+        await _regLookupRef.doc(regNo.trim().toUpperCase()).delete();
+        await _regLookupRef.doc(regNo.trim()).delete();
+      } catch (_) {}
+    }
   }
 
   Future<DocumentSnapshot> getStudentProfile(String uid) async {
@@ -166,16 +195,57 @@ class FirestoreService {
         query = query.where('building', isEqualTo: buildingFilter);
       }
       return query.snapshots().map((snapshot) {
-        final list = snapshot.docs.map((doc) => StudentProfile.fromFirestore(doc)).toList();
+        final Map<String, StudentProfile> uniqueStudents = {};
+
+        for (final doc in snapshot.docs) {
+          final data = doc.data() as Map<String, dynamic>? ?? {};
+          final role = (data['role'] ?? '').toString().toLowerCase().trim();
+          if (role == 'admin' || role == 'management' || role == 'staff') {
+            continue;
+          }
+
+          final profile = StudentProfile.fromFirestore(doc);
+          
+          // Unique key to prevent duplicates (studentId preferred, fallback to email or regNo)
+          final key = profile.studentId.isNotEmpty
+              ? profile.studentId
+              : (profile.email.isNotEmpty
+                  ? profile.email.toLowerCase().trim()
+                  : (profile.registrationNumber.isNotEmpty
+                      ? profile.registrationNumber.trim()
+                      : profile.id));
+
+          if (!uniqueStudents.containsKey(key)) {
+            uniqueStudents[key] = profile;
+          } else {
+            final existing = uniqueStudents[key]!;
+            final isCurrentCanonical = profile.id == profile.studentId;
+            final isExistingCanonical = existing.id == existing.studentId;
+
+            // Prefer the canonical document where doc.id matches studentId, or richer data
+            if (isCurrentCanonical && !isExistingCanonical) {
+              uniqueStudents[key] = profile;
+            } else if (!isExistingCanonical &&
+                (profile.guardianName.isNotEmpty || profile.rentAgreementUrl != null)) {
+              uniqueStudents[key] = profile;
+            }
+          }
+        }
+
+        final list = uniqueStudents.values.toList();
         list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         return list;
-      }).handleError((err) {
-        debugPrint("getStudentsStream error: $err");
-        return <StudentProfile>[];
-      });
+      }).transform(
+        StreamTransformer.fromHandlers(
+          handleError: (error, stackTrace, sink) {
+            debugPrint("getStudentsStream error: $error");
+            sink.addError(error, stackTrace);
+          },
+        ),
+      );
     } catch (e) {
       debugPrint("getStudentsStream error: $e");
-      return Stream.value(<StudentProfile>[]);
+      return Stream.error(e);
     }
   }
 
@@ -689,6 +759,21 @@ class FirestoreService {
     } catch (e) {
       debugPrint("Error writing to broadcast_notifications: $e");
     }
+
+    // Dispatch real-time Admin Push Notification (Android/iOS banner even when closed)
+    try {
+      PushNotificationService().sendToAdmin(
+        title: "Payment Awaiting Verification 🔔",
+        body: "$studentName ($building • Room $room) submitted payment proof for $billTitle (₹${amount.toStringAsFixed(0)} via $paymentMode).",
+        data: {
+          'billId': billId,
+          'studentId': studentId,
+          'category': 'Payment Verification',
+        },
+      );
+    } catch (e) {
+      debugPrint("Push notification error in notifyAdminPaymentAwaitingVerification: $e");
+    }
   }
 
   /// Admin rejects payment proof / unreceived cash and sets bill back to Pending
@@ -1020,6 +1105,19 @@ class FirestoreService {
         debugPrint("Notice writing to studentUid subcollection error: $e");
       }
     }
+
+    // 3. Dispatch Push Notification (Android/iOS banner even when closed)
+    try {
+      PushNotificationService().sendToStudent(
+        studentId: studentId.isNotEmpty ? studentId : effectiveUid,
+        title: title,
+        body: message,
+        category: category,
+        metadata: metadata,
+      );
+    } catch (e) {
+      debugPrint("Push notification error in sendStudentNotification: $e");
+    }
   }
 
   Stream<List<BroadcastNoticeModel>> getNotificationsStream() {
@@ -1037,6 +1135,7 @@ class FirestoreService {
     String studentId, {
     String? building,
     String? regNo,
+    DateTime? userCreatedAt,
   }) {
     if (Firebase.apps.isEmpty) {
       return Stream.value(<Map<String, dynamic>>[]);
@@ -1123,6 +1222,28 @@ class FirestoreService {
                         ?.map((e) => e.toString().trim())
                         .toList() ??
                     [];
+
+                // Defensive check: Do not display historical broadcast notices posted before the student onboarded
+                if (userCreatedAt != null) {
+                  DateTime? noticeDate;
+                  final raw = n['createdAt'];
+                  if (raw is Timestamp) {
+                    noticeDate = raw.toDate();
+                  } else if (raw is DateTime) {
+                    noticeDate = raw;
+                  } else if (raw != null) {
+                    noticeDate = DateTime.tryParse(raw.toString());
+                  }
+                  if (noticeDate != null) {
+                    final threshold = userCreatedAt.subtract(const Duration(hours: 24));
+                    final isDirectlyTargeted = (n['targetStudentId'] ?? '').toString() == studentId ||
+                        (n['targetStudentUid'] ?? '').toString() == studentId ||
+                        ((n['selectedStudentIds'] as List?)?.contains(studentId) ?? false);
+                    if (noticeDate.isBefore(threshold) && !isDirectlyTargeted) {
+                      return false;
+                    }
+                  }
+                }
 
                 // 1. All students
                 if (aud.contains('all student') || aud.isEmpty) return true;
@@ -1314,6 +1435,200 @@ class FirestoreService {
     return await _managementRef.doc(uid).get();
   }
 
+  /// Retrieve quick registration lookup record (works for unauthenticated resolution)
+  Future<Map<String, dynamic>?> getRegistrationLookup(String identifier) async {
+    final clean = identifier.trim();
+    if (clean.isEmpty) return null;
+
+    try {
+      // 1. Check uppercase regNo (e.g. REG101)
+      final doc1 = await _regLookupRef.doc(clean.toUpperCase()).get();
+      if (doc1.exists && doc1.data() != null) {
+        return doc1.data() as Map<String, dynamic>;
+      }
+
+      // 2. Check lowercase email / identifier
+      final doc2 = await _regLookupRef.doc(clean.toLowerCase()).get();
+      if (doc2.exists && doc2.data() != null) {
+        return doc2.data() as Map<String, dynamic>;
+      }
+
+      // 3. Check exact identifier
+      final doc3 = await _regLookupRef.doc(clean).get();
+      if (doc3.exists && doc3.data() != null) {
+        return doc3.data() as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint("getRegistrationLookup error: $e");
+    }
+    return null;
+  }
+
+  /// Persist registration lookup mapping for instant unauthenticated identifier resolution
+  Future<void> saveRegistrationLookup({
+    required String studentId,
+    required String email,
+    required String regNo,
+    String? fullName,
+    String? firstName,
+    String? defaultPassword,
+    String? authUid,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanReg = regNo.trim().toUpperCase();
+
+    final data = <String, dynamic>{
+      'studentId': studentId,
+      'email': cleanEmail,
+      'regNo': cleanReg,
+      'registrationNumber': cleanReg,
+      if (fullName != null && fullName.isNotEmpty) 'fullName': fullName,
+      if (firstName != null && firstName.isNotEmpty) 'firstName': firstName,
+      if (defaultPassword != null && defaultPassword.isNotEmpty) 'defaultPassword': defaultPassword,
+      if (authUid != null && authUid.isNotEmpty) 'authUid': authUid,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    try {
+      if (cleanReg.isNotEmpty) {
+        await _regLookupRef.doc(cleanReg).set(data, SetOptions(merge: true));
+      }
+      final cleanStudentId = studentId.trim().toUpperCase();
+      if (cleanStudentId.isNotEmpty) {
+        await _regLookupRef.doc(cleanStudentId).set(data, SetOptions(merge: true));
+      }
+      if (cleanEmail.isNotEmpty) {
+        await _regLookupRef.doc(cleanEmail).set(data, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint("saveRegistrationLookup error: $e");
+    }
+  }
+
+  /// Backfill registration lookup index for all existing resident students
+  Future<void> syncAllRegistrationLookups() async {
+    try {
+      final snap = await _usersRef.get();
+      for (final doc in snap.docs) {
+        final d = doc.data() as Map<String, dynamic>? ?? {};
+        final role = d['role']?.toString().toLowerCase().trim();
+        if (role == 'admin' || role == 'management' || role == 'staff') continue;
+
+        final email = d['email']?.toString() ?? '';
+        final regNo = (d['registrationNumber'] ?? d['regNo'])?.toString() ?? '';
+        final sId = (d['studentId'] ?? doc.id).toString();
+
+        if (email.isNotEmpty && regNo.isNotEmpty) {
+          await saveRegistrationLookup(
+            studentId: sId,
+            email: email,
+            regNo: regNo,
+            fullName: d['fullName']?.toString(),
+            firstName: d['firstName']?.toString(),
+            defaultPassword: d['defaultPassword']?.toString(),
+            authUid: d['authUid']?.toString(),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("syncAllRegistrationLookups notice: $e");
+    }
+  }
+
+  /// Scans the users collection, identifies any duplicate documents created for the same student
+  /// (e.g. authUid clone vs canonical studentId doc), merges any missing fields into the canonical
+  /// doc, and safely removes the redundant clone document.
+  Future<int> cleanupDuplicateStudentProfiles() async {
+    try {
+      final snap = await _usersRef.get();
+      final Map<String, List<DocumentSnapshot>> studentsBySid = {};
+      final Map<String, List<DocumentSnapshot>> studentsByEmail = {};
+
+      for (final doc in snap.docs) {
+        final d = doc.data() as Map<String, dynamic>? ?? {};
+        final role = d['role']?.toString().toLowerCase().trim();
+        if (role == 'admin' || role == 'management' || role == 'staff') continue;
+
+        final sid = (d['studentId'] ?? '').toString().trim();
+        if (sid.isNotEmpty) {
+          studentsBySid.putIfAbsent(sid, () => []).add(doc);
+        }
+        final email = (d['email'] ?? '').toString().toLowerCase().trim();
+        if (email.isNotEmpty) {
+          studentsByEmail.putIfAbsent(email, () => []).add(doc);
+        }
+      }
+
+      int deletedCount = 0;
+      final Set<String> deletedDocIds = {};
+
+      Future<void> resolveGroup(List<DocumentSnapshot> docs, String expectedCanonicalId) async {
+        final activeDocs = docs.where((d) => !deletedDocIds.contains(d.id)).toList();
+        if (activeDocs.length <= 1) return;
+
+        // Determine canonical doc: prefer doc.id == studentId, or doc with richest data
+        DocumentSnapshot canonicalDoc = activeDocs.firstWhere(
+          (d) => d.id == expectedCanonicalId,
+          orElse: () {
+            activeDocs.sort((a, b) {
+              final aMap = a.data() as Map<String, dynamic>? ?? {};
+              final bMap = b.data() as Map<String, dynamic>? ?? {};
+              return bMap.length.compareTo(aMap.length);
+            });
+            return activeDocs.first;
+          },
+        );
+
+        final canonicalData = canonicalDoc.data() as Map<String, dynamic>? ?? {};
+        final Map<String, dynamic> mergedData = Map<String, dynamic>.from(canonicalData);
+
+        for (final d in activeDocs) {
+          if (d.id == canonicalDoc.id) continue;
+          if (deletedDocIds.contains(d.id)) continue;
+
+          final dupData = d.data() as Map<String, dynamic>? ?? {};
+          dupData.forEach((k, v) {
+            if (v != null && (mergedData[k] == null || mergedData[k].toString().isEmpty)) {
+              mergedData[k] = v;
+            }
+          });
+
+          try {
+            await d.reference.delete();
+            deletedDocIds.add(d.id);
+            deletedCount++;
+            debugPrint("cleanupDuplicateStudentProfiles: Deleted duplicate doc ${d.id} for canonical ${canonicalDoc.id}");
+          } catch (delErr) {
+            debugPrint("cleanupDuplicateStudentProfiles delete error: $delErr");
+          }
+        }
+
+        try {
+          await canonicalDoc.reference.set(mergedData, SetOptions(merge: true));
+        } catch (setErr) {
+          debugPrint("cleanupDuplicateStudentProfiles set canonical notice: $setErr");
+        }
+      }
+
+      for (final entry in studentsBySid.entries) {
+        await resolveGroup(entry.value, entry.key);
+      }
+
+      for (final entry in studentsByEmail.entries) {
+        final remaining = entry.value.where((d) => !deletedDocIds.contains(d.id)).toList();
+        if (remaining.length > 1) {
+          final firstSid = (remaining.first.data() as Map)['studentId']?.toString() ?? remaining.first.id;
+          await resolveGroup(remaining, firstSid);
+        }
+      }
+
+      return deletedCount;
+    } catch (e) {
+      debugPrint("cleanupDuplicateStudentProfiles notice: $e");
+      return 0;
+    }
+  }
+
   /// Resolve an AppUser by checking admin bootstrap first, then student users collection, then staff/management collection
   Future<AppUser?> getAppUser(String uid, {String? emailHint}) async {
     try {
@@ -1329,10 +1644,15 @@ class FirestoreService {
       }
 
       // 2. Check users (students) collection by uid
-      final userDoc = await _usersRef.doc(uid).get();
+      DocumentSnapshot? userDoc;
+      try {
+        userDoc = await _usersRef.doc(uid).get();
+      } catch (e) {
+        debugPrint("getAppUser doc(uid) read notice: $e");
+      }
       Map<String, dynamic>? studentData;
 
-      if (userDoc.exists && userDoc.data() != null) {
+      if (userDoc != null && userDoc.exists && userDoc.data() != null) {
         final rawData = userDoc.data() as Map<String, dynamic>;
         final hasProfileData = (rawData['fullName'] != null && rawData['fullName'].toString().trim().isNotEmpty) ||
             (rawData['name'] != null && rawData['name'].toString().trim().isNotEmpty) ||
@@ -1342,28 +1662,52 @@ class FirestoreService {
 
         if (hasProfileData) {
           studentData = rawData;
-        } else {
-          // Document exists by uid but is only a metadata placeholder (e.g. created by markPasswordNoticeDismissed/tour)
-          // Look up the full student profile by emailHint or findStudentByRegNoOrEmail
-          if (emailHint != null && emailHint.isNotEmpty) {
-            final fullProfile = await findStudentByRegNoOrEmail(emailHint);
-            if (fullProfile != null) {
-              studentData = {
-                ...fullProfile,
-                ...rawData, // preserve updated flags like hasDismissedPasswordNotice
-              };
-              // Merge full profile into doc(uid)
-              await _usersRef.doc(uid).set(studentData, SetOptions(merge: true));
-            }
-          }
         }
-      } else if (emailHint != null && emailHint.isNotEmpty) {
-        // Document doesn't exist by uid yet; lookup student profile by email / regNo
+      }
+
+      // 2B. If not found by direct doc(uid), look up by authUid field on users (the canonical doc)
+      if (studentData == null) {
+        try {
+          final authQuery = await _usersRef.where('authUid', isEqualTo: uid).limit(1).get();
+          if (authQuery.docs.isNotEmpty) {
+            studentData = authQuery.docs.first.data() as Map<String, dynamic>;
+          }
+        } catch (e) {
+          debugPrint("getAppUser authUid query notice: $e");
+        }
+      }
+
+      // 2C. If still not found and emailHint provided, lookup student profile by email / regNo
+      if (studentData == null && emailHint != null && emailHint.isNotEmpty) {
         final fullProfile = await findStudentByRegNoOrEmail(emailHint);
         if (fullProfile != null) {
           studentData = fullProfile;
-          // Sync full profile into doc(uid) for subsequent direct lookups
-          await _usersRef.doc(uid).set(studentData, SetOptions(merge: true));
+          final sId = fullProfile['studentId']?.toString();
+          if (sId != null && sId.isNotEmpty && sId != uid) {
+            try {
+              await _usersRef.doc(sId).set({'authUid': uid}, SetOptions(merge: true));
+            } catch (linkErr) {
+              debugPrint("getAppUser link sId notice: $linkErr");
+            }
+          }
+
+          // Also sync registration lookup with the confirmed authUid
+          final regNo = (fullProfile['registrationNumber'] ?? fullProfile['regNo'])?.toString() ?? '';
+          if (regNo.isNotEmpty) {
+            try {
+              await saveRegistrationLookup(
+                studentId: sId ?? uid,
+                email: emailHint,
+                regNo: regNo,
+                fullName: fullProfile['fullName']?.toString(),
+                firstName: fullProfile['firstName']?.toString(),
+                defaultPassword: fullProfile['defaultPassword']?.toString(),
+                authUid: uid,
+              );
+            } catch (regLookupErr) {
+              debugPrint("getAppUser saveRegistrationLookup notice: $regLookupErr");
+            }
+          }
         }
       }
 
@@ -1427,6 +1771,7 @@ class FirestoreService {
   bool isPrimaryAdminEmail(String identifier) {
     final clean = identifier.toLowerCase().trim();
     return clean == "sudhansu1906@gmail.com" ||
+        clean == "adititulsyan388@gmail.com" ||
         clean == "sudhansu1906" ||
         clean.startsWith("sudhansu1906@");
   }
@@ -1454,8 +1799,47 @@ class FirestoreService {
     final clean = identifier.trim();
     if (clean.isEmpty) return null;
 
+    // 1. Check registration_lookup first (unauthenticated & fast resolution)
     try {
-      // 0. Check direct doc ID or studentId
+      final lookup = await getRegistrationLookup(clean);
+      if (lookup != null && lookup['studentId'] != null) {
+        final sId = lookup['studentId'].toString();
+        try {
+          final sDoc = await _usersRef.doc(sId).get();
+          if (sDoc.exists && sDoc.data() != null) {
+            return {
+              'id': sDoc.id,
+              ...sDoc.data() as Map<String, dynamic>,
+            };
+          }
+        } catch (sDocErr) {
+          debugPrint("findStudentByRegNoOrEmail doc($sId) read notice: $sDocErr");
+        }
+
+        // If profile was already linked by authUid
+        if (lookup['authUid'] != null) {
+          try {
+            final authDoc = await _usersRef.doc(lookup['authUid'].toString()).get();
+            if (authDoc.exists && authDoc.data() != null) {
+              return {
+                'id': authDoc.id,
+                ...authDoc.data() as Map<String, dynamic>,
+              };
+            }
+          } catch (authDocErr) {
+            debugPrint("findStudentByRegNoOrEmail doc(authUid) read notice: $authDocErr");
+          }
+        }
+
+        // Return lookup map itself as robust fallback
+        return lookup;
+      }
+    } catch (lookupErr) {
+      debugPrint("findStudentByRegNoOrEmail registration_lookup notice: $lookupErr");
+    }
+
+    // 2. Check direct doc ID
+    try {
       final directDoc = await _usersRef.doc(clean).get();
       if (directDoc.exists && directDoc.data() != null) {
         return {
@@ -1463,7 +1847,27 @@ class FirestoreService {
           ...directDoc.data() as Map<String, dynamic>,
         };
       }
+    } catch (e) {
+      debugPrint("findStudentByRegNoOrEmail directDoc notice: $e");
+    }
 
+    // 3. If identifier is an email, query email directly
+    if (clean.contains('@')) {
+      try {
+        final emailQuery = await _usersRef.where('email', isEqualTo: clean.toLowerCase()).limit(1).get();
+        if (emailQuery.docs.isNotEmpty) {
+          return {
+            'id': emailQuery.docs.first.id,
+            ...emailQuery.docs.first.data() as Map<String, dynamic>,
+          };
+        }
+      } catch (e) {
+        debugPrint("findStudentByRegNoOrEmail emailQuery notice: $e");
+      }
+    }
+
+    // 4. Check studentId query
+    try {
       final studentIdQuery = await _usersRef.where('studentId', isEqualTo: clean).limit(1).get();
       if (studentIdQuery.docs.isNotEmpty) {
         return {
@@ -1471,8 +1875,12 @@ class FirestoreService {
           ...studentIdQuery.docs.first.data() as Map<String, dynamic>,
         };
       }
+    } catch (e) {
+      debugPrint("findStudentByRegNoOrEmail studentIdQuery notice: $e");
+    }
 
-      // 1. Check registration number
+    // 5. Check registration number (exact and uppercase)
+    try {
       final regQuery = await _usersRef.where('registrationNumber', isEqualTo: clean).limit(1).get();
       if (regQuery.docs.isNotEmpty) {
         return {
@@ -1481,7 +1889,17 @@ class FirestoreService {
         };
       }
 
-      // Also check case-insensitively / fallback field 'regNo'
+      if (clean != clean.toUpperCase()) {
+        final regUpperQuery = await _usersRef.where('registrationNumber', isEqualTo: clean.toUpperCase()).limit(1).get();
+        if (regUpperQuery.docs.isNotEmpty) {
+          return {
+            'id': regUpperQuery.docs.first.id,
+            ...regUpperQuery.docs.first.data() as Map<String, dynamic>,
+          };
+        }
+      }
+
+      // Also check fallback field 'regNo'
       final regNoQuery = await _usersRef.where('regNo', isEqualTo: clean).limit(1).get();
       if (regNoQuery.docs.isNotEmpty) {
         return {
@@ -1490,17 +1908,34 @@ class FirestoreService {
         };
       }
 
-      // 2. Check email
-      final emailQuery = await _usersRef.where('email', isEqualTo: clean.toLowerCase()).limit(1).get();
-      if (emailQuery.docs.isNotEmpty) {
-        return {
-          'id': emailQuery.docs.first.id,
-          ...emailQuery.docs.first.data() as Map<String, dynamic>,
-        };
+      if (clean != clean.toUpperCase()) {
+        final regNoUpperQuery = await _usersRef.where('regNo', isEqualTo: clean.toUpperCase()).limit(1).get();
+        if (regNoUpperQuery.docs.isNotEmpty) {
+          return {
+            'id': regNoUpperQuery.docs.first.id,
+            ...regNoUpperQuery.docs.first.data() as Map<String, dynamic>,
+          };
+        }
       }
     } catch (e) {
-      debugPrint("findStudentByRegNoOrEmail error: $e");
+      debugPrint("findStudentByRegNoOrEmail regQuery notice: $e");
     }
+
+    // 6. Fallback email query if not already run
+    if (!clean.contains('@')) {
+      try {
+        final emailQuery = await _usersRef.where('email', isEqualTo: clean.toLowerCase()).limit(1).get();
+        if (emailQuery.docs.isNotEmpty) {
+          return {
+            'id': emailQuery.docs.first.id,
+            ...emailQuery.docs.first.data() as Map<String, dynamic>,
+          };
+        }
+      } catch (e) {
+        debugPrint("findStudentByRegNoOrEmail fallback emailQuery notice: $e");
+      }
+    }
+
     return null;
   }
 

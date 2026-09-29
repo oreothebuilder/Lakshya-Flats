@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../theme/app_colors.dart';
 import '../../widgets/admin_drawer.dart';
 import '../../widgets/app_toast.dart';
-import '../../services/navigation_service.dart';
-import '../login_screen.dart';
 import '../student_onboarding_screen.dart';
 import '../mess_menu_management_screen.dart';
 import 'students_directory_screen.dart';
@@ -24,7 +21,6 @@ import '../../models/bill_model.dart';
 import '../../models/mess_menu_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mess_menu_service.dart';
-import '../../services/firebase_auth_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -36,6 +32,15 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FirestoreService().syncAllRegistrationLookups();
+      FirestoreService().cleanupDuplicateStudentProfiles();
+    });
+  }
+
   void _showSnackbar(String msg) {
     AppToast.show(context, msg, isSuccess: !msg.toLowerCase().contains("failed") && !msg.toLowerCase().contains("error"));
   }
@@ -144,76 +149,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _handleLogout() {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          "Log Out",
-          style: GoogleFonts.plusJakartaSans(
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
-        content: Text(
-          "Are you sure you want to log out of Dashboard?",
-          style: GoogleFonts.plusJakartaSans(fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text(
-              "Cancel",
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(dialogCtx);
-              try {
-                await FirebaseAuthService().signOut();
-              } catch (e) {
-                debugPrint("Dashboard logout error: $e");
-              }
-              final nav = rootNavigatorKey.currentState;
-              if (nav != null) {
-                nav.pushAndRemoveUntil(
-                  MaterialPageRoute(
-                    builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
-                  ),
-                  (route) => false,
-                );
-              } else if (mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
-                  ),
-                  (route) => false,
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: Text(
-              "Log Out",
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -240,28 +176,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: const Color(0xFF0F172A),
           ),
         ),
-        actions: [
-          GestureDetector(
-            onTap: _handleLogout,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: const Color(0xFF1E3A8A),
-                child: Text(
-                  widget.currentUser?.fullName.isNotEmpty == true
-                      ? widget.currentUser!.fullName[0].toUpperCase()
-                      : "A",
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

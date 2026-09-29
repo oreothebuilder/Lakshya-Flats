@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/user_role_model.dart';
 import '../services/firebase_auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/push_notification_service.dart';
 import 'onboarding_screen.dart';
 import 'Admin/dashboard_screen.dart';
 import 'User/user_home_screen.dart';
@@ -104,6 +105,12 @@ class AuthGate extends StatelessWidget {
 
             // Route based on role
             if (appUser != null) {
+              PushNotificationService().registerUser(
+                uid: appUser.uid,
+                role: appUser.role.name,
+                building: appUser.building,
+                studentId: appUser.studentId,
+              );
               if (appUser.isAdmin || appUser.isManagement) {
                 return DashboardScreen(currentUser: appUser);
               } else {

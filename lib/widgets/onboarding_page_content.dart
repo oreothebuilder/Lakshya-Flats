@@ -171,6 +171,30 @@ class OnboardingPageContent extends StatelessWidget {
     );
   }
 
+  Widget _buildImage(String? src) {
+    if (src == null || src.isEmpty) {
+      return Container(color: const Color(0xFFE5E7EB));
+    }
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      return Image.network(
+        src,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (context, error, stackTrace) =>
+            Container(color: const Color(0xFFE5E7EB)),
+      );
+    }
+    return Image.asset(
+      src,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      errorBuilder: (context, error, stackTrace) =>
+          Container(color: const Color(0xFFE5E7EB)),
+    );
+  }
+
   Widget _buildSplitVisualGrid() {
     return Column(
       children: [
@@ -191,13 +215,7 @@ class OnboardingPageContent extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: Image.network(
-                item.splitTopImage ?? "",
-                fit: BoxFit.cover,
-                width: double.infinity,
-                errorBuilder: (context, error, stackTrace) =>
-                    Container(color: const Color(0xFFE5E7EB)),
-              ),
+              child: _buildImage(item.splitTopImage),
             ),
           ),
         ),
@@ -223,14 +241,7 @@ class OnboardingPageContent extends StatelessWidget {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.network(
-                      item.splitBottomImage ?? "",
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: double.infinity,
-                      errorBuilder: (context, error, stackTrace) =>
-                          Container(color: const Color(0xFFE5E7EB)),
-                    ),
+                    child: _buildImage(item.splitBottomImage),
                   ),
                 ),
               ),
