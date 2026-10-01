@@ -41,15 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _updateDefaultEmail() {
-    if (_selectedRole == LoginRole.user) {
-      _emailController.clear();
-    } else {
-      if (_managementSubRole == ManagementSubRole.admin) {
-        _emailController.text = "sudhansu1906@gmail.com";
-      } else {
-        _emailController.clear();
-      }
-    }
+    _emailController.clear();
     _passwordController.clear();
   }
 
@@ -78,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (identifier.isEmpty) {
       _showNotification(
         _selectedRole == LoginRole.user
-            ? "Please enter your Student Email or College Roll No."
+            ? "Please enter your Email ID or College Roll No."
             : "Please enter your management email address.",
         isSuccess: false,
       );
@@ -459,7 +451,13 @@ class _LoginScreenState extends State<LoginScreen> {
           decoration: InputDecoration(
             filled: true,
             fillColor: inputBgColor,
-            hintText: "admin@lakshya.com",
+            hintText: _managementSubRole == ManagementSubRole.admin
+                ? "admin@lakshya.com"
+                : "staff@lakshya.com",
+            hintStyle: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF94A3B8),
+              fontSize: 14,
+            ),
             prefixIcon: const Icon(
               Icons.mail_outline_rounded,
               color: Color(0xFF64748B),
@@ -618,11 +616,11 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 24),
 
-        // Student Email or College Roll No Field
+        // Email ID or College Roll No Field
         Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            "Student Email or College Roll No.",
+            "Email ID or College Roll No.",
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13.5,
               fontWeight: FontWeight.w700,

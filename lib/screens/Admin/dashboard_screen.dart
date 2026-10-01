@@ -21,6 +21,7 @@ import '../../models/bill_model.dart';
 import '../../models/mess_menu_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/mess_menu_service.dart';
+import '../../services/academic_year_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -67,7 +68,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   int _countStudentsForBuilding(String buildingName, List<StudentProfile> students) {
-    return students.where((s) => _matchesBuilding(buildingName, s.building)).length;
+    final year = AcademicYearService.instance.selectedYear;
+    return students.where((s) =>
+      _matchesBuilding(buildingName, s.building) &&
+      s.isEnrolledInAcademicYear(year) &&
+      !s.isMovedOut
+    ).length;
   }
 
   void _showQuickStatusDialog(ComplaintModel ticket) {

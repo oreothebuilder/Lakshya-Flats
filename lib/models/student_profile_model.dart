@@ -36,6 +36,12 @@ class StudentProfile {
   final List<Map<String, dynamic>> installments;
   final String status;
   final DateTime createdAt;
+  final String? leaseStartDate;
+  final String? leaseEndDate;
+  final String? rentalTerm;
+  final List<String> academicYears;
+  final String? movedOutYear;
+  final String? movedOutDate;
 
   StudentProfile({
     required this.id,
@@ -73,10 +79,28 @@ class StudentProfile {
     this.installments = const [],
     this.status = 'Active',
     DateTime? createdAt,
+    this.leaseStartDate,
+    this.leaseEndDate,
+    this.rentalTerm,
+    this.academicYears = const ["2026-2027"],
+    this.movedOutYear,
+    this.movedOutDate,
   }) : createdAt = createdAt ?? DateTime.now();
 
   factory StudentProfile.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>? ?? {};
+
+    // Academic years resolution
+    List<String> resolvedAcademicYears = [];
+    if (data['academicYears'] is List) {
+      resolvedAcademicYears = (data['academicYears'] as List).map((e) => e.toString().trim()).toList();
+    }
+    final startDate = data['leaseStartDate']?.toString();
+    final endDate = data['leaseEndDate']?.toString();
+    if (resolvedAcademicYears.isEmpty) {
+      resolvedAcademicYears = _deriveAcademicYears(startDate, endDate);
+    }
+
     return StudentProfile(
       id: doc.id,
       studentId: data['studentId'] ?? doc.id,
@@ -117,7 +141,41 @@ class StudentProfile {
               ? (data['createdAt'] as Timestamp).toDate()
               : DateTime.tryParse(data['createdAt'].toString()) ?? DateTime.now())
           : DateTime.now(),
+      leaseStartDate: startDate,
+      leaseEndDate: endDate,
+      rentalTerm: data['rentalTerm']?.toString() ?? data['lockInPeriod']?.toString(),
+      academicYears: resolvedAcademicYears,
+      movedOutYear: data['movedOutYear']?.toString(),
+      movedOutDate: data['movedOutDate']?.toString(),
     );
+  }
+
+  static List<String> _deriveAcademicYears(String? startStr, String? endStr) {
+    int? parseYear(String? s) {
+      if (s == null || s.trim().isEmpty) return null;
+      final clean = s.trim();
+      final parts = clean.split('/');
+      if (parts.length == 3) {
+        return int.tryParse(parts[2]);
+      }
+      final dt = DateTime.tryParse(clean);
+      return dt?.year;
+    }
+
+    final startYear = parseYear(startStr);
+    final endYear = parseYear(endStr);
+
+    if (startYear != null && endYear != null && endYear >= startYear) {
+      final List<String> list = [];
+      const currentStartYear = 2026;
+      for (int y = startYear; y < endYear; y++) {
+        if (y <= currentStartYear) {
+          list.add("$y-${y + 1}");
+        }
+      }
+      if (list.isNotEmpty) return list;
+    }
+    return ["2026-2027"];
   }
 
   Map<String, dynamic> toMap() {
@@ -158,6 +216,12 @@ class StudentProfile {
       'installments': installments,
       'status': status,
       'createdAt': createdAt.toIso8601String(),
+      'leaseStartDate': leaseStartDate,
+      'leaseEndDate': leaseEndDate,
+      'rentalTerm': rentalTerm,
+      'academicYears': academicYears,
+      'movedOutYear': movedOutYear,
+      'movedOutDate': movedOutDate,
     };
   }
 
@@ -197,6 +261,12 @@ class StudentProfile {
     List<Map<String, dynamic>>? installments,
     String? status,
     DateTime? createdAt,
+    String? leaseStartDate,
+    String? leaseEndDate,
+    String? rentalTerm,
+    List<String>? academicYears,
+    String? movedOutYear,
+    String? movedOutDate,
   }) {
     return StudentProfile(
       id: id ?? this.id,
@@ -234,7 +304,75 @@ class StudentProfile {
       installments: installments ?? this.installments,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
+      leaseStartDate: leaseStartDate ?? this.leaseStartDate,
+      leaseEndDate: leaseEndDate ?? this.leaseEndDate,
+      rentalTerm: rentalTerm ?? this.rentalTerm,
+      academicYears: academicYears ?? this.academicYears,
+      movedOutYear: movedOutYear ?? this.movedOutYear,
+      movedOutDate: movedOutDate ?? this.movedOutDate,
     );
+  }
+
+  bool get isMovedOut {
+    final s = status.toLowerCase().trim();
+    return s == 'moved out' || s == 'left' || s == 'student left';
+  }
+
+  /// Determines whether the student was enrolled / present in a particular academic year.
+  /// If student moved out in year X, they ARE shown in year X (as Moved Out) and previous years,
+  /// but NEVER in year X+1 or any upcoming academic years.
+  /// The only students shown in upcoming academic years are:
+  /// (a) active students who have NOT moved out (carried forward), and
+  /// (b) newly onboarded students for that academic year.
+  bool isEnrolledInAcademicYear(String year) {
+    final cleanYear = year.trim();
+    if (cleanYear.isEmpty) return true;
+
+    final currentViewStart = int.tryParse(cleanYear.split('-').first.trim()) ?? 0;
+
+    // Determine earliest enrolled year
+    int earliestStart = 9999;
+    for (final y in academicYears) {
+      final ys = int.tryParse(y.split('-').first.trim()) ?? 0;
+      if (ys > 0 && ys < earliestStart) earliestStart = ys;
+    }
+    if (earliestStart == 9999) {
+      earliestStart = 2026;
+    }
+
+    // 1. If viewing a year before the student was first enrolled, NEVER show them
+    if (currentViewStart > 0 && currentViewStart < earliestStart) {
+      return false;
+    }
+
+    // 2. If student moved out:
+    if (isMovedOut) {
+      if (movedOutYear != null && movedOutYear!.trim().isNotEmpty) {
+        final movedOutStart = int.tryParse(movedOutYear!.split('-').first.trim()) ?? 0;
+        if (movedOutStart > 0 && currentViewStart > 0) {
+          if (currentViewStart > movedOutStart) {
+            // Student moved out in a past year -> NEVER show in upcoming / future academic years
+            return false;
+          }
+          // Viewing the year they moved out in or an earlier enrolled year -> show them historically
+          return true;
+        }
+      }
+      // If movedOutYear is not set or unparseable, only show for explicit academicYears
+      return academicYears.contains(cleanYear);
+    }
+
+    // 3. For active students (not moved out):
+    // Show if explicitly in academicYears or if viewing a year >= their enrollment year
+    if (academicYears.contains(cleanYear)) {
+      return true;
+    }
+
+    if (currentViewStart > 0 && currentViewStart >= earliestStart) {
+      return true;
+    }
+
+    return false;
   }
 
   String get displayBed {

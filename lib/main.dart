@@ -6,6 +6,7 @@ import 'firebase_options.dart';
 import 'config/cloudinary_config.dart';
 import 'services/navigation_service.dart';
 import 'services/push_notification_service.dart';
+import 'services/academic_year_service.dart';
 import 'screens/auth_gate.dart';
 import 'theme/app_colors.dart';
 
@@ -25,6 +26,13 @@ void main() async {
     debugPrint("Firebase successfully initialized with lakshya-flats.");
   } catch (e) {
     debugPrint("Firebase initialization note: $e");
+  }
+
+  // Initialize Academic Year Service (cached preference & Firestore sync)
+  try {
+    await AcademicYearService.instance.initialize();
+  } catch (e) {
+    debugPrint("AcademicYearService initialization error: $e");
   }
 
   // Initialize Push Notification Service (FCM & Local Notifications)

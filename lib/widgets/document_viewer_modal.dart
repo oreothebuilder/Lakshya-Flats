@@ -37,14 +37,15 @@ class DocumentViewerModal extends StatefulWidget {
       return;
     }
 
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (ctx) => DocumentViewerModal(
-        url: url,
-        title: title,
-        memoryBytes: memoryBytes,
-        fileName: fileName,
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (ctx) => DocumentViewerModal(
+          url: url,
+          title: title,
+          memoryBytes: memoryBytes,
+          fileName: fileName,
+        ),
       ),
     );
   }
@@ -55,12 +56,15 @@ class DocumentViewerModal extends StatefulWidget {
 
 class _DocumentViewerModalState extends State<DocumentViewerModal> {
   bool _isDownloading = false;
+  bool _isSharing = false;
   bool _isPdf = false;
   late String _displayName;
+  Uint8List? _cachedBytes;
 
   @override
   void initState() {
     super.initState();
+    _cachedBytes = widget.memoryBytes;
     _isPdf = CloudinaryService.isPdf(widget.url) ||
         CloudinaryService.isPdf(widget.fileName);
     _displayName = widget.fileName ??
@@ -71,11 +75,19 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
   }
 
   Future<Uint8List?> _getBytes() async {
-    if (widget.memoryBytes != null) return widget.memoryBytes;
-    if (widget.url.isNotEmpty) {
+    if (_cachedBytes != null) return _cachedBytes;
+    if (widget.memoryBytes != null) {
+      _cachedBytes = widget.memoryBytes;
+      return _cachedBytes;
+    }
+    final cleanUrl = widget.url.trim();
+    if (cleanUrl.isNotEmpty) {
       try {
-        final res = await http.get(Uri.parse(widget.url));
-        if (res.statusCode == 200) return res.bodyBytes;
+        final res = await http.get(Uri.parse(cleanUrl));
+        if (res.statusCode == 200) {
+          _cachedBytes = res.bodyBytes;
+          return _cachedBytes;
+        }
       } catch (e) {
         debugPrint("Error fetching bytes: $e");
       }
@@ -84,19 +96,46 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
   }
 
   Future<void> _handleShare() async {
-    final bytes = await _getBytes();
-    if (bytes == null) {
-      if (mounted) {
-        AppToast.showError(context, "Unable to fetch document for sharing.");
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+    try {
+      final bytes = await _getBytes();
+      final ext = _isPdf ? ".pdf" : ".jpg";
+      final targetName = _displayName.contains('.') ? _displayName : "$_displayName$ext";
+
+      if (bytes != null && bytes.isNotEmpty) {
+        await shareFileOrBytes(
+          targetName,
+          bytes,
+          text: widget.url.isNotEmpty ? widget.url : null,
+          subject: widget.title,
+        );
+      } else if (widget.url.isNotEmpty) {
+        await shareFileOrBytes(
+          targetName,
+          Uint8List(0),
+          text: widget.url,
+          subject: widget.title,
+        );
+      } else {
+        if (mounted) {
+          AppToast.showError(context, "Unable to fetch file for sharing.");
+        }
       }
-      return;
+    } catch (e) {
+      debugPrint("Error sharing: $e");
+      if (mounted) {
+        AppToast.showError(context, "Share error: $e");
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSharing = false);
+      }
     }
-    final ext = _isPdf ? ".pdf" : ".jpg";
-    final targetName = _displayName.contains('.') ? _displayName : "$_displayName$ext";
-    await shareFileOrBytes(targetName, bytes, subject: widget.title);
   }
 
   Future<void> _handleDownload() async {
+    if (_isDownloading) return;
     setState(() => _isDownloading = true);
     final ext = _isPdf ? ".pdf" : ".jpg";
     final targetName = _displayName.contains('.') ? _displayName : "$_displayName$ext";
@@ -107,7 +146,7 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
         await triggerBrowserDownloadUrl(downloadUrl, targetName);
         setState(() => _isDownloading = false);
         if (mounted) {
-          AppToast.showSuccess(context, "Payment proof downloaded to Downloads");
+          AppToast.showSuccess(context, "${_isPdf ? 'Document' : 'Image'} downloaded");
         }
         return;
       }
@@ -125,7 +164,7 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
       if (!mounted) return;
 
       if (savedPath != null) {
-        AppToast.showSuccess(context, "Payment proof saved to Downloads");
+        AppToast.showSuccess(context, "${_isPdf ? 'Document' : 'Image'} saved to Downloads");
       } else {
         AppToast.showError(context, "Could not save file to device.");
       }
@@ -136,9 +175,30 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
     }
   }
 
+  Future<void> _handleOpenInBrowser() async {
+    final cleanUrl = widget.url.trim();
+    if (cleanUrl.isEmpty) {
+      AppToast.showError(context, "No URL available to open.");
+      return;
+    }
+    final success = await CloudinaryService.openUrl(cleanUrl);
+    if (!success && mounted) {
+      AppToast.showError(context, "Could not open link in external browser.");
+    }
+  }
+
+  void _handleClose() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Dialog.fullscreen(
+    return PopScope(
+      canPop: true,
       child: Scaffold(
         backgroundColor: const Color(0xFF0F172A),
         appBar: AppBar(
@@ -146,10 +206,12 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.close_rounded, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+            tooltip: "Close",
+            onPressed: _handleClose,
           ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 widget.title,
@@ -175,9 +237,18 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
             if (widget.url.isNotEmpty || widget.memoryBytes != null) ...[
               // Share Button
               IconButton(
-                icon: const Icon(Icons.share_rounded, color: Colors.white),
+                icon: _isSharing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.share_rounded, color: Colors.white),
                 tooltip: "Share / Export",
-                onPressed: _handleShare,
+                onPressed: (_isSharing || _isDownloading) ? null : _handleShare,
               ),
 
               // Download Button
@@ -193,7 +264,7 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
                       )
                     : const Icon(Icons.download_rounded, color: Colors.white),
                 tooltip: "Download to device",
-                onPressed: _isDownloading ? null : _handleDownload,
+                onPressed: (_isDownloading || _isSharing) ? null : _handleDownload,
               ),
 
               if (widget.url.isNotEmpty)
@@ -201,7 +272,7 @@ class _DocumentViewerModalState extends State<DocumentViewerModal> {
                 IconButton(
                   icon: const Icon(Icons.open_in_new_rounded, color: Colors.white),
                   tooltip: "Open in external browser",
-                  onPressed: () => CloudinaryService.openUrl(widget.url),
+                  onPressed: _handleOpenInBrowser,
                 ),
             ],
             const SizedBox(width: 8),

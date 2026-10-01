@@ -6,6 +6,7 @@ import '../../models/user_role_model.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/admin_drawer.dart';
 import '../../widgets/app_toast.dart';
+import 'dashboard_screen.dart';
 
 class ExpenseTrackerScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -620,12 +621,14 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                   ),
 
                   // Footer Actions
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-                    ),
+                  SafeArea(
+                    top: false,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                      ),
                     child: Row(
                       children: [
                         Expanded(
@@ -725,6 +728,7 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                       ],
                     ),
                   ),
+                ),
                 ],
               ),
             );
@@ -1446,40 +1450,42 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Divider(height: 1, color: Color(0xFFE2E8F0)),
-            const SizedBox(height: 14),
-            _buildDetailRow("Amount", _formatIndianCurrency(expense.amount), isBold: true, highlightColor: const Color(0xFFEF4444)),
-            _buildDetailRow("Date", _formatDate(expense.date)),
-            _buildDetailRow("Payment Mode", expense.paymentMode),
-            if (expense.paidTo.isNotEmpty) _buildDetailRow("Paid To", expense.paidTo),
-            if (expense.building.isNotEmpty) _buildDetailRow("Building", expense.building),
-            if (expense.recordedBy.isNotEmpty) _buildDetailRow("Recorded By", expense.recordedBy),
-            if (expense.notes.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                "Notes:",
-                style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+              const SizedBox(height: 14),
+              _buildDetailRow("Amount", _formatIndianCurrency(expense.amount), isBold: true, highlightColor: const Color(0xFFEF4444)),
+              _buildDetailRow("Date", _formatDate(expense.date)),
+              _buildDetailRow("Payment Mode", expense.paymentMode),
+              if (expense.paidTo.isNotEmpty) _buildDetailRow("Paid To", expense.paidTo),
+              if (expense.building.isNotEmpty) _buildDetailRow("Building", expense.building),
+              if (expense.recordedBy.isNotEmpty) _buildDetailRow("Recorded By", expense.recordedBy),
+              if (expense.notes.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  "Notes:",
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF64748B)),
                 ),
-                child: Text(
-                  expense.notes,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF1E293B)),
+                const SizedBox(height: 4),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Text(
+                    expense.notes,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF1E293B)),
+                  ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1545,64 +1551,89 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
     );
   }
 
+  void _handleBackToDashboard() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => DashboardScreen(currentUser: widget.currentUser),
+        ),
+        (route) => false,
+      );
+    }
+  }
+
   // =========================================================================
   // MAIN BUILD METHOD
   // =========================================================================
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAF9),
-      drawer: AdminDrawer(activeItem: "Expense Tracker", currentUser: widget.currentUser),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A), size: 24),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+    return PopScope(
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackToDashboard();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAF9),
+        drawer: AdminDrawer(activeItem: "Expense Tracker", currentUser: widget.currentUser),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+            tooltip: "Back to Dashboard",
+            onPressed: _handleBackToDashboard,
           ),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Expense Tracker",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Expense Tracker",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              Text(
+                "Outlays & Category Buckets",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            // Search toggle
+            IconButton(
+              icon: Icon(
+                _isSearching ? Icons.close_rounded : Icons.search_rounded,
                 color: const Color(0xFF0F172A),
               ),
+              onPressed: () {
+                setState(() {
+                  _isSearching = !_isSearching;
+                  if (!_isSearching) {
+                    _searchController.clear();
+                    _searchQuery = '';
+                  }
+                });
+              },
             ),
-            Text(
-              "Outlays & Category Buckets",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF64748B),
+            Builder(
+              builder: (drawerCtx) => IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A), size: 24),
+                tooltip: "Open Menu",
+                onPressed: () => Scaffold.of(drawerCtx).openDrawer(),
               ),
             ),
           ],
         ),
-        actions: [
-          // Search toggle
-          IconButton(
-            icon: Icon(
-              _isSearching ? Icons.close_rounded : Icons.search_rounded,
-              color: const Color(0xFF0F172A),
-            ),
-            onPressed: () {
-              setState(() {
-                _isSearching = !_isSearching;
-                if (!_isSearching) {
-                  _searchController.clear();
-                  _searchQuery = '';
-                }
-              });
-            },
-          ),
-        ],
-      ),
 
       // FAB for recording new expense
       floatingActionButton: FloatingActionButton.extended(
@@ -2509,6 +2540,7 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
           );
         },
       ),
-    );
-  }
+    ),
+  );
+}
 }

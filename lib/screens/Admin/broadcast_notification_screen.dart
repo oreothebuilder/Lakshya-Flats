@@ -8,6 +8,7 @@ import '../../models/student_profile_model.dart';
 import '../../models/bill_model.dart';
 import '../../models/broadcast_notice_model.dart';
 import '../../services/push_notification_service.dart';
+import '../../services/academic_year_service.dart';
 
 class BroadcastAudience {
   static const String allStudents = "All students";
@@ -967,7 +968,10 @@ class _BroadcastNotificationScreenState extends State<BroadcastNotificationScree
       body: StreamBuilder<List<StudentProfile>>(
         stream: FirestoreService().getStudentsStream(),
         builder: (context, studentsSnapshot) {
-          final allStudents = studentsSnapshot.data ?? [];
+          final currentYear = AcademicYearService.instance.selectedYear;
+          final allStudents = (studentsSnapshot.data ?? [])
+              .where((s) => s.isEnrolledInAcademicYear(currentYear))
+              .toList();
 
           return StreamBuilder<List<BillModel>>(
             stream: FirestoreService().getBillsStream(),

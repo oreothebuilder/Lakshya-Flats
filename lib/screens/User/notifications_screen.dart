@@ -40,12 +40,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   void _handleBackToHome() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (context) => UserHomeScreen(currentUser: widget.currentUser),
-      ),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => UserHomeScreen(currentUser: widget.currentUser),
+        ),
+        (route) => false,
+      );
+    }
   }
 
   String _formatTimestamp(dynamic createdAt) {
@@ -137,7 +141,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToHome();
@@ -163,10 +167,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_rounded, color: Color(0xFF1D4ED8)),
-            onPressed: () {},
-          ),
           GestureDetector(
             onTap: () {
               Navigator.push(

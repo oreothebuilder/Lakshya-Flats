@@ -703,9 +703,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
+            return SafeArea(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -776,7 +778,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
-            );
+            ),
+          ),
+        );
           },
         );
       },
@@ -794,42 +798,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Select Language",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF0F172A),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ...languages.map((lang) {
-                final isSel = _language == lang;
-                return ListTile(
-                  title: Text(
-                    lang,
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Select Language",
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                      color: isSel ? const Color(0xFF1D4ED8) : const Color(0xFF0F172A),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF0F172A),
                     ),
                   ),
-                  trailing: isSel ? const Icon(Icons.check_rounded, color: Color(0xFF1D4ED8)) : null,
-                  onTap: () {
-                    setState(() {
-                      _language = lang;
-                    });
-                    Navigator.pop(context);
-                  },
-                );
-              }),
-            ],
+                  const SizedBox(height: 16),
+                  ...languages.map((lang) {
+                    final isSel = _language == lang;
+                    return ListTile(
+                      title: Text(
+                        lang,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                          color: isSel ? const Color(0xFF1D4ED8) : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      trailing: isSel ? const Icon(Icons.check_rounded, color: Color(0xFF1D4ED8)) : null,
+                      onTap: () {
+                        setState(() {
+                          _language = lang;
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  }),
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -837,16 +845,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _handleBackToHome() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: widget.currentUser)),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: widget.currentUser)),
+        (route) => false,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToHome();

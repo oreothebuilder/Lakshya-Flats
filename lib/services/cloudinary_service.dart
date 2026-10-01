@@ -137,11 +137,35 @@ class CloudinaryService {
 
   /// Opens an external URL (PDF, document, web link) in default browser/viewer.
   static Future<bool> openUrl(String url) async {
+    final cleanUrl = url.trim();
+    if (cleanUrl.isEmpty) return false;
     try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        return await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
+      final uri = Uri.parse(cleanUrl);
+
+      // 1. Try launching with canLaunchUrl check
+      try {
+        if (await canLaunchUrl(uri)) {
+          final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (launched) return true;
+        }
+      } catch (_) {}
+
+      // 2. Direct attempt without canLaunchUrl (in case queries declaration was bypassed)
+      try {
+        final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (launched) return true;
+      } catch (_) {}
+
+      // 3. Fallback to platform default
+      try {
+        final launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+        if (launched) return true;
+      } catch (_) {}
+
+      // 4. Fallback to in-app browser view
+      try {
+        return await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      } catch (_) {}
     } catch (e) {
       debugPrint("openUrl Exception: $e");
     }

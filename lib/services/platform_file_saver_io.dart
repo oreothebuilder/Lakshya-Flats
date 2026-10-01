@@ -111,6 +111,7 @@ Future<String?> saveAndLaunchFile(Uint8List bytes, String fileName) async {
 }
 
 Future<void> shareFileOrBytes(String filePathOrName, Uint8List bytes, {String? text, String? subject}) async {
+  // 1. If filePathOrName is already an existing local file on disk:
   try {
     final file = File(filePathOrName);
     if (await file.exists()) {
@@ -125,16 +126,47 @@ Future<void> shareFileOrBytes(String filePathOrName, Uint8List bytes, {String? t
     }
   } catch (_) {}
 
-  try {
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile.fromData(bytes, name: filePathOrName)],
-        text: text,
-        subject: subject,
-      ),
-    );
-  } catch (e) {
-    debugPrint("shareFileOrBytes IO Error: $e");
+  // 2. Write bytes to temporary cache directory so Android FileProvider can resolve it
+  if (bytes.isNotEmpty) {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final cleanName = filePathOrName
+          .split(Platform.pathSeparator)
+          .last
+          .split('/')
+          .last
+          .replaceAll(RegExp(r'[^\w\.\-]'), '_');
+      final tempFile = File('${tempDir.path}/$cleanName');
+      await tempFile.writeAsBytes(bytes, flush: true);
+
+      if (await tempFile.exists()) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(tempFile.path)],
+            text: text,
+            subject: subject,
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      debugPrint("shareFileOrBytes temp file share error: $e");
+    }
+  }
+
+  // 3. Fallback: Share link/text if available
+  if ((text != null && text.isNotEmpty) || (subject != null && subject.isNotEmpty)) {
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: text ?? subject,
+          subject: subject,
+        ),
+      );
+      return;
+    } catch (e) {
+      debugPrint("shareFileOrBytes text fallback Error: $e");
+    }
   }
 }
 

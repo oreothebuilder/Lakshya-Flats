@@ -12,6 +12,7 @@ import 'building_space_screen.dart';
 import '../../widgets/app_toast.dart';
 import '../../widgets/building_photo_selector.dart';
 import '../../services/mess_menu_service.dart';
+import '../../services/academic_year_service.dart';
 
 class BuildingsManagementScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -39,7 +40,12 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
   }
 
   int _countStudentsForBuilding(String buildingName, List<StudentProfile> students) {
-    return students.where((s) => _matchesBuilding(buildingName, s.building)).length;
+    final year = AcademicYearService.instance.selectedYear;
+    return students.where((s) =>
+      _matchesBuilding(buildingName, s.building) &&
+      s.isEnrolledInAcademicYear(year) &&
+      !s.isMovedOut
+    ).length;
   }
 
   List<BuildingModel> _filterBuildings(List<BuildingModel> buildings) {
@@ -747,12 +753,14 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                   ),
 
                   // Bottom Save Action
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-                    ),
+                  SafeArea(
+                    top: false,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                      ),
                     child: Row(
                       children: [
                         Expanded(
@@ -907,6 +915,7 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                         ),
                       ],
                     ),
+                  ),
                   ),
                 ],
               ),
@@ -1491,18 +1500,22 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
   // ---------------------------------------------------------------------------
   // Main Screen Build
   void _handleBackToDashboard() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (context) => DashboardScreen(currentUser: widget.currentUser),
-      ),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => DashboardScreen(currentUser: widget.currentUser),
+        ),
+        (route) => false,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToDashboard();

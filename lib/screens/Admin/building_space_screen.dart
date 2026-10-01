@@ -11,6 +11,7 @@ import 'student_profile_detail_screen.dart';
 import '../../widgets/app_toast.dart';
 import '../../widgets/building_photo_selector.dart';
 import '../../services/mess_menu_service.dart';
+import '../../services/academic_year_service.dart';
 
 class BuildingSpaceScreen extends StatefulWidget {
   final BuildingModel building;
@@ -791,12 +792,14 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                   ),
 
                   // Bottom action buttons
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                    ),
+                  SafeArea(
+                    top: false,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                      ),
                     child: Row(
                       children: [
                         Expanded(
@@ -924,6 +927,7 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
                         ),
                       ],
                     ),
+                  ),
                   ),
                 ],
               ),
@@ -1124,7 +1128,11 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
   // TAB 1: All Students in this Building
   // ---------------------------------------------------------------------------
   Widget _buildStudentsTab(List<StudentProfile> allStudents, BuildingModel currentBuilding) {
-    final buildingStudents = allStudents.where((s) => _matchesBuilding(currentBuilding.name, s.building)).toList();
+    final currentYear = AcademicYearService.instance.selectedYear;
+    final buildingStudents = allStudents.where((s) =>
+      _matchesBuilding(currentBuilding.name, s.building) &&
+      s.isEnrolledInAcademicYear(currentYear)
+    ).toList();
 
     final filteredStudents = buildingStudents.where((s) {
       if (_studentSearchQuery.isEmpty) return true;
@@ -1966,8 +1974,12 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
             stream: _firestoreService.getStudentsStream(),
             builder: (context, studentsSnapshot) {
               final allStudents = studentsSnapshot.data ?? [];
-              final buildingStudents = allStudents.where((s) => _matchesBuilding(currentBuilding.name, s.building)).toList();
-              final detectedOccupancy = buildingStudents.length;
+              final currentYear = AcademicYearService.instance.selectedYear;
+              final buildingStudents = allStudents.where((s) =>
+                _matchesBuilding(currentBuilding.name, s.building) &&
+                s.isEnrolledInAcademicYear(currentYear)
+              ).toList();
+              final detectedOccupancy = buildingStudents.where((s) => !s.isMovedOut).length;
 
               return StreamBuilder<List<StaffModel>>(
                 stream: _firestoreService.getStaffStream(),

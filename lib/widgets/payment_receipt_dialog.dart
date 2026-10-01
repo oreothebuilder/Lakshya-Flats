@@ -417,87 +417,102 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
           ),
 
           // Sticky Bottom Action Bar
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 10),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-              boxShadow: [
-                BoxShadow(
-                  color: Color(0x0A000000),
-                  blurRadius: 8,
-                  offset: Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final pdfBytes = await PaymentReceiptPdfService.generateReceiptPdf(widget.receiptData);
-                    final filename = "Payment_Receipt_${widget.receiptData.receiptNo}.pdf";
-                    _openFullPdfViewer(pdfBytes, filename);
-                  },
-                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                  label: Text(
-                    isMobile ? "Preview" : "Preview Bill",
-                    style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600),
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 10),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x0A000000),
+                    blurRadius: 8,
+                    offset: Offset(0, -2),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1F3864),
-                    side: const BorderSide(color: Color(0xFFCBD5E1)),
-                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _isSharingPdf ? null : _handleSharePdf,
-                  icon: _isSharingPdf
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF1F3864)),
-                        )
-                      : const Icon(Icons.share_rounded, size: 16),
-                  label: Text(
-                    isMobile ? "Share" : "Share",
-                    style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1F3864),
-                    side: const BorderSide(color: Color(0xFFCBD5E1)),
-                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isDownloadingPdf ? null : _handleDownloadPdf,
-                    icon: _isDownloadingPdf
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.download_rounded, size: 17),
-                    label: Text(
-                      _isDownloadingPdf
-                          ? "Downloading..."
-                          : (isMobile ? "Download PDF" : "Download Official PDF"),
-                      style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w700),
+                ],
+              ),
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final pdfBytes = await PaymentReceiptPdfService.generateReceiptPdf(widget.receiptData);
+                      final filename = "Payment_Receipt_${widget.receiptData.receiptNo}.pdf";
+                      _openFullPdfViewer(pdfBytes, filename);
+                    },
+                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        isMobile ? "Preview" : "Preview Bill",
+                        maxLines: 1,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1F3864),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1F3864),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 14, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _isSharingPdf ? null : _handleSharePdf,
+                    icon: _isSharingPdf
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF1F3864)),
+                          )
+                        : const Icon(Icons.share_rounded, size: 16),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "Share",
+                        maxLines: 1,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1F3864),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isDownloadingPdf ? null : _handleDownloadPdf,
+                      icon: _isDownloadingPdf
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.download_rounded, size: 17),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _isDownloadingPdf
+                              ? "Downloading..."
+                              : (isMobile ? "Download PDF" : "Download Official PDF"),
+                          maxLines: 1,
+                          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1F3864),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

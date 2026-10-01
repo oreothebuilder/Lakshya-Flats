@@ -53,7 +53,7 @@ void main() {
       // Submitting empty credentials triggers validation snackbar
       await tester.tap(find.text('Sign In'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Please enter your Student Email'), findsOneWidget);
+      expect(find.textContaining('Please enter your Email ID'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3));
 
       // Enter student credentials
@@ -81,7 +81,7 @@ void main() {
       expect(updatedPasswordField.obscureText, isFalse);
     });
 
-    testWidgets('E2E Journey 3: Management Portal role toggle and super admin auto-fill',
+    testWidgets('E2E Journey 3: Management Portal role toggle does not prefill email',
         (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -95,10 +95,10 @@ void main() {
       expect(find.text('Admin'), findsOneWidget);
       expect(find.text('Log In to Management'), findsOneWidget);
 
-      // Admin tab auto-populates the super admin email
+      // Email field is empty by default (not prefilled)
       final emailField = find.byType(TextField).first;
       final TextField adminEmail = tester.widget(emailField);
-      expect(adminEmail.controller?.text, 'sudhansu1906@gmail.com');
+      expect(adminEmail.controller?.text, isEmpty);
 
       // Switch to Staff tab
       await tester.tap(find.text('Staff'));
@@ -111,7 +111,7 @@ void main() {
       await tester.tap(find.text('Admin'));
       await tester.pumpAndSettle();
       final TextField restoredAdminEmail = tester.widget(emailField);
-      expect(restoredAdminEmail.controller?.text, 'sudhansu1906@gmail.com');
+      expect(restoredAdminEmail.controller?.text, isEmpty);
     });
 
     testWidgets('E2E Journey 4: Mess Menu screen viewing and day switching',

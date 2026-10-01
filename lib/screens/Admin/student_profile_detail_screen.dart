@@ -15,6 +15,7 @@ import '../../widgets/app_toast.dart';
 import '../../services/email_service.dart';
 import 'broadcast_notification_screen.dart';
 import 'dashboard_screen.dart';
+import '../../services/academic_year_service.dart';
 
 class StudentProfileDetailScreen extends StatefulWidget {
   final StudentProfile student;
@@ -153,20 +154,36 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFDCFCE7),
+                            color: _student.isMovedOut ? const Color(0xFFFEF2F2) : const Color(0xFFDCFCE7),
                             borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _student.isMovedOut ? const Color(0xFFFECACA) : const Color(0xFFBBF7D0),
+                            ),
                           ),
                           child: Text(
-                            _student.status,
+                            _student.isMovedOut
+                                ? "MOVED OUT${_student.movedOutYear != null ? ' (${_student.movedOutYear})' : ''}"
+                                : _student.status,
                             style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF15803D),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: _student.isMovedOut ? const Color(0xFFDC2626) : const Color(0xFF15803D),
                             ),
                           ),
                         ),
                       ],
                     ),
+                    if (_student.academicYears.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        "Academic Years: ${_student.academicYears.join(', ')}",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
 
                     // Building and Bed Number Banner
@@ -2109,9 +2126,10 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
             top: 20,
             bottom: MediaQuery.of(context).viewInsets.bottom + 24,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(
                 child: Container(
@@ -2327,6 +2345,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -2563,7 +2582,9 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
         ),
 
         // Message Composer
-        Container(
+        SafeArea(
+          top: false,
+          child: Container(
           padding: EdgeInsets.symmetric(horizontal: 14, vertical: isKeyboardOpen ? 6 : 10),
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -2616,7 +2637,8 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
             ],
           ),
         ),
-      ],
+      ),
+    ],
     );
   }
 
@@ -3771,6 +3793,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
     final roomCtrl = TextEditingController(text: _student.room);
     final bedCtrl = TextEditingController(text: _student.bedNumber);
     String selectedBuilding = _student.building;
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -3932,78 +3955,141 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: () async {
-                      final updatedFields = {
-                        'fullName': nameCtrl.text.trim(),
-                        'building': selectedBuilding,
-                        'room': roomCtrl.text.trim(),
-                        'bedNumber': bedCtrl.text.trim(),
-                        'phone': phoneCtrl.text.trim(),
-                        'dob': dobCtrl.text.trim(),
-                        'dateOfBirth': dobCtrl.text.trim(),
-                        'email': emailCtrl.text.trim(),
-                        'registrationNumber': regCtrl.text.trim(),
-                        'course': courseCtrl.text.trim(),
-                        'branch': branchCtrl.text.trim(),
-                        'hometownAddress': addressCtrl.text.trim(),
-                        'address': addressCtrl.text.trim(),
-                      };
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final cleanName = nameCtrl.text.trim();
+                            final cleanEmail = emailCtrl.text.trim();
+                            final cleanRegNo = regCtrl.text.trim();
+                            final cleanPhone = phoneCtrl.text.trim();
 
-                      Navigator.pop(modalCtx);
+                            if (cleanName.isEmpty) {
+                              _showSnackbar("Please enter student name.", isSuccess: false);
+                              return;
+                            }
+                            if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+                              _showSnackbar("Please enter a valid email address.", isSuccess: false);
+                              return;
+                            }
+                            if (cleanRegNo.isEmpty) {
+                              _showSnackbar("Please enter a valid registration number.", isSuccess: false);
+                              return;
+                            }
 
-                      setState(() {
-                        _student = StudentProfile(
-                          id: _student.id,
-                          studentId: _student.studentId,
-                          fullName: updatedFields['fullName']!,
-                          firstName: updatedFields['fullName']!.split(' ').first,
-                          email: updatedFields['email']!,
-                          phone: updatedFields['phone']!,
-                          dob: updatedFields['dob'] ?? _student.dob,
-                          registrationNumber: updatedFields['registrationNumber']!,
-                          course: updatedFields['course']!,
-                          branch: updatedFields['branch']!,
-                          hometownAddress: updatedFields['hometownAddress']!,
-                          building: updatedFields['building']!,
-                          room: updatedFields['room']!,
-                          bedNumber: updatedFields['bedNumber']!,
-                          plan: _student.plan,
-                          paymentFrequency: _student.paymentFrequency,
-                          monthlyRent: _student.monthlyRent,
-                          securityDeposit: _student.securityDeposit,
-                          guardianName: _student.guardianName,
-                          guardianPhone: _student.guardianPhone,
-                          guardianRelationship: _student.guardianRelationship,
-                          dietaryPreference: _student.dietaryPreference,
-                          photoUrl: _student.photoUrl,
-                          collegeIdUrl: _student.collegeIdUrl,
-                          govtIdUrl: _student.govtIdUrl,
-                          rentAgreementUrl: _student.rentAgreementUrl,
-                          additionalDocs: _student.additionalDocs,
-                          inventory: _student.inventory,
-                          notes: _student.notes,
-                          installments: _student.installments,
-                          status: _student.status,
-                          createdAt: _student.createdAt,
-                        );
-                      });
+                            setModalState(() => isSaving = true);
 
-                      try {
-                        await FirestoreService().updateStudentProfileFields(_student.id, updatedFields);
-                        _showSnackbar("Profile updated successfully!");
-                      } catch (e) {
-                        _showSnackbar("Failed to update profile: $e", isSuccess: false);
-                      }
-                    },
+                            // 1. Strict Email Uniqueness Check across the entire system
+                            if (cleanEmail.toLowerCase() != _student.email.trim().toLowerCase()) {
+                              final dupEmail = await FirestoreService().checkDuplicateStudentEmail(
+                                cleanEmail,
+                                excludeStudentId: _student.studentId,
+                                excludeAuthUid: _student.id,
+                              );
+                              if (dupEmail != null) {
+                                setModalState(() => isSaving = false);
+                                final conflictName = dupEmail['fullName'] ?? 'User';
+                                final conflictRole = dupEmail['role'] ?? 'User';
+                                final conflictId = dupEmail['studentId'] ?? '';
+                                final idSuffix = conflictId.isNotEmpty ? " ($conflictId)" : "";
+                                _showSnackbar(
+                                  "Email \"$cleanEmail\" is already registered to $conflictName$idSuffix [$conflictRole]. Every user must have a unique email address.",
+                                  isSuccess: false,
+                                );
+                                return;
+                              }
+                            }
+
+                            // 2. Scoped Registration Number Check (against active residents and current academic year)
+                            if (cleanRegNo.toUpperCase() != _student.registrationNumber.trim().toUpperCase()) {
+                              final dupReg = await FirestoreService().checkDuplicateStudentRegNo(
+                                cleanRegNo,
+                                excludeStudentId: _student.studentId,
+                                excludeAuthUid: _student.id,
+                                targetAcademicYears: _student.academicYears,
+                              );
+                              if (dupReg != null) {
+                                setModalState(() => isSaving = false);
+                                final conflictName = dupReg['fullName'] ?? 'Resident';
+                                final conflictId = dupReg['studentId'] ?? '';
+                                final conflictBuilding = dupReg['building'] ?? '';
+                                final conflictRoom = dupReg['room'] ?? '';
+                                final conflictYear = dupReg['academicYear'] ?? AcademicYearService.instance.selectedYear;
+                                final isResiding = dupReg['isCurrentlyResiding'] == true;
+
+                                final message = isResiding
+                                    ? "Registration Number \"$cleanRegNo\" is already in use by active resident $conflictName ($conflictId) in $conflictBuilding Room $conflictRoom."
+                                    : "Registration Number \"$cleanRegNo\" is already in use by $conflictName ($conflictId) in academic year $conflictYear.";
+
+                                _showSnackbar(message, isSuccess: false);
+                                return;
+                              }
+                            }
+
+                            final updatedFields = {
+                              'fullName': cleanName,
+                              'building': selectedBuilding,
+                              'room': roomCtrl.text.trim(),
+                              'bedNumber': bedCtrl.text.trim(),
+                              'phone': cleanPhone,
+                              'dob': dobCtrl.text.trim(),
+                              'dateOfBirth': dobCtrl.text.trim(),
+                              'email': cleanEmail,
+                              'registrationNumber': cleanRegNo,
+                              'course': courseCtrl.text.trim(),
+                              'branch': branchCtrl.text.trim(),
+                              'hometownAddress': addressCtrl.text.trim(),
+                              'address': addressCtrl.text.trim(),
+                            };
+
+                            if (modalCtx.mounted) {
+                              Navigator.pop(modalCtx);
+                            }
+                            if (!mounted) return;
+
+                            setState(() {
+                              _student = _student.copyWith(
+                                fullName: updatedFields['fullName']!,
+                                firstName: updatedFields['fullName']!.split(' ').first,
+                                email: updatedFields['email']!,
+                                phone: updatedFields['phone']!,
+                                dob: updatedFields['dob'] ?? _student.dob,
+                                registrationNumber: updatedFields['registrationNumber']!,
+                                course: updatedFields['course']!,
+                                branch: updatedFields['branch']!,
+                                hometownAddress: updatedFields['hometownAddress']!,
+                                building: updatedFields['building']!,
+                                room: updatedFields['room']!,
+                                bedNumber: updatedFields['bedNumber']!,
+                              );
+                            });
+
+                            try {
+                              await FirestoreService().updateStudentProfileFields(
+                                _student.id,
+                                updatedFields,
+                                oldEmail: _student.email,
+                                oldRegNo: _student.registrationNumber,
+                              );
+                              _showSnackbar("Profile updated successfully!");
+                            } catch (e) {
+                              _showSnackbar("Failed to update profile: $e", isSuccess: false);
+                            }
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryBlue,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(
-                      "Save Profile Details",
-                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
-                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Text(
+                            "Save Profile Details",
+                            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -4093,17 +4179,84 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
   }
 
   // ===========================================================================
-  // DELETE STUDENT PROFILE
+  // MOVE OUT & REACTIVATE RESIDENT
   // ===========================================================================
 
-  Future<void> _confirmDeleteStudentProfile() async {
-    bool deleteBills = true;
+  Future<void> _handleMoveOutOrReactivate() async {
+    if (_student.isMovedOut) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            "Reactivate Student?",
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+          ),
+          content: Text(
+            "Restore ${_student.fullName}'s residency status back to Active? They will reappear as an active resident across their enrolled academic years.",
+            style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: const Color(0xFF475569)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D52CE),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text("Reactivate"),
+            ),
+          ],
+        ),
+      );
 
-    final shouldDelete = await showDialog<bool>(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (dialogCtx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      if (confirm == true && mounted) {
+        try {
+          await FirestoreService().reactivateStudent(_student.id);
+          setState(() {
+            _student = _student.copyWith(
+              status: 'Active',
+              movedOutYear: null,
+            );
+          });
+          if (mounted) {
+            AppToast.showSuccess(context, "${_student.fullName} has been reactivated.");
+          }
+        } catch (e) {
+          if (mounted) {
+            _showSnackbar("Failed to reactivate: $e", isSuccess: false);
+          }
+        }
+      }
+      return;
+    }
+
+    // Student is active -> Mark as Moved Out
+    // STRICT SETTLEMENT CHECK: verify all bills are paid before allowing move out
+    List<BillModel> unpaidBills = [];
+    try {
+      unpaidBills = await FirestoreService().getUnpaidStudentBills(
+        _student.id,
+        phone: _student.phone,
+        email: _student.email,
+        regNo: _student.registrationNumber,
+      );
+    } catch (e) {
+      debugPrint("Error checking student bills: $e");
+    }
+
+    if (!mounted) return;
+
+    if (unpaidBills.isNotEmpty) {
+      final totalDue = unpaidBills.fold(0.0, (totalDueVal, b) => totalDueVal + (b.amount - b.paidAmount).clamp(0.0, b.amount));
+
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           title: Row(
             children: [
               Container(
@@ -4112,20 +4265,16 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                   color: const Color(0xFFFEE2E2),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
-                  Icons.delete_forever_rounded,
-                  color: Color(0xFFDC2626),
-                  size: 24,
-                ),
+                child: const Icon(Icons.block_rounded, color: Color(0xFFDC2626), size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  "Delete Profile?",
+                  "Cannot Move Out",
                   style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                    color: primaryDark,
+                    fontSize: 17,
+                    color: const Color(0xFF0F172A),
                   ),
                 ),
               ),
@@ -4135,131 +4284,371 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text.rich(
-                TextSpan(
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13.5,
-                    color: const Color(0xFF475569),
-                    height: 1.45,
-                  ),
-                  children: [
-                    const TextSpan(text: "Are you sure you want to permanently delete the resident profile of "),
-                    TextSpan(
-                      text: "${_student.fullName} (${_student.displayRollNo})",
-                      style: const TextStyle(fontWeight: FontWeight.w800, color: primaryDark),
-                    ),
-                    const TextSpan(text: " from "),
-                    TextSpan(
-                      text: "${_student.building}, Room ${_student.displayRoomOnly}",
-                      style: const TextStyle(fontWeight: FontWeight.w700, color: primaryBlue),
-                    ),
-                    const TextSpan(text: "?"),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFECACA)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        "This action cannot be undone. Room occupancy will be released immediately.",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF991B1B),
-                        ),
-                      ),
-                    ),
-                  ],
+              Text(
+                "${_student.fullName} has ${unpaidBills.length} unpaid bill${unpaidBills.length > 1 ? 's' : ''} with a total balance of ₹${totalDue.toStringAsFixed(0)}. All pending dues must be settled or marked as Paid before moving out.",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  color: const Color(0xFF475569),
+                  height: 1.45,
                 ),
               ),
               const SizedBox(height: 14),
-              InkWell(
-                onTap: () {
-                  setDialogState(() {
-                    deleteBills = !deleteBills;
-                  });
-                },
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: Checkbox(
-                          value: deleteBills,
-                          activeColor: const Color(0xFFDC2626),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                          onChanged: (val) {
-                            setDialogState(() {
-                              deleteBills = val ?? true;
-                            });
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "Also delete associated bills & payment records",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF334155),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  itemCount: unpaidBills.length,
+                  separatorBuilder: (_, _) => const Divider(height: 8, color: Color(0xFFE2E8F0)),
+                  itemBuilder: (context, idx) {
+                    final b = unpaidBills[idx];
+                    final bal = (b.amount - b.paidAmount).clamp(0.0, b.amount);
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                b.billType.isNotEmpty ? b.billType : 'Hostel Fee',
+                                style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B)),
+                              ),
+                              Text(
+                                b.invoiceNo.isNotEmpty ? b.invoiceNo : (b.billingMonth.isNotEmpty ? b.billingMonth : 'Invoice'),
+                                style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B)),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
+                        Text(
+                          "₹${bal.toStringAsFixed(0)}",
+                          style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFFDC2626)),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Close"),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  _activeSection = 0; // Switch to Fees Details tab
+                });
+              },
+              icon: const Icon(Icons.receipt_long_rounded, size: 16),
+              label: const Text("View Bills & Dues"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D52CE),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final availableYears = await AcademicYearService.instance.getAcademicYears();
+    if (!mounted) return;
+    String selectedYear = AcademicYearService.instance.selectedYear;
+    if (!availableYears.contains(selectedYear) && availableYears.isNotEmpty) {
+      selectedYear = availableYears.first;
+    }
+    final remarksController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.logout_rounded, color: Color(0xFFD97706), size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "Mark as Moved Out",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
                   ),
                 ),
               ),
             ],
           ),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.pop(dialogCtx, false),
-              style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                side: const BorderSide(color: Color(0xFFCBD5E1)),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              ),
-              child: Text(
-                "Cancel",
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF64748B),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Mark ${_student.fullName} as moved out after completing their stay. Their data will remain in the database and accessible when viewing historical academic years, but will NOT appear in future academic years.",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    color: const Color(0xFF64748B),
+                    height: 1.4,
+                  ),
                 ),
+                const SizedBox(height: 16),
+                Text(
+                  "Academic Year Left:",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF334155),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedYear,
+                      isExpanded: true,
+                      items: availableYears.map((y) {
+                        return DropdownMenuItem<String>(
+                          value: y,
+                          child: Text(y, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => selectedYear = val);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  "Move-out Remarks (Optional):",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF334155),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: remarksController,
+                  decoration: InputDecoration(
+                    hintText: "e.g. Completed tenure, shifted out",
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogCtx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD97706),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text("Confirm Move Out"),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true && mounted) {
+      try {
+        await FirestoreService().markStudentMovedOut(
+          _student.id,
+          academicYear: selectedYear,
+          remarks: remarksController.text.trim(),
+        );
+        if (mounted) {
+          setState(() {
+            _student = _student.copyWith(
+              status: 'Moved Out',
+              movedOutYear: selectedYear,
+            );
+          });
+          AppToast.showSuccess(context, "${_student.fullName} marked as moved out for $selectedYear.");
+        }
+      } catch (e) {
+        if (mounted) {
+          _showSnackbar("Failed to update status: $e", isSuccess: false);
+        }
+      }
+    }
+  }
+
+  // ===========================================================================
+  // DELETE STUDENT PROFILE (100% ZERO-TRACE CASCADING DELETE)
+  // ===========================================================================
+
+  Future<void> _confirmDeleteStudentProfile() async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.delete_forever_rounded,
+                color: Color(0xFFDC2626),
+                size: 24,
               ),
             ),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(dialogCtx, true),
-              icon: const Icon(Icons.delete_forever_rounded, size: 18),
-              label: Text(
-                "Delete Profile",
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFDC2626),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Permanent Deletion",
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: primaryDark,
+                ),
               ),
             ),
           ],
         ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text.rich(
+              TextSpan(
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5,
+                  color: const Color(0xFF475569),
+                  height: 1.45,
+                ),
+                children: [
+                  const TextSpan(text: "Are you sure you want to permanently delete the resident profile of "),
+                  TextSpan(
+                    text: "${_student.fullName} (${_student.displayRollNo})",
+                    style: const TextStyle(fontWeight: FontWeight.w800, color: primaryDark),
+                  ),
+                  const TextSpan(text: " from "),
+                  TextSpan(
+                    text: "${_student.building}, Room ${_student.displayRoomOnly}",
+                    style: const TextStyle(fontWeight: FontWeight.w700, color: primaryBlue),
+                  ),
+                  const TextSpan(text: "?"),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        "Zero-Trace Cleanup Warning",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF991B1B),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    "This action is permanent and cannot be undone. All data created under this student will be completely erased from the database:\n"
+                    "• All raised tickets & maintenance complaints\n"
+                    "• All bills and payment transaction receipts\n"
+                    "• All targeted notices and personal notes\n"
+                    "• Room occupancy released immediately",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF991B1B),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            style: OutlinedButton.styleFrom(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: Text(
+              "Cancel",
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            icon: const Icon(Icons.delete_forever_rounded, size: 18),
+            label: Text(
+              "Delete Everything",
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+          ),
+        ],
       ),
     );
 
@@ -4275,7 +4664,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
       try {
         await FirestoreService().deleteStudentProfile(
           _student.id,
-          deleteBills: deleteBills,
+          deleteBills: true,
         );
 
         if (mounted) {
@@ -4283,7 +4672,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
           Navigator.pop(context, true); // Pop back to students directory
           AppToast.showSuccess(
             context,
-            "Student profile for ${_student.fullName} deleted successfully.",
+            "Student profile for ${_student.fullName} deleted completely.",
           );
         }
       } catch (e) {
@@ -4300,18 +4689,22 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
   // ===========================================================================
 
   void _handleBackToDashboard() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (context) => DashboardScreen(currentUser: widget.currentUser),
-      ),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => DashboardScreen(currentUser: widget.currentUser),
+        ),
+        (route) => false,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToDashboard();
@@ -4345,6 +4738,14 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                 _showSnackbar("Student phone copied: ${_student.phone}");
               }
             },
+          ),
+          IconButton(
+            icon: Icon(
+              _student.isMovedOut ? Icons.restart_alt_rounded : Icons.logout_rounded,
+              color: _student.isMovedOut ? const Color(0xFF0D52CE) : const Color(0xFFD97706),
+            ),
+            tooltip: _student.isMovedOut ? "Reactivate Student" : "Mark as Moved Out / Student Left",
+            onPressed: _handleMoveOutOrReactivate,
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626)),

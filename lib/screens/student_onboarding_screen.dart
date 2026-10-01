@@ -18,6 +18,7 @@ import '../services/agreement_pdf_service.dart';
 import '../widgets/rental_agreement_dialog.dart';
 import '../widgets/app_toast.dart';
 import 'Admin/dashboard_screen.dart';
+import '../services/academic_year_service.dart';
 
 class StudentOnboardingScreen extends StatefulWidget {
   const StudentOnboardingScreen({super.key});
@@ -90,19 +91,31 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     }
   }
 
-  int _calculateLeaseMonths() {
-    final start = _leaseStartDate ?? DateTime(DateTime.now().year, 7, 15);
-    final end = _leaseEndDate ?? DateTime(DateTime.now().year + 1, 6, 15);
-    if (end.isBefore(start)) return 1;
-    int months = (end.year - start.year) * 12 + (end.month - start.month);
-    if (end.day > start.day) {
-      months += 1;
+  DateTime _getAcademicYearEndDate() {
+    final yearStr = AcademicYearService.instance.selectedYear.trim();
+    final parts = yearStr.split('-');
+    int endYear = DateTime.now().year + 1;
+    if (parts.length == 2) {
+      endYear = int.tryParse(parts[1].trim()) ?? (DateTime.now().year + 1);
+    } else {
+      endYear = int.tryParse(yearStr) ?? (DateTime.now().year + 1);
     }
-    if (start.day == 1 && end.day >= 28) {
-      final nextDay = end.add(const Duration(days: 1));
-      if (nextDay.day == 1) {
-        months = (end.year - start.year) * 12 + (end.month - start.month) + 1;
-      }
+    DateTime mayEnd = DateTime(endYear, 5, 31);
+    if (DateTime.now().isAfter(mayEnd)) {
+      mayEnd = DateTime(DateTime.now().year + 1, 5, 31);
+    }
+    return mayEnd;
+  }
+
+  int _calculateLeaseMonths() {
+    final now = DateTime.now();
+    final end = _getAcademicYearEndDate();
+    DateTime current = DateTime(now.year, now.month, 1);
+    DateTime targetEndMonth = DateTime(end.year, end.month, 1);
+    int months = 0;
+    while (!current.isAfter(targetEndMonth)) {
+      months++;
+      current = DateTime(current.year, current.month + 1, 1);
     }
     return months <= 0 ? 1 : months;
   }
@@ -111,17 +124,14 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     if (_selectedPlan == "Full Package") {
       return "Academic calendar of MUJ — Commencement of odd semester to last exam of even semester (excluding winter and summer break)";
     } else {
-      final startStr = _leaseStartDate != null
-          ? _formatDateDDMMYYYY(_leaseStartDate!)
-          : "15/07/${DateTime.now().year}";
-      final endStr = _leaseEndDate != null
-          ? _formatDateDDMMYYYY(_leaseEndDate!)
-          : "15/06/${DateTime.now().year + 1}";
-      return "$startStr – $endStr";
+      final start = _leaseStartDate ?? DateTime.now();
+      final end = _leaseEndDate ?? _getAcademicYearEndDate();
+      return "${_formatDateDDMMYYYY(start)} – ${_formatDateDDMMYYYY(end)}";
     }
   }
 
   final TextEditingController _monthlyRentController = TextEditingController(text: "12,500");
+  final TextEditingController _wholeYearTotalController = TextEditingController(text: "1,00,000");
   final TextEditingController _securityDepositController = TextEditingController(text: "25,000");
   final TextEditingController _yearInstallmentsController = TextEditingController(text: "4");
   final TextEditingController _totalAcademicFeesController = TextEditingController(text: "1,50,000");
@@ -214,7 +224,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       endingDate: endDateStr,
       studentFullName: _fullNameController.text.trim().isNotEmpty ? _fullNameController.text.trim() : "Resident",
       mobileNumber: _mobileController.text.trim(),
-      email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : "student@university.edu",
+      email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : "resident@email.com",
       regNumber: _regNoController.text.trim().isNotEmpty ? _regNoController.text.trim() : "N/A",
       dob: _dobController.text.trim(),
       course: _courseController.text.trim(),
@@ -266,6 +276,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   @override
   void initState() {
     super.initState();
+    _leaseStartDate = DateTime.now();
+    _leaseEndDate = _getAcademicYearEndDate();
     _generateInstallmentsFromStep3();
     _loadDynamicBuildings();
   }
@@ -298,6 +310,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     _bedNumberController.dispose();
     _dobController.dispose();
     _monthlyRentController.dispose();
+    _wholeYearTotalController.dispose();
     _securityDepositController.dispose();
     _yearInstallmentsController.dispose();
     _totalAcademicFeesController.dispose();
@@ -312,22 +325,44 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
 
   void _generateInstallmentsFromStep3() {
     _installments.clear();
-    int count = 12;
     final now = DateTime.now();
+    final endDate = _getAcademicYearEndDate();
+    _leaseStartDate = now;
+    _leaseEndDate = endDate;
 
     if (_selectedPlan == "Rent Only") {
-      int monthlyRent = int.tryParse(_monthlyRentController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 12500;
-      final termMonths = _calculateLeaseMonths();
+      // Build list of months from current month to academic year end in May (inclusive)
+      DateTime currentMonth = DateTime(now.year, now.month, 1);
+      DateTime targetEndMonth = DateTime(endDate.year, endDate.month, 1);
+      List<DateTime> monthList = [];
+      while (!currentMonth.isAfter(targetEndMonth)) {
+        monthList.add(currentMonth);
+        currentMonth = DateTime(currentMonth.year, currentMonth.month + 1, 1);
+      }
+      if (monthList.isEmpty) {
+        monthList.add(DateTime(now.year, now.month, 1));
+      }
+
+      const monthNames = [
+        "",
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
 
       if (_paymentFrequency == "Pay Monthly") {
-        count = termMonths;
-        for (int i = 1; i <= count; i++) {
-          final instDate = (i == 1)
-              ? now // 1st month rent on date of onboarding
-              : DateTime(now.year, now.month + (i - 1), 1); // then from 1st of the month
+        int monthlyRent = int.tryParse(
+          _monthlyRentController.text.replaceAll(',', '').replaceAll('₹', '').trim(),
+        ) ?? 12500;
+
+        for (int i = 0; i < monthList.length; i++) {
+          final m = monthList[i];
+          final monthName = monthNames[m.month];
+          final title = "$monthName Rent";
+          final instDate = (i == 0)
+              ? now // 1st month due on joining / onboarding date
+              : DateTime(m.year, m.month, 1);
           final dayStr = instDate.day.toString().padLeft(2, '0');
           final monthStr = instDate.month.toString().padLeft(2, '0');
-          final title = "Month $i Rent";
           _installments.add(<String, String>{
             "title": title,
             "amount": "$monthlyRent",
@@ -335,16 +370,21 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           });
         }
       } else {
-        count = int.tryParse(_yearInstallmentsController.text.trim()) ?? 1;
+        // Whole Year: user enters number of installments and total amount
+        int totalAmount = int.tryParse(
+          _wholeYearTotalController.text.replaceAll(',', '').replaceAll('₹', '').trim(),
+        ) ?? 100000;
+        int count = int.tryParse(_yearInstallmentsController.text.trim()) ?? 1;
         if (count < 1) count = 1;
-        final totalTermAmount = monthlyRent * termMonths;
-        int instAmount = totalTermAmount ~/ count;
-        int remainder = totalTermAmount % count;
-        final stepMonths = (termMonths / count).round().clamp(1, 12);
+
+        int instAmount = totalAmount ~/ count;
+        int remainder = totalAmount % count;
+        final stepMonths = (monthList.length / count).round().clamp(1, 12);
+
         for (int i = 1; i <= count; i++) {
           int currentInst = (i == 1) ? (instAmount + remainder) : instAmount;
           final instDate = (i == 1)
-              ? now // Due on date of onboarding
+              ? now // Due on date of joining
               : DateTime(now.year, now.month + (i - 1) * stepMonths, 1);
           final dayStr = instDate.day.toString().padLeft(2, '0');
           final monthStr = instDate.month.toString().padLeft(2, '0');
@@ -361,7 +401,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     } else {
       // Full Package
       int totalAmount = int.tryParse(_totalAcademicFeesController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 150000;
-      count = _packageInstallmentsCount > 0 ? _packageInstallmentsCount : 1;
+      final int count = _packageInstallmentsCount > 0 ? _packageInstallmentsCount : 1;
 
       int instAmount = totalAmount ~/ count;
       int remainder = totalAmount % count;
@@ -644,10 +684,11 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       builder: (ctx) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Center(
                 child: Container(
                   width: 36,
@@ -739,6 +780,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               ),
             ],
           ),
+          ),
         ),
       ),
     );
@@ -750,7 +792,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
 
     final fullName = _fullNameController.text.trim().isNotEmpty ? _fullNameController.text.trim() : "Resident";
     final firstName = fullName.split(' ').first;
-    final email = _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : "student@university.edu";
+    final email = _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : "resident@email.com";
     final phone = _mobileController.text.trim();
     final regNo = _regNoController.text.trim().isNotEmpty ? _regNoController.text.trim() : "REG101";
     final course = _courseController.text.trim();
@@ -760,28 +802,52 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     final bedNumber = _bedNumberController.text.trim();
     final defaultPassword = "$firstName@$regNo";
 
-    // Validate unique email to prevent Firebase Auth collisions & student lockout
+    // Onboard strictly into the currently active academic year
+    final currentAcademicYear = AcademicYearService.instance.selectedYear.trim().isNotEmpty
+        ? AcademicYearService.instance.selectedYear.trim()
+        : AcademicYearService.defaultYear;
+    final onboardAcademicYears = [currentAcademicYear];
+
+    // Validate unique email to prevent collisions across the entire app
     final dupEmail = await FirestoreService().checkDuplicateStudentEmail(email);
     if (dupEmail != null) {
       setState(() => _isSavingStudent = false);
       if (mounted) {
+        final conflictName = dupEmail['fullName'] ?? 'User';
+        final conflictRole = dupEmail['role'] ?? 'User';
+        final conflictId = dupEmail['studentId'] ?? '';
+        final idSuffix = conflictId.isNotEmpty ? " ($conflictId)" : "";
         AppToast.show(
           context,
-          "Email \"$email\" is already registered to ${dupEmail['fullName']} (${dupEmail['studentId']}). Please provide a unique email address.",
+          "Email \"$email\" is already registered to $conflictName$idSuffix [$conflictRole]. Every user must have a unique email address.",
           isSuccess: false,
         );
       }
       return;
     }
 
-    // Validate unique registration number to prevent credential lookup collisions
-    final dupReg = await FirestoreService().checkDuplicateStudentRegNo(regNo);
+    // Validate registration number: must not match any active residing resident or any user in current academic year
+    final dupReg = await FirestoreService().checkDuplicateStudentRegNo(
+      regNo,
+      targetAcademicYears: onboardAcademicYears,
+    );
     if (dupReg != null) {
       setState(() => _isSavingStudent = false);
       if (mounted) {
+        final conflictName = dupReg['fullName'] ?? 'Resident';
+        final conflictId = dupReg['studentId'] ?? '';
+        final conflictBuilding = dupReg['building'] ?? '';
+        final conflictRoom = dupReg['room'] ?? '';
+        final conflictYear = dupReg['academicYear'] ?? AcademicYearService.instance.selectedYear;
+        final isResiding = dupReg['isCurrentlyResiding'] == true;
+
+        final message = isResiding
+            ? "Registration Number \"$regNo\" is already in use by active resident $conflictName ($conflictId) in $conflictBuilding Room $conflictRoom."
+            : "Registration Number \"$regNo\" is already in use by $conflictName ($conflictId) in academic year $conflictYear.";
+
         AppToast.show(
           context,
-          "Registration Number \"$regNo\" is already registered to ${dupReg['fullName']} (${dupReg['studentId']}).",
+          message,
           isSuccess: false,
         );
       }
@@ -872,8 +938,9 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         }
       }
 
-      // 1B. Save student record to Firestore
-      await FirestoreService().saveStudentProfile(studentId, {
+      // 1B. Save student record to Firestore with calculated academic years
+
+      final studentProfileData = <String, dynamic>{
         'studentId': studentId,
         'fullName': fullName,
         'firstName': firstName,
@@ -895,8 +962,13 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         'lockInPeriod': _getLockInPeriod(),
         'leaseStartDate': _leaseStartDate != null ? _formatDateDDMMYYYY(_leaseStartDate!) : null,
         'leaseEndDate': _leaseEndDate != null ? _formatDateDDMMYYYY(_leaseEndDate!) : null,
+        'academicYears': onboardAcademicYears,
+        'onboardedAcademicYear': currentAcademicYear,
         'paymentFrequency': _paymentFrequency,
-        'monthlyRent': _monthlyRentController.text.trim(),
+        'monthlyRent': (_selectedPlan == "Rent Only" && _paymentFrequency == "Whole Year")
+            ? "${(int.tryParse(_wholeYearTotalController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 100000) ~/ _calculateLeaseMonths()}"
+            : _monthlyRentController.text.trim(),
+        'totalRent': _wholeYearTotalController.text.trim(),
         'securityDeposit': _securityDepositController.text.trim(),
         'guardianName': _guardianNameController.text.trim(),
         'guardianPhone': _guardianPhoneController.text.trim(),
@@ -917,7 +989,9 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         'defaultPassword': defaultPassword,
         'status': 'Active',
         'createdAt': DateTime.now().toIso8601String(),
-      });
+      };
+
+      await FirestoreService().saveStudentProfile(studentId, studentProfileData);
 
       // 2. Auto-issue initial bills to Firestore
       // 2A. Security Deposit bill (if applicable)
@@ -1032,6 +1106,11 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       if (authUid != null && authUid.isNotEmpty) {
         try {
           await FirestoreService().saveStudentProfile(studentId, {
+            'authUid': authUid,
+          });
+          // Also save complete profile at authUid doc for seamless auth parity
+          await FirestoreService().saveStudentProfile(authUid, {
+            ...studentProfileData,
             'authUid': authUid,
           });
         } catch (linkErr) {
@@ -1422,10 +1501,14 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   Future<void> _handleBackNavigation() async {
     if (_isSavingStudent) return;
     if (_currentStep == 0) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
-        (route) => false,
-      );
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          (route) => false,
+        );
+      }
       return;
     }
 
@@ -1583,6 +1666,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       'paymentFrequency': _paymentFrequency,
       'packageInstallmentType': _packageInstallmentType,
       'monthlyRent': _monthlyRentController.text,
+      'wholeYearTotalRent': _wholeYearTotalController.text,
       'securityDeposit': _securityDepositController.text,
       'yearInstallments': _yearInstallmentsController.text,
       'totalAcademicFees': _totalAcademicFeesController.text,
@@ -1664,6 +1748,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       _paymentFrequency = draft['paymentFrequency'] ?? "Pay Monthly";
       _packageInstallmentType = draft['packageInstallmentType'] ?? "Single";
       _monthlyRentController.text = draft['monthlyRent'] ?? "12,500";
+      _wholeYearTotalController.text = draft['wholeYearTotalRent'] ?? "1,00,000";
       _securityDepositController.text = draft['securityDeposit'] ?? "25,000";
       _yearInstallmentsController.text = draft['yearInstallments'] ?? "4";
       _totalAcademicFeesController.text = draft['totalAcademicFees'] ?? "1,50,000";
@@ -1713,9 +1798,11 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     _bedNumberController.clear();
     _selectedBuilding = null;
     _selectedPlan = "Rent Only";
-    _leaseStartDate = null;
-    _leaseEndDate = null;
+    _leaseStartDate = DateTime.now();
+    _leaseEndDate = _getAcademicYearEndDate();
     _paymentFrequency = "Pay Monthly";
+    _wholeYearTotalController.text = "1,00,000";
+    _monthlyRentController.text = "12,500";
     _profilePhotoBytes = null;
     _profilePhotoUrl = null;
     _profilePhotoUploaded = false;
@@ -1751,7 +1838,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: _currentStep == 0 && Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackNavigation();
@@ -1774,6 +1861,36 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               color: const Color(0xFF0F172A),
             ),
           ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.school_rounded, size: 14, color: Color(0xFF1D4ED8)),
+                      const SizedBox(width: 5),
+                      Text(
+                        AcademicYearService.instance.selectedYear,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1D4ED8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         body: SafeArea(
           child: AbsorbPointer(
@@ -2384,7 +2501,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
           decoration: _buildInputDecoration(
-            hintText: "student@university.edu (Compulsory)",
+            hintText: "Enter email ID (Compulsory)",
             prefixIcon: Icons.mail_outline_rounded,
           ),
         ),
@@ -3169,6 +3286,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   onTap: () {
                     setState(() {
                       _paymentFrequency = "Whole Year";
+                      if (_wholeYearTotalController.text.trim().isEmpty) {
+                        int mr = int.tryParse(_monthlyRentController.text.replaceAll(',', '').replaceAll('₹', '').trim()) ?? 12500;
+                        _wholeYearTotalController.text = "${mr * _calculateLeaseMonths()}";
+                      }
                       _generateInstallmentsFromStep3();
                     });
                   },
@@ -3198,146 +3319,35 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
           ),
           const SizedBox(height: 18),
 
-          _buildInputLabel("Lease Period *"),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () async {
-                    final initial = _leaseStartDate ?? DateTime(DateTime.now().year, 7, 15);
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: initial,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2035),
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        _leaseStartDate = picked;
-                        if (_leaseEndDate != null && _leaseEndDate!.isBefore(_leaseStartDate!)) {
-                          _leaseEndDate = _leaseStartDate!.add(const Duration(days: 330));
-                        }
-                        _generateInstallmentsFromStep3();
-                      });
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    height: 54,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFCBD5E1)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today_outlined,
-                          size: 19,
-                          color: Color(0xFF64748B),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                "From",
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: const Color(0xFF94A3B8),
-                                ),
-                              ),
-                              Text(
-                                _leaseStartDate != null ? _formatDateDDMMYYYY(_leaseStartDate!) : "DD/MM/YYYY",
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _leaseStartDate != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: InkWell(
-                  onTap: () async {
-                    final initial = _leaseEndDate ?? (_leaseStartDate?.add(const Duration(days: 330)) ?? DateTime(DateTime.now().year + 1, 6, 15));
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: initial,
-                      firstDate: _leaseStartDate ?? DateTime(2020),
-                      lastDate: DateTime(2035),
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        _leaseEndDate = picked;
-                        _generateInstallmentsFromStep3();
-                      });
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    height: 54,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFCBD5E1)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today_outlined,
-                          size: 19,
-                          color: Color(0xFF64748B),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                "To",
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: const Color(0xFF94A3B8),
-                                ),
-                              ),
-                              Text(
-                                _leaseEndDate != null ? _formatDateDDMMYYYY(_leaseEndDate!) : "DD/MM/YYYY",
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _leaseEndDate != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
 
-          if (_paymentFrequency == "Whole Year") ...[
-            _buildInputLabel("Number of Installments"),
+          if (_paymentFrequency == "Pay Monthly") ...[
+            _buildInputLabel("Monthly Rent (₹) *"),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _monthlyRentController,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => _generateInstallmentsFromStep3(),
+              decoration: _buildInputDecoration(
+                hintText: "₹ 12,500",
+                prefixIcon: Icons.currency_rupee_rounded,
+              ),
+            ),
+            const SizedBox(height: 18),
+          ] else ...[
+            _buildInputLabel("Total Rent Amount (₹) *"),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _wholeYearTotalController,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => _generateInstallmentsFromStep3(),
+              decoration: _buildInputDecoration(
+                hintText: "₹ 1,00,000",
+                prefixIcon: Icons.currency_rupee_rounded,
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            _buildInputLabel("Number of Installments *"),
             const SizedBox(height: 6),
             TextField(
               controller: _yearInstallmentsController,
@@ -3350,19 +3360,6 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
             ),
             const SizedBox(height: 18),
           ],
-
-          _buildInputLabel("Monthly Rent (₹) *"),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _monthlyRentController,
-            keyboardType: TextInputType.number,
-            onChanged: (_) => _generateInstallmentsFromStep3(),
-            decoration: _buildInputDecoration(
-              hintText: "₹ 12,500",
-              prefixIcon: Icons.currency_rupee_rounded,
-            ),
-          ),
-          const SizedBox(height: 18),
 
           _buildInputLabel("Security Deposit (₹) *"),
           const SizedBox(height: 6),
@@ -3700,13 +3697,26 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
-                    if (_selectedPlan == "Rent Only" && _monthlyRentController.text.trim().isEmpty) {
-                      _showSnackbar("Please enter monthly rent", isSuccess: false);
-                      return;
-                    }
-                    if (_selectedPlan == "Rent Only" && _securityDepositController.text.trim().isEmpty) {
-                      _showSnackbar("Please enter security deposit", isSuccess: false);
-                      return;
+                    if (_selectedPlan == "Rent Only") {
+                      if (_paymentFrequency == "Pay Monthly") {
+                        if (_monthlyRentController.text.trim().isEmpty) {
+                          _showSnackbar("Please enter monthly rent", isSuccess: false);
+                          return;
+                        }
+                      } else {
+                        if (_wholeYearTotalController.text.trim().isEmpty) {
+                          _showSnackbar("Please enter total rent amount", isSuccess: false);
+                          return;
+                        }
+                        if (_yearInstallmentsController.text.trim().isEmpty) {
+                          _showSnackbar("Please enter number of installments", isSuccess: false);
+                          return;
+                        }
+                      }
+                      if (_securityDepositController.text.trim().isEmpty) {
+                        _showSnackbar("Please enter security deposit", isSuccess: false);
+                        return;
+                      }
                     }
                     if (_selectedPlan == "Full Package" && _totalAcademicFeesController.text.trim().isEmpty) {
                       _showSnackbar("Please enter total academic fee", isSuccess: false);
@@ -5183,13 +5193,21 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                               style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF334155)),
                             ),
                             const SizedBox(height: 8),
-                            _buildSummaryRow("Plan", _selectedPlan),
+                            _buildSummaryRow("Plan", "$_selectedPlan ($_paymentFrequency)"),
                             const Divider(height: 14, color: Color(0xFFE2E8F0)),
                             _buildSummaryRow("Term / Lock-in", _getLockInPeriod()),
                             const Divider(height: 14, color: Color(0xFFE2E8F0)),
-                            _buildSummaryRow("Monthly Rent", "₹ ${_monthlyRentController.text}"),
-                            const Divider(height: 14, color: Color(0xFFE2E8F0)),
-                            _buildSummaryRow("Security Deposit", "₹ ${_securityDepositController.text}"),
+                            if (_selectedPlan == "Rent Only" && _paymentFrequency == "Whole Year") ...[
+                              _buildSummaryRow("Total Rent Amount", "₹ ${_wholeYearTotalController.text}"),
+                              const Divider(height: 14, color: Color(0xFFE2E8F0)),
+                            ] else if (_selectedPlan == "Rent Only") ...[
+                              _buildSummaryRow("Monthly Rent", "₹ ${_monthlyRentController.text}"),
+                              const Divider(height: 14, color: Color(0xFFE2E8F0)),
+                            ] else ...[
+                              _buildSummaryRow("Total Academic Fee", "₹ ${_totalAcademicFeesController.text}"),
+                              const Divider(height: 14, color: Color(0xFFE2E8F0)),
+                            ],
+                            _buildSummaryRow("Security Deposit", "₹ ${_selectedPlan == 'Rent Only' ? _securityDepositController.text : _premiumDepositController.text}"),
                             const Divider(height: 14, color: Color(0xFFE2E8F0)),
                             _buildSummaryRow("Installments Count", "${_installments.length} Installments"),
                           ],
@@ -5463,47 +5481,50 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: _isSavingStudent
-                      ? null
-                      : () async {
-                          if (_isSavingStudent) return;
-                          if (_signedAgreementPdfBytes == null) {
-                            final agreementData = _buildRentalAgreementData();
-                            final res = await RentalAgreementDialog.show(
-                              context,
-                              agreementData: agreementData,
-                            );
-                            if (res != null) {
-                              setState(() {
-                                _signedAgreementPdfBytes = res['pdfBytes'] as Uint8List?;
-                                _signedAgreementSignatureBytes = res['signatureBytes'] as Uint8List?;
-                              });
-                              if (!modalCtx.mounted) return;
-                              Navigator.pop(modalCtx);
-                              _handleCompleteOnboarding();
+              SafeArea(
+                top: false,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSavingStudent
+                        ? null
+                        : () async {
+                            if (_isSavingStudent) return;
+                            if (_signedAgreementPdfBytes == null) {
+                              final agreementData = _buildRentalAgreementData();
+                              final res = await RentalAgreementDialog.show(
+                                context,
+                                agreementData: agreementData,
+                              );
+                              if (res != null) {
+                                setState(() {
+                                  _signedAgreementPdfBytes = res['pdfBytes'] as Uint8List?;
+                                  _signedAgreementSignatureBytes = res['signatureBytes'] as Uint8List?;
+                                });
+                                if (!modalCtx.mounted) return;
+                                Navigator.pop(modalCtx);
+                                _handleCompleteOnboarding();
+                              }
+                              return;
                             }
-                            return;
-                          }
-                          Navigator.pop(modalCtx);
-                          _handleCompleteOnboarding();
-                        },
-                  icon: const Icon(Icons.check_circle_rounded, size: 20),
-                  label: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      "Confirm & Create Student Account",
-                      maxLines: 1,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700),
+                            Navigator.pop(modalCtx);
+                            _handleCompleteOnboarding();
+                          },
+                    icon: const Icon(Icons.check_circle_rounded, size: 20),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "Confirm & Create Student Account",
+                        maxLines: 1,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0056D2),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0056D2),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
                   ),
                 ),
               ),

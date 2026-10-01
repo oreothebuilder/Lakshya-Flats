@@ -12,6 +12,7 @@ import '../../models/bill_model.dart';
 import '../../models/student_profile_model.dart';
 import 'broadcast_notification_screen.dart';
 import 'dashboard_screen.dart';
+import '../../services/academic_year_service.dart';
 
 class PaymentCollectionScreen extends StatefulWidget {
   final String? initialFilter; // 'All', 'Pending', 'Defaulters', 'Collected'
@@ -792,8 +793,10 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
                           }
 
                           final students = snapshot.data ?? [];
+                          final currentYear = AcademicYearService.instance.selectedYear;
                           final q = studentSearchQuery.toLowerCase();
                           final filtered = students.where((s) {
+                            if (!s.isEnrolledInAcademicYear(currentYear)) return false;
                             if (q.isEmpty) return true;
                             return s.fullName.toLowerCase().contains(q) ||
                                 s.registrationNumber.toLowerCase().contains(q) ||

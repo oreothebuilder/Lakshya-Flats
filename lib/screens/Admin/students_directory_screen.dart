@@ -10,6 +10,7 @@ import '../student_onboarding_screen.dart';
 import 'student_profile_detail_screen.dart';
 import 'dashboard_screen.dart';
 import '../../widgets/app_toast.dart';
+import '../../services/academic_year_service.dart';
 
 class StudentsDirectoryScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -61,8 +62,15 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
     "Somnath",
   ];
 
-  List<StudentProfile> _filterStudents(List<StudentProfile> students) {
+  List<StudentProfile> _filterStudents(List<StudentProfile> students, {String? academicYear}) {
+    final year = academicYear ?? AcademicYearService.instance.selectedYear;
     return students.where((student) {
+      // Academic Year Filter: students only appear in years they were enrolled for.
+      // Moved-out students appear in historical years with a badge, but never in future years.
+      if (!student.isEnrolledInAcademicYear(year)) {
+        return false;
+      }
+
       // Building Filter
       if (_selectedBuilding != "All Buildings") {
         final bSearch = _selectedBuilding.toLowerCase().replaceAll(" residency", "").replaceAll(" homes", "");
@@ -120,9 +128,10 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                 top: 20,
                 bottom: MediaQuery.of(context).viewInsets.bottom + 24,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Center(
                     child: Container(
@@ -374,7 +383,8 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                   ),
                 ],
               ),
-            );
+            ),
+          );
           },
         );
       },
@@ -467,15 +477,20 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFDCFCE7),
+                                color: student.isMovedOut ? const Color(0xFFFEF2F2) : const Color(0xFFDCFCE7),
                                 borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: student.isMovedOut ? const Color(0xFFFECACA) : const Color(0xFFBBF7D0),
+                                ),
                               ),
                               child: Text(
-                                student.status,
+                                student.isMovedOut
+                                    ? "Moved Out${student.movedOutYear != null ? ' (${student.movedOutYear})' : ''}"
+                                    : student.status,
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 11.5,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF15803D),
+                                  color: student.isMovedOut ? const Color(0xFFDC2626) : const Color(0xFF15803D),
                                 ),
                               ),
                             ),
@@ -644,18 +659,22 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
   }
 
   void _handleBackToDashboard() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (context) => DashboardScreen(currentUser: widget.currentUser),
-      ),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => DashboardScreen(currentUser: widget.currentUser),
+        ),
+        (route) => false,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToDashboard();
@@ -796,6 +815,64 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
 
             const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
+            // Academic Year Banner Indicator
+            ValueListenableBuilder<String>(
+              valueListenable: AcademicYearService.instance.selectedYearNotifier,
+              builder: (context, currentYear, _) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF1F5F9),
+                    border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today_rounded, size: 14, color: Color(0xFF0D52CE)),
+                      const SizedBox(width: 8),
+                      Text(
+                        "Academic Year: ",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF475569),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Text(
+                          currentYear,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0D52CE),
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Builder(
+                        builder: (btnCtx) => InkWell(
+                          onTap: () => Scaffold.of(btnCtx).openDrawer(),
+                          child: Text(
+                            "Change Year ▾",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0D52CE),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+
             // Student List via real-time Firestore stream
             Expanded(
               child: StreamBuilder<List<StudentProfile>>(
@@ -887,72 +964,79 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                   }
 
                   final allStudents = snapshot.data ?? [];
-                  final filtered = _filterStudents(allStudents);
+                  return ValueListenableBuilder<String>(
+                    valueListenable: AcademicYearService.instance.selectedYearNotifier,
+                    builder: (context, currentYear, _) {
+                      final filtered = _filterStudents(allStudents, academicYear: currentYear);
 
-                  if (filtered.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFEEF2FF),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.people_outline_rounded, size: 44, color: Color(0xFF003896)),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            allStudents.isEmpty ? "No students enrolled yet" : "No matching students found",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            allStudents.isEmpty
-                                ? "Onboard your first real resident to get started."
-                                : "Try clearing search query or changing building filter.",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                          if (allStudents.isEmpty) ...[
-                            const SizedBox(height: 20),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => const StudentOnboardingScreen()),
-                                );
-                              },
-                              icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                              label: Text(
-                                "Onboard Student Now",
-                                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+                      if (filtered.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFEEF2FF),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.people_outline_rounded, size: 44, color: Color(0xFF003896)),
                               ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF003896),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              const SizedBox(height: 16),
+                              Text(
+                                allStudents.isEmpty
+                                    ? "No students enrolled yet"
+                                    : "No residents for $currentYear",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF0F172A),
+                                ),
                               ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    );
-                  }
+                              const SizedBox(height: 6),
+                              Text(
+                                allStudents.isEmpty
+                                    ? "Onboard your first real resident to get started."
+                                    : "No resident records match academic year $currentYear.",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                              if (allStudents.isEmpty) ...[
+                                const SizedBox(height: 20),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const StudentOnboardingScreen()),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                                  label: Text(
+                                    "Onboard Student Now",
+                                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF003896),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      }
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      return _buildStudentCard(filtered[index]);
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          return _buildStudentCard(filtered[index]);
+                        },
+                      );
                     },
                   );
                 },

@@ -777,7 +777,9 @@ class _StaffScreenState extends State<StaffScreen> {
                   ),
 
                   // Bottom Action Bar
-                  Container(
+                  SafeArea(
+                    top: false,
+                    child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     decoration: const BoxDecoration(
                       color: Colors.white,
@@ -915,6 +917,7 @@ class _StaffScreenState extends State<StaffScreen> {
                       ],
                     ),
                   ),
+                ),
                 ],
               ),
             );
@@ -1514,18 +1517,22 @@ class _StaffScreenState extends State<StaffScreen> {
   }
 
   void _handleBackToDashboard() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (context) => DashboardScreen(currentUser: widget.currentUser),
-      ),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => DashboardScreen(currentUser: widget.currentUser),
+        ),
+        (route) => false,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToDashboard();

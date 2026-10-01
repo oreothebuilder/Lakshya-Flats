@@ -15,6 +15,7 @@ import '../models/expense_model.dart';
 import '../models/personal_todo_model.dart';
 import 'email_service.dart';
 import 'push_notification_service.dart';
+import 'academic_year_service.dart';
 
 class FirestoreService {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
@@ -124,59 +125,522 @@ class FirestoreService {
     }
   }
 
-  /// Permanently delete a student profile, personal notes subcollection,
-  /// and optionally associated bills from Firestore
-  Future<void> deleteStudentProfile(String studentId, {bool deleteBills = true}) async {
-    // 1. Delete personal notes subcollection
-    try {
-      final notesSnap = await _usersRef.doc(studentId).collection('personal_notes').get();
-      for (final doc in notesSnap.docs) {
-        await doc.reference.delete();
+  /// Permanently delete a student profile with 100% zero-trace cascading cleanup.
+  /// Deletes:
+  /// - Student document(s) from users and legacy students collections
+  /// - All associated tickets / complaints from complaints
+  /// - All associated bills from bills
+  /// - All recorded payment receipts from payments
+  /// - All targeted notifications from broadcast_notifications
+  /// - All subcollections (personal_notes, notifications, personal_todos) from users/{id}
+  /// - All registration lookup mappings from registration_lookup
+  /// - Any onboarding drafts from onboarding_drafts
+  Future<void> deleteStudentProfile(String studentIdentifier, {bool deleteBills = true}) async {
+    final cleanId = studentIdentifier.trim();
+    if (cleanId.isEmpty) return;
+
+    final Set<String> targetStudentIds = {cleanId};
+    final Set<String> targetAuthUids = {};
+    final Set<String> targetEmails = {};
+    final Set<String> targetPhones = {};
+    final Set<String> targetRegNos = {};
+    final Set<String> targetNames = {};
+    final Set<String> targetUserDocIds = {cleanId};
+
+    void harvestData(Map<String, dynamic> d, String docId) {
+      targetUserDocIds.add(docId);
+      final sId = (d['studentId'] ?? d['id'])?.toString().trim();
+      if (sId != null && sId.isNotEmpty) {
+        targetStudentIds.add(sId);
+        targetUserDocIds.add(sId);
       }
-    } catch (e) {
-      debugPrint("deleteStudentProfile personal_notes cleanup notice: $e");
+      final aUid = d['authUid']?.toString().trim();
+      if (aUid != null && aUid.isNotEmpty) {
+        targetAuthUids.add(aUid);
+        targetUserDocIds.add(aUid);
+      }
+      final email = d['email']?.toString().trim().toLowerCase();
+      if (email != null && email.isNotEmpty) targetEmails.add(email);
+      final phone = d['phone']?.toString().trim();
+      if (phone != null && phone.isNotEmpty) {
+        final digits = phone.replaceAll(RegExp(r'\D'), '');
+        if (digits.isNotEmpty) targetPhones.add(digits);
+      }
+      final gPhone = d['guardianPhone']?.toString().trim();
+      if (gPhone != null && gPhone.isNotEmpty) {
+        final gDigits = gPhone.replaceAll(RegExp(r'\D'), '');
+        if (gDigits.isNotEmpty) targetPhones.add(gDigits);
+      }
+      final regNo = (d['registrationNumber'] ?? d['regNo'])?.toString().trim();
+      if (regNo != null && regNo.isNotEmpty) {
+        targetRegNos.add(regNo);
+        targetRegNos.add(regNo.toUpperCase());
+        targetRegNos.add(regNo.toLowerCase());
+      }
+      final fName = (d['fullName'] ?? d['name'])?.toString().trim();
+      if (fName != null && fName.isNotEmpty) {
+        targetNames.add(fName.toLowerCase());
+      }
     }
 
-    // 2. Delete associated student bills if requested
-    if (deleteBills) {
-      try {
-        final billsSnap = await _billsRef.where('studentId', isEqualTo: studentId).get();
-        for (final doc in billsSnap.docs) {
-          await doc.reference.delete();
-        }
-      } catch (e) {
-        debugPrint("deleteStudentProfile bills cleanup notice: $e");
-      }
-    }
-
-    // 3. Find linked authUid and regNo if present
-    String? authUid;
-    String? regNo;
+    // 1. Gather all linked profile data
     try {
-      final doc = await _usersRef.doc(studentId).get();
-      if (doc.exists && doc.data() is Map) {
-        final d = doc.data() as Map<String, dynamic>;
-        authUid = d['authUid']?.toString();
-        regNo = (d['registrationNumber'] ?? d['regNo'])?.toString();
+      final d1 = await _usersRef.doc(cleanId).get();
+      if (d1.exists && d1.data() is Map) {
+        harvestData(d1.data() as Map<String, dynamic>, cleanId);
       }
     } catch (_) {}
 
-    // 4. Delete canonical student document
-    await _usersRef.doc(studentId).delete();
+    try {
+      final d2 = await _studentsRef.doc(cleanId).get();
+      if (d2.exists && d2.data() is Map) {
+        harvestData(d2.data() as Map<String, dynamic>, cleanId);
+      }
+    } catch (_) {}
 
-    // 5. Delete linked auth document if separate
-    if (authUid != null && authUid.isNotEmpty && authUid != studentId) {
+    // Search by studentId field if cleanId was an authUid or vice versa
+    try {
+      final qSId = await _usersRef.where('studentId', isEqualTo: cleanId).get();
+      for (final doc in qSId.docs) {
+        if (doc.data() is Map) harvestData(doc.data() as Map<String, dynamic>, doc.id);
+      }
+    } catch (_) {}
+
+    // If emails found, search by email
+    for (final em in targetEmails.toList()) {
       try {
-        await _usersRef.doc(authUid).delete();
+        final qEm = await _usersRef.where('email', isEqualTo: em).get();
+        for (final doc in qEm.docs) {
+          if (doc.data() is Map) harvestData(doc.data() as Map<String, dynamic>, doc.id);
+        }
       } catch (_) {}
     }
 
-    // 6. Delete registration lookup mapping
-    if (regNo != null && regNo.isNotEmpty) {
+    // 2. Cascade Delete All Complaints / Tickets
+    try {
+      final complaintsSnap = await _complaintsRef.get();
+      for (final doc in complaintsSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        final cStudentId = (data['studentId'] ?? '').toString().trim();
+        final cEmail = (data['studentEmail'] ?? '').toString().trim().toLowerCase();
+        final cName = (data['studentName'] ?? '').toString().trim().toLowerCase();
+        final cPhone = (data['studentPhone'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+
+        bool matches = false;
+        if (cStudentId.isNotEmpty && (targetStudentIds.contains(cStudentId) || targetAuthUids.contains(cStudentId) || targetUserDocIds.contains(cStudentId))) {
+          matches = true;
+        } else if (cEmail.isNotEmpty && targetEmails.contains(cEmail)) {
+          matches = true;
+        } else if (cPhone.isNotEmpty && targetPhones.contains(cPhone)) {
+          matches = true;
+        } else if (cName.isNotEmpty && targetNames.contains(cName)) {
+          matches = true;
+        }
+
+        if (matches) {
+          await doc.reference.delete().catchError((_) {});
+          debugPrint("Zero-trace cleanup: Deleted complaint ${doc.id}");
+        }
+      }
+    } catch (e) {
+      debugPrint("deleteStudentProfile complaints cleanup notice: $e");
+    }
+
+    // 3. Cascade Delete All Associated Bills & Collect Deleted Bill IDs
+    final Set<String> deletedBillIds = {};
+    try {
+      final billsSnap = await _billsRef.get();
+      for (final doc in billsSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        final bStudentId = (data['studentId'] ?? '').toString().trim();
+        final bStudentDocId = (data['studentDocId'] ?? '').toString().trim();
+        final bEmail = (data['studentEmail'] ?? '').toString().trim().toLowerCase();
+        final bName = (data['studentName'] ?? '').toString().trim().toLowerCase();
+        final bRegNo = (data['regNo'] ?? '').toString().trim();
+        final bPhone = (data['phone'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+
+        bool matches = false;
+        if (bStudentId.isNotEmpty && (targetStudentIds.contains(bStudentId) || targetAuthUids.contains(bStudentId) || targetUserDocIds.contains(bStudentId))) {
+          matches = true;
+        } else if (bStudentDocId.isNotEmpty && targetUserDocIds.contains(bStudentDocId)) {
+          matches = true;
+        } else if (bEmail.isNotEmpty && targetEmails.contains(bEmail)) {
+          matches = true;
+        } else if (bRegNo.isNotEmpty && targetRegNos.contains(bRegNo)) {
+          matches = true;
+        } else if (bPhone.isNotEmpty && targetPhones.contains(bPhone)) {
+          matches = true;
+        } else if (bName.isNotEmpty && targetNames.contains(bName)) {
+          matches = true;
+        }
+
+        if (matches) {
+          deletedBillIds.add(doc.id);
+          final invNo = (data['invoiceNo'] ?? '').toString().trim();
+          if (invNo.isNotEmpty) deletedBillIds.add(invNo);
+          await doc.reference.delete().catchError((_) {});
+          debugPrint("Zero-trace cleanup: Deleted bill ${doc.id}");
+        }
+      }
+    } catch (e) {
+      debugPrint("deleteStudentProfile bills cleanup notice: $e");
+    }
+
+    // 4. Cascade Delete All Associated Payments / Receipts
+    try {
+      final paymentsSnap = await _paymentsRef.get();
+      for (final doc in paymentsSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        final pStudentId = (data['studentId'] ?? '').toString().trim();
+        final pBillId = (data['billId'] ?? '').toString().trim();
+        final pInvoiceNo = (data['invoiceNo'] ?? '').toString().trim();
+        final pName = (data['studentName'] ?? '').toString().trim().toLowerCase();
+
+        bool matches = false;
+        if (pStudentId.isNotEmpty && (targetStudentIds.contains(pStudentId) || targetAuthUids.contains(pStudentId) || targetUserDocIds.contains(pStudentId))) {
+          matches = true;
+        } else if (pBillId.isNotEmpty && deletedBillIds.contains(pBillId)) {
+          matches = true;
+        } else if (pInvoiceNo.isNotEmpty && deletedBillIds.contains(pInvoiceNo)) {
+          matches = true;
+        } else if (pName.isNotEmpty && targetNames.contains(pName)) {
+          matches = true;
+        }
+
+        if (matches) {
+          await doc.reference.delete().catchError((_) {});
+          debugPrint("Zero-trace cleanup: Deleted payment ${doc.id}");
+        }
+      }
+    } catch (e) {
+      debugPrint("deleteStudentProfile payments cleanup notice: $e");
+    }
+
+    // 5. Cascade Delete Broadcast / Targeted Notifications
+    try {
+      final noticesSnap = await _noticesRef.get();
+      for (final doc in noticesSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        final tId = (data['targetStudentId'] ?? '').toString().trim();
+        final tUid = (data['targetStudentUid'] ?? '').toString().trim();
+        final tReg = (data['targetRegNo'] ?? '').toString().trim();
+        final tName = (data['targetStudentName'] ?? '').toString().trim().toLowerCase();
+        final selectedIds = (data['selectedStudentIds'] as List?)?.map((e) => e.toString().trim()).toSet() ?? {};
+
+        bool matches = false;
+        if (tId.isNotEmpty && (targetStudentIds.contains(tId) || targetAuthUids.contains(tId))) matches = true;
+        if (tUid.isNotEmpty && (targetAuthUids.contains(tUid) || targetUserDocIds.contains(tUid))) matches = true;
+        if (tReg.isNotEmpty && targetRegNos.contains(tReg)) matches = true;
+        if (tName.isNotEmpty && targetNames.contains(tName)) matches = true;
+        if (selectedIds.any((id) => targetStudentIds.contains(id) || targetAuthUids.contains(id))) matches = true;
+
+        if (matches) {
+          await doc.reference.delete().catchError((_) {});
+        }
+      }
+    } catch (e) {
+      debugPrint("deleteStudentProfile notices cleanup notice: $e");
+    }
+
+    // 6. Delete All Subcollections for All Associated User & Student Document IDs
+    final allDocIdsToDelete = {...targetUserDocIds, ...targetStudentIds, ...targetAuthUids};
+    final subcollectionNames = [
+      'personal_notes',
+      'notifications',
+      'personal_todos',
+      'fcm_tokens',
+      'tokens',
+      'messages',
+      'activity_logs',
+      'attendance',
+      'documents',
+      'chats',
+      'drafts',
+      'transactions',
+    ];
+
+    for (final docId in allDocIdsToDelete) {
+      if (docId.trim().isEmpty) continue;
+      for (final sub in subcollectionNames) {
+        try {
+          final subSnap = await _usersRef.doc(docId).collection(sub).get();
+          for (final subDoc in subSnap.docs) {
+            await subDoc.reference.delete().catchError((_) {});
+          }
+        } catch (_) {}
+        try {
+          final sSubSnap = await _studentsRef.doc(docId).collection(sub).get();
+          for (final subDoc in sSubSnap.docs) {
+            await subDoc.reference.delete().catchError((_) {});
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 7. Delete Registration Lookup Mappings
+    for (final reg in targetRegNos) {
       try {
-        await _regLookupRef.doc(regNo.trim().toUpperCase()).delete();
-        await _regLookupRef.doc(regNo.trim()).delete();
+        await _regLookupRef.doc(reg).delete().catchError((_) {});
       } catch (_) {}
+    }
+    for (final em in targetEmails) {
+      try {
+        await _regLookupRef.doc(em).delete().catchError((_) {});
+      } catch (_) {}
+    }
+    try {
+      final lookupSnap = await _regLookupRef.get();
+      for (final lDoc in lookupSnap.docs) {
+        final data = lDoc.data() as Map<String, dynamic>? ?? {};
+        final sId = (data['studentId'] ?? '').toString().trim();
+        final aUid = (data['authUid'] ?? '').toString().trim();
+        final em = (data['email'] ?? '').toString().trim().toLowerCase();
+        if ((sId.isNotEmpty && targetStudentIds.contains(sId)) ||
+            (aUid.isNotEmpty && targetAuthUids.contains(aUid)) ||
+            (em.isNotEmpty && targetEmails.contains(em))) {
+          await lDoc.reference.delete().catchError((_) {});
+        }
+      }
+    } catch (_) {}
+
+    // 8. Delete Onboarding Drafts
+    for (final id in allDocIdsToDelete) {
+      try {
+        await _draftsRef.doc(id).delete().catchError((_) {});
+      } catch (_) {}
+    }
+
+    // 9. Delete Canonical & Linked User Documents from users & students
+    for (final docId in allDocIdsToDelete) {
+      if (docId.trim().isEmpty) continue;
+      try {
+        await _usersRef.doc(docId).delete().catchError((_) {});
+      } catch (_) {}
+      try {
+        await _studentsRef.doc(docId).delete().catchError((_) {});
+      } catch (_) {}
+    }
+
+    // Extra sweep across students collection by studentId and email
+    for (final sId in targetStudentIds) {
+      try {
+        final snap = await _studentsRef.where('studentId', isEqualTo: sId).get();
+        for (final doc in snap.docs) {
+          await doc.reference.delete().catchError((_) {});
+        }
+      } catch (_) {}
+    }
+    for (final em in targetEmails) {
+      try {
+        final snap = await _studentsRef.where('email', isEqualTo: em).get();
+        for (final doc in snap.docs) {
+          await doc.reference.delete().catchError((_) {});
+        }
+      } catch (_) {}
+    }
+  }
+
+  /// Fetches all unpaid / pending / defaulter bills for a student.
+  /// Used to verify complete settlement before move-out can be processed.
+  Future<List<BillModel>> getUnpaidStudentBills(
+    String studentId, {
+    String? phone,
+    String? email,
+    String? regNo,
+    String? studentDocId,
+  }) async {
+    final cleanStudentId = studentId.trim();
+    final cleanPhone = (phone ?? '').replaceAll(RegExp(r'\D'), '');
+    final cleanEmail = (email ?? '').trim().toLowerCase();
+    final cleanRegNo = (regNo ?? '').trim().toLowerCase();
+    final cleanDocId = (studentDocId ?? '').trim().toLowerCase();
+
+    final Set<String> targetIds = {};
+    if (cleanStudentId.isNotEmpty) targetIds.add(cleanStudentId.toLowerCase());
+    if (cleanDocId.isNotEmpty) targetIds.add(cleanDocId);
+
+    // Harvest authUid and studentId from users collection if available
+    if (cleanStudentId.isNotEmpty) {
+      try {
+        final userDoc = await _usersRef.doc(cleanStudentId).get();
+        if (userDoc.exists && userDoc.data() is Map) {
+          final d = userDoc.data() as Map<String, dynamic>;
+          final sId = d['studentId']?.toString().trim().toLowerCase();
+          if (sId != null && sId.isNotEmpty) targetIds.add(sId);
+          final aUid = d['authUid']?.toString().trim().toLowerCase();
+          if (aUid != null && aUid.isNotEmpty) targetIds.add(aUid);
+        }
+      } catch (_) {}
+    }
+
+    try {
+      final snap = await _billsRef.get();
+      final unpaid = <BillModel>[];
+
+      for (final doc in snap.docs) {
+        final b = BillModel.fromFirestore(doc);
+        final inv = b.invoiceNo.toLowerCase().trim();
+        final id = b.id.toLowerCase().trim();
+        final billingMonth = b.billingMonth.toLowerCase().trim();
+
+        // Skip dummy bills
+        if (inv == 'inv-dep-101' ||
+            inv.startsWith('inv-hst-10') ||
+            inv.startsWith('inv-util-30') ||
+            id.startsWith('fb-') ||
+            billingMonth == 'admission deposit') {
+          continue;
+        }
+
+        // Check if bill belongs to this student
+        final bStudentId = b.studentId.trim().toLowerCase();
+        final bDocId = (b.studentDocId ?? '').trim().toLowerCase();
+        final bPhone = b.phone.replaceAll(RegExp(r'\D'), '');
+        final bEmail = (b.studentEmail ?? '').trim().toLowerCase();
+        final bRegNo = (b.regNo ?? '').trim().toLowerCase();
+
+        bool belongsToStudent = false;
+        if (bStudentId.isNotEmpty && targetIds.contains(bStudentId)) {
+          belongsToStudent = true;
+        } else if (bDocId.isNotEmpty && targetIds.contains(bDocId)) {
+          belongsToStudent = true;
+        } else if (cleanPhone.isNotEmpty && bPhone.isNotEmpty && cleanPhone == bPhone) {
+          belongsToStudent = true;
+        } else if (cleanEmail.isNotEmpty && bEmail.isNotEmpty && cleanEmail == bEmail) {
+          belongsToStudent = true;
+        } else if (cleanRegNo.isNotEmpty && bRegNo.isNotEmpty && cleanRegNo == bRegNo) {
+          belongsToStudent = true;
+        }
+
+        if (!belongsToStudent) continue;
+
+        // Check if unpaid / pending dues
+        final statusLower = b.status.toLowerCase().trim();
+        final isDepositReturned = b.isDepositReturned;
+
+        final isSettled = b.isPaid ||
+            statusLower == 'paid' ||
+            statusLower == 'returned' ||
+            statusLower == 'refunded' ||
+            statusLower == 'cancelled' ||
+            isDepositReturned;
+
+        if (!isSettled && b.balance > 0) {
+          unpaid.add(b);
+        }
+      }
+
+      unpaid.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return unpaid;
+    } catch (e) {
+      debugPrint("getUnpaidStudentBills error: $e");
+      return <BillModel>[];
+    }
+  }
+
+  /// Mark student as moved out / student left for a specific academic year.
+  /// Preserves all historical records for past academic year views while excluding
+  /// the student from any subsequent academic years.
+  /// STRICT: Checks that all bills are paid before allowing move-out.
+  Future<void> markStudentMovedOut(
+    String studentIdentifier, {
+    required String academicYear,
+    String? remarks,
+  }) async {
+    final cleanId = studentIdentifier.trim();
+    if (cleanId.isEmpty) return;
+
+    // Harvest student identifiers for strict bill settlement check
+    String? phone;
+    String? email;
+    String? regNo;
+    String? authUid;
+    try {
+      final doc = await _usersRef.doc(cleanId).get();
+      if (doc.exists && doc.data() is Map) {
+        final d = doc.data() as Map<String, dynamic>;
+        authUid = d['authUid']?.toString().trim();
+        email = d['email']?.toString().trim();
+        phone = d['phone']?.toString().trim();
+        regNo = (d['registrationNumber'] ?? d['regNo'])?.toString().trim();
+      }
+    } catch (_) {}
+
+    if (email == null || email.isEmpty) {
+      try {
+        final sDoc = await _studentsRef.doc(cleanId).get();
+        if (sDoc.exists && sDoc.data() is Map) {
+          final d = sDoc.data() as Map<String, dynamic>;
+          email ??= d['email']?.toString().trim();
+          phone ??= d['phone']?.toString().trim();
+          regNo ??= (d['registrationNumber'] ?? d['regNo'])?.toString().trim();
+        }
+      } catch (_) {}
+    }
+
+    // Strict Settlement Check: verify that all bills are fully settled
+    final unpaidBills = await getUnpaidStudentBills(
+      cleanId,
+      phone: phone,
+      email: email,
+      regNo: regNo,
+      studentDocId: cleanId,
+    );
+
+    if (unpaidBills.isNotEmpty) {
+      final totalDue = unpaidBills.fold(0.0, (totalDueVal, b) => totalDueVal + (b.amount - b.paidAmount).clamp(0.0, b.amount));
+      throw Exception(
+        "Cannot mark student as moved out: ${unpaidBills.length} unpaid bill(s) pending settlement (Total due: ₹${totalDue.toStringAsFixed(0)}). All bills must be cleared before move-out.",
+      );
+    }
+
+    final updatePayload = <String, dynamic>{
+      'status': 'Moved Out',
+      'isMovedOut': true,
+      'movedOutYear': academicYear.trim(),
+      'movedOutDate': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (remarks != null && remarks.trim().isNotEmpty) {
+      updatePayload['moveOutRemarks'] = remarks.trim();
+    }
+
+    await _usersRef.doc(cleanId).set(updatePayload, SetOptions(merge: true));
+    await _studentsRef.doc(cleanId).set(updatePayload, SetOptions(merge: true));
+
+    if (authUid != null && authUid.isNotEmpty && authUid != cleanId) {
+      await _usersRef.doc(authUid).set(updatePayload, SetOptions(merge: true));
+    }
+  }
+
+  /// Reactivates a moved-out student back to active status
+  Future<void> reactivateStudent(String studentIdentifier) async {
+    final cleanId = studentIdentifier.trim();
+    if (cleanId.isEmpty) return;
+
+    final updatePayload = <String, dynamic>{
+      'status': 'Active',
+      'isMovedOut': false,
+      'movedOutYear': FieldValue.delete(),
+      'movedOutDate': FieldValue.delete(),
+      'moveOutRemarks': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    String? authUid;
+    try {
+      final doc = await _usersRef.doc(cleanId).get();
+      if (doc.exists && doc.data() is Map) {
+        final d = doc.data() as Map<String, dynamic>;
+        authUid = d['authUid']?.toString().trim();
+      }
+    } catch (_) {}
+
+    await _usersRef.doc(cleanId).set(updatePayload, SetOptions(merge: true));
+    await _studentsRef.doc(cleanId).set(updatePayload, SetOptions(merge: true));
+
+    if (authUid != null && authUid.isNotEmpty && authUid != cleanId) {
+      await _usersRef.doc(authUid).set(updatePayload, SetOptions(merge: true));
     }
   }
 
@@ -201,6 +665,16 @@ class FirestoreService {
           final data = doc.data() as Map<String, dynamic>? ?? {};
           final role = (data['role'] ?? '').toString().toLowerCase().trim();
           if (role == 'admin' || role == 'management' || role == 'staff') {
+            continue;
+          }
+
+          final name = (data['fullName'] ?? data['name'] ?? '').toString().trim();
+          final email = (data['email'] ?? '').toString().trim();
+          final regNo = (data['registrationNumber'] ?? data['regNo'] ?? '').toString().trim();
+          final studentId = (data['studentId'] ?? '').toString().trim();
+
+          // Skip blank/ghost accounts created by FCM token or partial syncs
+          if (name.isEmpty && email.isEmpty && regNo.isEmpty && (studentId.isEmpty || (studentId == doc.id && !studentId.startsWith('STU-')))) {
             continue;
           }
 
@@ -1799,6 +2273,15 @@ class FirestoreService {
     final clean = identifier.trim();
     if (clean.isEmpty) return null;
 
+    bool hasProfileData(Map<String, dynamic>? data) {
+      if (data == null) return false;
+      final name = (data['fullName'] ?? data['name'] ?? '').toString().trim();
+      final email = (data['email'] ?? '').toString().trim();
+      final sId = (data['studentId'] ?? '').toString().trim();
+      final reg = (data['registrationNumber'] ?? data['regNo'] ?? '').toString().trim();
+      return name.isNotEmpty || email.isNotEmpty || sId.isNotEmpty || reg.isNotEmpty;
+    }
+
     // 1. Check registration_lookup first (unauthenticated & fast resolution)
     try {
       final lookup = await getRegistrationLookup(clean);
@@ -1806,7 +2289,7 @@ class FirestoreService {
         final sId = lookup['studentId'].toString();
         try {
           final sDoc = await _usersRef.doc(sId).get();
-          if (sDoc.exists && sDoc.data() != null) {
+          if (sDoc.exists && hasProfileData(sDoc.data() as Map<String, dynamic>?)) {
             return {
               'id': sDoc.id,
               ...sDoc.data() as Map<String, dynamic>,
@@ -1820,7 +2303,7 @@ class FirestoreService {
         if (lookup['authUid'] != null) {
           try {
             final authDoc = await _usersRef.doc(lookup['authUid'].toString()).get();
-            if (authDoc.exists && authDoc.data() != null) {
+            if (authDoc.exists && hasProfileData(authDoc.data() as Map<String, dynamic>?)) {
               return {
                 'id': authDoc.id,
                 ...authDoc.data() as Map<String, dynamic>,
@@ -1841,7 +2324,7 @@ class FirestoreService {
     // 2. Check direct doc ID
     try {
       final directDoc = await _usersRef.doc(clean).get();
-      if (directDoc.exists && directDoc.data() != null) {
+      if (directDoc.exists && hasProfileData(directDoc.data() as Map<String, dynamic>?)) {
         return {
           'id': directDoc.id,
           ...directDoc.data() as Map<String, dynamic>,
@@ -1939,27 +2422,112 @@ class FirestoreService {
     return null;
   }
 
-  /// Checks if an email is already assigned to another registered student.
-  /// Returns existing student information if a collision is detected.
-  Future<Map<String, dynamic>?> checkDuplicateStudentEmail(String email, {String? excludeStudentId}) async {
+  /// Checks if an email is already assigned to ANY user across the entire system
+  /// (students in users & students collections, management users, staff, and registration lookups).
+  /// Excludes the specified student/user IDs (to allow editing their own profile without self-collision).
+  /// Returns conflicting user information if a collision is detected.
+  Future<Map<String, dynamic>?> checkDuplicateStudentEmail(
+    String email, {
+    String? excludeStudentId,
+    String? excludeAuthUid,
+  }) async {
     final clean = email.trim().toLowerCase();
     if (clean.isEmpty || !clean.contains('@')) return null;
 
+    bool isExcluded(String docId, Map<String, dynamic> data) {
+      final cleanDocId = docId.trim().toLowerCase();
+      if (excludeStudentId != null && excludeStudentId.trim().isNotEmpty) {
+        final exStudent = excludeStudentId.trim().toLowerCase();
+        if (cleanDocId == exStudent) return true;
+        if ((data['studentId'] ?? '').toString().trim().toLowerCase() == exStudent) return true;
+        if ((data['id'] ?? '').toString().trim().toLowerCase() == exStudent) return true;
+      }
+      if (excludeAuthUid != null && excludeAuthUid.trim().isNotEmpty) {
+        final exAuth = excludeAuthUid.trim().toLowerCase();
+        if (cleanDocId == exAuth) return true;
+        if ((data['authUid'] ?? '').toString().trim().toLowerCase() == exAuth) return true;
+      }
+      return false;
+    }
+
     try {
-      final query = await _usersRef.where('email', isEqualTo: clean).get();
-      for (final doc in query.docs) {
-        if (excludeStudentId != null && doc.id == excludeStudentId) continue;
+      // 1. Check users collection
+      final userSnap = await _usersRef.where('email', isEqualTo: clean).get();
+      for (final doc in userSnap.docs) {
         final data = doc.data() as Map<String, dynamic>? ?? {};
-        final status = (data['status'] ?? '').toString().toLowerCase();
-        if (status != 'archived' && status != 'deleted') {
+        if (isExcluded(doc.id, data)) continue;
+        final status = (data['status'] ?? '').toString().trim().toLowerCase();
+        if (status == 'deleted') continue;
+        return {
+          'id': doc.id,
+          'studentId': data['studentId'] ?? doc.id,
+          'fullName': data['fullName'] ?? data['name'] ?? 'Resident',
+          'role': data['role'] ?? 'Student',
+          'room': data['room'] ?? '',
+          'building': data['building'] ?? '',
+          'email': clean,
+        };
+      }
+
+      // 2. Check management_users collection
+      final mgmtSnap = await _managementRef.where('email', isEqualTo: clean).get();
+      for (final doc in mgmtSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        if (isExcluded(doc.id, data)) continue;
+        return {
+          'id': doc.id,
+          'studentId': doc.id,
+          'fullName': data['name'] ?? data['fullName'] ?? 'Management User',
+          'role': data['role'] ?? 'Management',
+          'email': clean,
+        };
+      }
+
+      // 3. Check staff collection
+      final staffSnap = await _staffRef.where('email', isEqualTo: clean).get();
+      for (final doc in staffSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        if (isExcluded(doc.id, data)) continue;
+        return {
+          'id': doc.id,
+          'studentId': doc.id,
+          'fullName': data['name'] ?? data['fullName'] ?? 'Staff',
+          'role': data['role'] ?? 'Staff',
+          'email': clean,
+        };
+      }
+
+      // 4. Check registration_lookup mapping
+      final regDoc = await _regLookupRef.doc(clean).get();
+      if (regDoc.exists) {
+        final data = regDoc.data() as Map<String, dynamic>? ?? {};
+        if (!isExcluded(regDoc.id, data)) {
           return {
-            'id': doc.id,
-            'studentId': data['studentId'] ?? doc.id,
+            'id': regDoc.id,
+            'studentId': data['studentId'] ?? regDoc.id,
             'fullName': data['fullName'] ?? 'Resident',
-            'room': data['room'] ?? '',
-            'building': data['building'] ?? '',
+            'role': 'Student',
+            'email': clean,
           };
         }
+      }
+
+      // 5. Check students collection (if legacy/separate docs exist)
+      final studentSnap = await _studentsRef.where('email', isEqualTo: clean).get();
+      for (final doc in studentSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        if (isExcluded(doc.id, data)) continue;
+        final status = (data['status'] ?? '').toString().trim().toLowerCase();
+        if (status == 'deleted') continue;
+        return {
+          'id': doc.id,
+          'studentId': data['studentId'] ?? doc.id,
+          'fullName': data['fullName'] ?? data['name'] ?? 'Resident',
+          'role': data['role'] ?? 'Student',
+          'room': data['room'] ?? '',
+          'building': data['building'] ?? '',
+          'email': clean,
+        };
       }
     } catch (e) {
       debugPrint("checkDuplicateStudentEmail error: $e");
@@ -1967,24 +2535,136 @@ class FirestoreService {
     return null;
   }
 
-  /// Checks if a registration number is already assigned to another registered student.
-  Future<Map<String, dynamic>?> checkDuplicateStudentRegNo(String regNo, {String? excludeStudentId}) async {
+  /// Checks if a registration number is already assigned to:
+  /// 1. Any student who is currently residing in (active resident, not moved out/left/deleted).
+  /// 2. Any user in the current academic year (or target academic year(s)).
+  /// Excludes the specified student/user IDs (to allow editing without self-collision).
+  /// Returns conflicting student details if a collision is detected.
+  Future<Map<String, dynamic>?> checkDuplicateStudentRegNo(
+    String regNo, {
+    String? excludeStudentId,
+    String? excludeAuthUid,
+    String? targetAcademicYear,
+    List<String>? targetAcademicYears,
+  }) async {
     final clean = regNo.trim();
     if (clean.isEmpty) return null;
+    final cleanUpper = clean.toUpperCase();
+
+    // Prepare target academic years to check against
+    final Set<String> yearsToCheck = {};
+    final currentSelected = AcademicYearService.instance.selectedYear.trim();
+    if (currentSelected.isNotEmpty) {
+      yearsToCheck.add(currentSelected);
+    }
+    if (targetAcademicYear != null && targetAcademicYear.trim().isNotEmpty) {
+      yearsToCheck.add(targetAcademicYear.trim());
+    }
+    if (targetAcademicYears != null) {
+      for (final y in targetAcademicYears) {
+        if (y.trim().isNotEmpty) yearsToCheck.add(y.trim());
+      }
+    }
+
+    bool isExcluded(String docId, Map<String, dynamic> data) {
+      final cleanDocId = docId.trim().toLowerCase();
+      if (excludeStudentId != null && excludeStudentId.trim().isNotEmpty) {
+        final exStudent = excludeStudentId.trim().toLowerCase();
+        if (cleanDocId == exStudent) return true;
+        if ((data['studentId'] ?? '').toString().trim().toLowerCase() == exStudent) return true;
+        if ((data['id'] ?? '').toString().trim().toLowerCase() == exStudent) return true;
+      }
+      if (excludeAuthUid != null && excludeAuthUid.trim().isNotEmpty) {
+        final exAuth = excludeAuthUid.trim().toLowerCase();
+        if (cleanDocId == exAuth) return true;
+        if ((data['authUid'] ?? '').toString().trim().toLowerCase() == exAuth) return true;
+      }
+      return false;
+    }
 
     try {
-      final regQuery = await _usersRef.where('registrationNumber', isEqualTo: clean).get();
-      for (final doc in regQuery.docs) {
-        if (excludeStudentId != null && doc.id == excludeStudentId) continue;
+      final Map<String, DocumentSnapshot> candidates = {};
+
+      // Query users collection by registrationNumber and regNo
+      final q1 = await _usersRef.where('registrationNumber', isEqualTo: clean).get();
+      for (final doc in q1.docs) {
+        candidates[doc.id] = doc;
+      }
+      if (cleanUpper != clean) {
+        final q2 = await _usersRef.where('registrationNumber', isEqualTo: cleanUpper).get();
+        for (final doc in q2.docs) {
+          candidates[doc.id] = doc;
+        }
+      }
+      final q3 = await _usersRef.where('regNo', isEqualTo: clean).get();
+      for (final doc in q3.docs) {
+        candidates[doc.id] = doc;
+      }
+      if (cleanUpper != clean) {
+        final q4 = await _usersRef.where('regNo', isEqualTo: cleanUpper).get();
+        for (final doc in q4.docs) {
+          candidates[doc.id] = doc;
+        }
+      }
+
+      // Check registration_lookup mapping
+      final lookupSnap = await _regLookupRef.doc(cleanUpper).get();
+      if (lookupSnap.exists) {
+        final d = lookupSnap.data() as Map<String, dynamic>? ?? {};
+        final sId = d['studentId']?.toString().trim();
+        if (sId != null && sId.isNotEmpty && !candidates.containsKey(sId)) {
+          final userDoc = await _usersRef.doc(sId).get();
+          if (userDoc.exists) {
+            candidates[userDoc.id] = userDoc;
+          }
+        }
+      }
+
+      // Evaluate candidates against residency and academic year rules
+      for (final doc in candidates.values) {
         final data = doc.data() as Map<String, dynamic>? ?? {};
-        final status = (data['status'] ?? '').toString().toLowerCase();
-        if (status != 'archived' && status != 'deleted') {
+        if (isExcluded(doc.id, data)) continue;
+
+        final status = (data['status'] ?? '').toString().trim().toLowerCase();
+        if (status == 'deleted') continue;
+
+        // Condition 1: Is this student currently residing in?
+        // (Active resident, not moved out, left, student left, or archived)
+        final isNotResiding = status == 'moved out' ||
+            status == 'student left' ||
+            status == 'left' ||
+            status == 'archived';
+        final isCurrentlyResiding = !isNotResiding;
+
+        // Condition 2: Is this user in the current academic year (or target years)?
+        final profile = StudentProfile.fromFirestore(doc);
+        bool isInTargetYear = false;
+        String matchedYear = '';
+        for (final yr in yearsToCheck) {
+          if (profile.isEnrolledInAcademicYear(yr)) {
+            isInTargetYear = true;
+            matchedYear = yr;
+            break;
+          }
+        }
+
+        // If either condition is true -> COLLISION!
+        if (isCurrentlyResiding || isInTargetYear) {
           return {
             'id': doc.id,
             'studentId': data['studentId'] ?? doc.id,
             'fullName': data['fullName'] ?? 'Resident',
+            'registrationNumber': clean,
             'room': data['room'] ?? '',
             'building': data['building'] ?? '',
+            'status': data['status'] ?? 'Active',
+            'isCurrentlyResiding': isCurrentlyResiding,
+            'isInCurrentAcademicYear': isInTargetYear,
+            'academicYear': matchedYear.isNotEmpty
+                ? matchedYear
+                : (profile.academicYears.isNotEmpty
+                    ? profile.academicYears.first
+                    : AcademicYearService.instance.selectedYear),
           };
         }
       }
@@ -2110,11 +2790,95 @@ class FirestoreService {
   }
 
   /// Update custom student profile fields (bed number, phone, email, etc.)
-  Future<void> updateStudentProfileFields(String studentId, Map<String, dynamic> fields) async {
-    await _usersRef.doc(studentId).set({
+  /// Automatically syncs across linked authUid doc, students collection,
+  /// and updates registration_lookup if email or registration number changes.
+  Future<void> updateStudentProfileFields(
+    String studentId,
+    Map<String, dynamic> fields, {
+    String? oldEmail,
+    String? oldRegNo,
+  }) async {
+    final cleanId = studentId.trim();
+    if (cleanId.isEmpty) return;
+
+    final updateData = {
       ...fields,
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+
+    // Update primary doc in users collection
+    await _usersRef.doc(cleanId).set(updateData, SetOptions(merge: true));
+
+    // Keep authUid or counterpart studentId docs in sync
+    try {
+      final snap = await _usersRef.doc(cleanId).get();
+      if (snap.exists && snap.data() is Map) {
+        final data = snap.data() as Map<String, dynamic>;
+        final authUid = data['authUid']?.toString().trim();
+        final linkedStudentId = data['studentId']?.toString().trim();
+
+        if (authUid != null && authUid.isNotEmpty && authUid != cleanId) {
+          await _usersRef.doc(authUid).set(updateData, SetOptions(merge: true));
+        }
+        if (linkedStudentId != null && linkedStudentId.isNotEmpty && linkedStudentId != cleanId) {
+          await _usersRef.doc(linkedStudentId).set(updateData, SetOptions(merge: true));
+        }
+
+        // Also update students collection if doc exists
+        try {
+          final sDoc = await _studentsRef.doc(cleanId).get();
+          if (sDoc.exists) {
+            await _studentsRef.doc(cleanId).set(updateData, SetOptions(merge: true));
+          }
+          if (linkedStudentId != null && linkedStudentId.isNotEmpty) {
+            final sDoc2 = await _studentsRef.doc(linkedStudentId).get();
+            if (sDoc2.exists) {
+              await _studentsRef.doc(linkedStudentId).set(updateData, SetOptions(merge: true));
+            }
+          }
+        } catch (_) {}
+
+        // Handle registration_lookup updating if email or regNo changed
+        final newEmail = fields['email']?.toString().trim().toLowerCase();
+        final newRegNo = (fields['registrationNumber'] ?? fields['regNo'])?.toString().trim().toUpperCase();
+
+        if (oldEmail != null && oldEmail.trim().isNotEmpty) {
+          final cleanOld = oldEmail.trim().toLowerCase();
+          if (newEmail != null && newEmail != cleanOld) {
+            try {
+              await _regLookupRef.doc(cleanOld).delete();
+            } catch (_) {}
+          }
+        }
+        if (oldRegNo != null && oldRegNo.trim().isNotEmpty) {
+          final cleanOldReg = oldRegNo.trim().toUpperCase();
+          if (newRegNo != null && newRegNo != cleanOldReg) {
+            try {
+              await _regLookupRef.doc(cleanOldReg).delete();
+            } catch (_) {}
+          }
+        }
+
+        if (newEmail != null || newRegNo != null) {
+          final finalEmail = newEmail ?? (data['email']?.toString().trim().toLowerCase() ?? '');
+          final finalReg = newRegNo ?? ((data['registrationNumber'] ?? data['regNo'])?.toString().trim().toUpperCase() ?? '');
+          final finalName = fields['fullName']?.toString() ?? data['fullName']?.toString();
+          final finalStudentId = linkedStudentId ?? cleanId;
+
+          if (finalEmail.isNotEmpty && finalReg.isNotEmpty) {
+            await saveRegistrationLookup(
+              studentId: finalStudentId,
+              email: finalEmail,
+              regNo: finalReg,
+              fullName: finalName,
+              authUid: authUid,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("updateStudentProfileFields sync notice: $e");
+    }
   }
 
   // =========================================================================

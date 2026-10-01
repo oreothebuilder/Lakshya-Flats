@@ -16,6 +16,8 @@ import '../screens/Admin/tickets_management_screen.dart';
 import '../screens/Admin/expense_tracker_screen.dart';
 import '../screens/Admin/personal_todo_screen.dart';
 import '../screens/Admin/staff_screen.dart';
+import '../services/academic_year_service.dart';
+import 'app_toast.dart';
 
 class AdminDrawer extends StatelessWidget {
   final String activeItem;
@@ -222,6 +224,9 @@ class AdminDrawer extends StatelessWidget {
               ],
             ),
           ),
+
+          // Academic Year Selector Dropdown
+          _buildAcademicYearSelector(context),
 
           // Drawer Items
           Expanded(
@@ -465,6 +470,260 @@ class AdminDrawer extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAcademicYearSelector(BuildContext context) {
+    return StreamBuilder<List<String>>(
+      stream: AcademicYearService.instance.getAcademicYearsStream(),
+      initialData: const [AcademicYearService.defaultYear],
+      builder: (context, snapshot) {
+        final availableYears = snapshot.data ?? [AcademicYearService.defaultYear];
+
+        return ValueListenableBuilder<String>(
+          valueListenable: AcademicYearService.instance.selectedYearNotifier,
+          builder: (context, currentSelectedYear, _) {
+            final effectiveYear = availableYears.contains(currentSelectedYear)
+                ? currentSelectedYear
+                : availableYears.first;
+
+            return Container(
+              margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_month_rounded, size: 14, color: Color(0xFF0D52CE)),
+                      const SizedBox(width: 6),
+                      Text(
+                        "ACADEMIC YEAR VIEW",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0D52CE),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: effectiveYear,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0F172A), size: 20),
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0F172A),
+                        ),
+                        items: [
+                          ...availableYears.map((year) {
+                            return DropdownMenuItem<String>(
+                              value: year,
+                              child: Row(
+                                children: [
+                                  Text(
+                                    year,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF0F172A),
+                                      fontSize: 13.5,
+                                    ),
+                                  ),
+                                  if (year == AcademicYearService.defaultYear) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        "Default",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF0D52CE),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          }),
+                          const DropdownMenuItem<String>(
+                            value: "__CREATE_NEW_YEAR__",
+                            child: Row(
+                              children: [
+                                Icon(Icons.add_circle_outline_rounded, size: 16, color: Color(0xFF0D52CE)),
+                                SizedBox(width: 6),
+                                Text(
+                                  "+ Create Next Year",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF0D52CE),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val == null) return;
+                          if (val == "__CREATE_NEW_YEAR__") {
+                            _showCreateNextYearDialog(context, availableYears);
+                          } else {
+                            AcademicYearService.instance.setSelectedYear(val);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showCreateNextYearDialog(BuildContext context, List<String> availableYears) {
+    final proposedYear = AcademicYearService.proposeNextAcademicYear(availableYears);
+    final yearController = TextEditingController(text: proposedYear);
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0D52CE), size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "Create Academic Year",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Create the next academic year view for resident management. Students whose stay spans this time frame will appear in this new year's view.",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  color: const Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "Academic Year (e.g. 2027-2028)",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF334155),
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: yearController,
+                decoration: InputDecoration(
+                  hintText: proposedYear,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text(
+                "Cancel",
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final input = yearController.text.trim();
+                      if (input.isEmpty) return;
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        await AcademicYearService.instance.addAcademicYear(input);
+                        if (context.mounted) {
+                          Navigator.pop(dialogCtx);
+                          AppToast.showSuccess(context, "Academic year $input created and selected.");
+                        }
+                      } catch (e) {
+                        setDialogState(() => isSubmitting = false);
+                        if (context.mounted) {
+                          AppToast.showError(context, "Error: $e");
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D52CE),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(
+                      "Create Year",
+                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
