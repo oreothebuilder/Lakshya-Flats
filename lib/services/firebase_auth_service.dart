@@ -128,8 +128,8 @@ class FirebaseAuthService {
             } on FirebaseAuthException catch (createError) {
               if (createError.code == 'email-already-in-use') {
                 throw FirebaseAuthException(
-                  code: 'wrong-password',
-                  message: "Incorrect password for student resident account.",
+                  code: 'email-already-in-use',
+                  message: "The email ($resolvedEmail) is already registered in Firebase with another password. Tap 'Forgot Password?' below to reset it, or log in with your existing password.",
                 );
               }
               rethrow;
@@ -326,13 +326,20 @@ class FirebaseAuthService {
           return "No account found with this email address.";
         case 'wrong-password':
         case 'invalid-credential':
+          if (error.message != null &&
+              error.message!.isNotEmpty &&
+              !error.message!.startsWith("INVALID_LOGIN_CREDENTIALS") &&
+              !error.message!.startsWith("The email address is") &&
+              !error.message!.startsWith("An internal error has occurred")) {
+            return error.message!;
+          }
           return "Incorrect password or credentials. Please try again.";
         case 'invalid-email':
           return "The email address is formatted improperly.";
         case 'user-disabled':
           return "This account has been disabled by the administrator.";
         case 'email-already-in-use':
-          return "An account already exists for this email.";
+          return error.message ?? "An account already exists for this email.";
         case 'weak-password':
           return "The password is too weak. Use at least 6 characters.";
         case 'requires-recent-login':

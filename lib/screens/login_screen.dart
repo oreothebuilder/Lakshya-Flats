@@ -161,13 +161,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleForgotPassword() async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      _showNotification("Please enter a valid email address first.", isSuccess: false);
+    final input = _emailController.text.trim();
+    if (input.isEmpty) {
+      _showNotification(
+        _selectedRole == LoginRole.user
+            ? "Please enter your Email ID or College Roll No. first."
+            : "Please enter your management email address first.",
+        isSuccess: false,
+      );
       return;
     }
 
+    setState(() => _isLoading = true);
     try {
+      final email = await FirebaseAuthService().resolveEmailFromIdentifier(input);
       await FirebaseAuthService().sendPasswordResetEmail(email);
       if (mounted) {
         _showNotification("Password reset email sent to $email. Check your inbox!");
@@ -175,6 +182,10 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (mounted) {
         _showNotification(FirebaseAuthService.getReadableErrorMessage(e), isSuccess: false);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
