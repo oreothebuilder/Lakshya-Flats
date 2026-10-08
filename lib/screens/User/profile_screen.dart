@@ -98,6 +98,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _emailNotifications = true;
   String _language = "English";
 
+  // Account Deletion state
+  bool _deletionRequested = false;
+  DateTime? _deletionRequestedAt;
+  String? _deletionReason;
+
   @override
   void initState() {
     super.initState();
@@ -112,6 +117,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (u.registrationNumber?.isNotEmpty == true) _reg = u.registrationNumber!;
       if (u.building?.isNotEmpty == true) _building = u.building!;
       if (u.room?.isNotEmpty == true) _room = u.room!;
+      _deletionRequested = u.deletionRequested;
+      _deletionRequestedAt = u.deletionRequestedAt;
+      _deletionReason = u.deletionReason;
     } else if (authUser != null) {
       if (authUser.displayName?.isNotEmpty == true) _name = authUser.displayName!;
       if (authUser.email?.isNotEmpty == true) _email = authUser.email!;
@@ -354,6 +362,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (rawNotes is List) {
         _notes = rawNotes.map((e) => e.toString()).toList();
       }
+
+      _deletionRequested = studentData['deletionRequested'] == true;
+      if (studentData['deletionRequestedAt'] != null) {
+        if (studentData['deletionRequestedAt'] is Timestamp) {
+          _deletionRequestedAt = (studentData['deletionRequestedAt'] as Timestamp).toDate();
+        } else if (studentData['deletionRequestedAt'] is String) {
+          _deletionRequestedAt = DateTime.tryParse(studentData['deletionRequestedAt']);
+        }
+      } else {
+        _deletionRequestedAt = null;
+      }
+      _deletionReason = studentData['deletionReason']?.toString();
     });
   }
 
@@ -1019,7 +1039,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const Icon(Icons.apartment_rounded, color: Colors.white70, size: 14),
                           const SizedBox(width: 6),
                           Text(
-                            "${_building.isNotEmpty ? _building : 'Lakshya'} • Room ${_room.isNotEmpty ? _room : 'N/A'}${_bed.isNotEmpty ? ' • ' + (_bed.toLowerCase().startsWith('bed') ? _bed : 'Bed ' + _bed) : ''}",
+                            "${_building.isNotEmpty ? _building : 'Lakshya'} • Room ${_room.isNotEmpty ? _room : 'N/A'}${_bed.isNotEmpty ? ' • ${_bed.toLowerCase().startsWith('bed') ? _bed : 'Bed $_bed'}' : ''}",
                             style: GoogleFonts.plusJakartaSans(
                               color: Colors.white.withValues(alpha: 0.85),
                               fontSize: 13,
@@ -1371,6 +1391,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 20),
+
+                // 6. Account Deletion / Management Card
+                _buildDangerZoneCard(),
               ],
             ),
           ),
@@ -1378,6 +1402,457 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     ),
   );
+  }
+
+  void _showDeleteAccountDialog() {
+    final reasonController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (_, setModalState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.delete_forever_rounded, color: Color(0xFFDC2626), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "Delete Account Request",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "Notice: Students cannot directly delete their account. Confirming this will forward a deletion request to the Hostel Administrator for review and directory removal.",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: const Color(0xFF92400E),
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "What happens next?",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "• Your request is placed in the Administrator's queue.\n"
+                      "• Administration will verify pending dues, room vacating status, and deposits.\n"
+                      "• The Administrator will permanently delete your resident record from the Student Directory.",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        color: const Color(0xFF64748B),
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "Reason for Deletion (Optional)",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: reasonController,
+                      maxLines: 2,
+                      enabled: !isSubmitting,
+                      decoration: InputDecoration(
+                        hintText: "e.g. Vacating hostel, course finished, incorrect registration...",
+                        hintStyle: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF94A3B8)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
+                  child: Text(
+                    "Keep Account",
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          setModalState(() => isSubmitting = true);
+                          final u = widget.currentUser;
+                          final authUser = FirebaseAuthService().currentUser;
+                          final uid = u?.uid ?? authUser?.uid ?? _studentDocId;
+                          final sid = _studentId.isNotEmpty ? _studentId : (u?.studentId ?? uid);
+                          final name = _name;
+                          final email = _email;
+                          final phone = _phone;
+                          final bldg = _building;
+                          final room = _room;
+                          final reg = _reg;
+                          final reason = reasonController.text.trim();
+
+                          try {
+                            await FirestoreService().requestAccountDeletion(
+                              userId: uid,
+                              studentId: sid,
+                              fullName: name,
+                              email: email,
+                              phone: phone,
+                              building: bldg,
+                              room: room,
+                              registrationNumber: reg,
+                              reason: reason.isNotEmpty ? reason : null,
+                            );
+
+                            if (mounted) {
+                              setState(() {
+                                _deletionRequested = true;
+                                _deletionRequestedAt = DateTime.now();
+                                _deletionReason = reason.isNotEmpty ? reason : null;
+                              });
+                            }
+
+                            if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                            if (mounted) {
+                              AppToast.showSuccess(
+                                context,
+                                "Account deletion request sent to administrator for review.",
+                              );
+                            }
+                          } catch (e) {
+                            setModalState(() => isSubmitting = false);
+                            if (mounted) {
+                              AppToast.showError(context, "Failed to submit request: $e");
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : Text(
+                          "Submit Request",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmCancelDeletionRequest() {
+    bool isCancelling = false;
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (_, setModalState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(
+                "Cancel Deletion Request?",
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 17),
+              ),
+              content: Text(
+                "Are you sure you want to cancel your account deletion request? Your resident account will remain active in the system.",
+                style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
+              ),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              actions: [
+                TextButton(
+                  onPressed: isCancelling ? null : () => Navigator.pop(dialogCtx),
+                  child: Text(
+                    "Back",
+                    style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B), fontWeight: FontWeight.bold),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isCancelling
+                      ? null
+                      : () async {
+                          setModalState(() => isCancelling = true);
+                          final u = widget.currentUser;
+                          final uid = u?.uid ?? FirebaseAuthService().currentUser?.uid ?? _studentDocId;
+                          final sid = _studentId.isNotEmpty ? _studentId : (u?.studentId ?? uid);
+                          try {
+                            await FirestoreService().cancelAccountDeletionRequest(uid, studentId: sid);
+                            if (mounted) {
+                              setState(() {
+                                _deletionRequested = false;
+                                _deletionRequestedAt = null;
+                                _deletionReason = null;
+                              });
+                            }
+                            if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                            if (mounted) {
+                              AppToast.showSuccess(context, "Account deletion request has been cancelled.");
+                            }
+                          } catch (e) {
+                            setModalState(() => isCancelling = false);
+                            if (mounted) {
+                              AppToast.showError(context, "Failed to cancel request: $e");
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: isCancelling
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : Text("Cancel Request", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDangerZoneCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _deletionRequested ? const Color(0xFFFED7AA) : const Color(0xFFFEE2E2),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _deletionRequested ? const Color(0xFFFFF7ED) : const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  _deletionRequested ? Icons.hourglass_top_rounded : Icons.delete_outline_rounded,
+                  color: _deletionRequested ? const Color(0xFFEA580C) : const Color(0xFFDC2626),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                "Account Management",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_deletionRequested) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.pending_actions_rounded, color: Color(0xFFD97706), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Deletion Request Pending Admin Review",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF92400E),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "You have submitted a request to delete your student resident account. The administrator will review your clearance in the Student Directory and complete permanent deletion.",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: const Color(0xFFB45309),
+                      height: 1.4,
+                    ),
+                  ),
+                  if (_deletionReason != null && _deletionReason!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        "Reason: $_deletionReason",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF78350F),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (_deletionRequestedAt != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      "Submitted on: ${_formatDateTime(_deletionRequestedAt!)}",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF92400E),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: _confirmCancelDeletionRequest,
+              icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF475569)),
+              label: Text(
+                "Cancel Deletion Request",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF334155),
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFCBD5E1)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+            ),
+          ] else ...[
+            Text(
+              "Delete Account",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "Submit a request to the hostel administration to permanently remove your account and resident profile from the student directory.",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: const Color(0xFF64748B),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _showDeleteAccountDialog,
+              icon: const Icon(Icons.delete_forever_rounded, size: 16, color: Color(0xFFDC2626)),
+              label: Text(
+                "Request Account Deletion",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFFDC2626),
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFFECACA), width: 1.2),
+                backgroundColor: const Color(0xFFFFF1F2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildInfoField(String label, TextEditingController controller, String value, bool isEditing, {TextInputType keyboardType = TextInputType.text, int maxLines = 1}) {

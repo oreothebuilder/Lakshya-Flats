@@ -31,6 +31,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
   bool _isSearching = false;
   String _searchQuery = "";
   final TextEditingController _searchController = TextEditingController();
+  bool _showDeletionRequestsOnly = false;
 
   @override
   void initState() {
@@ -65,6 +66,11 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
   List<StudentProfile> _filterStudents(List<StudentProfile> students, {String? academicYear}) {
     final year = academicYear ?? AcademicYearService.instance.selectedYear;
     return students.where((student) {
+      // Deletion Requests filter toggle
+      if (_showDeletionRequestsOnly && !student.deletionRequested) {
+        return false;
+      }
+
       // Academic Year Filter: students only appear in years they were enrolled for.
       // Moved-out students appear in historical years with a badge, but never in future years.
       if (!student.isEnrolledInAcademicYear(year)) {
@@ -98,6 +104,256 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
 
   void _showSnackbar(String msg, {bool isSuccess = true}) {
     AppToast.show(context, msg, isSuccess: isSuccess);
+  }
+
+  String _formatDate(DateTime dt) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return "${dt.day} ${months[dt.month - 1]} ${dt.year}";
+  }
+
+  Widget _buildDeleteWarningPoint(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.close_rounded, size: 14, color: Color(0xFFDC2626)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: const Color(0xFF475569),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteStudent(StudentProfile student) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.delete_forever_rounded, color: Color(0xFFDC2626), size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Delete Student Profile",
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (student.deletionRequested)
+              Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF1F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFECDD3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: Color(0xFFE11D48), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Resident requested account deletion${student.deletionReason?.isNotEmpty == true ? ': ${student.deletionReason!}' : ''}",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF9F1239),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Text.rich(
+              TextSpan(
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5,
+                  color: const Color(0xFF475569),
+                  height: 1.45,
+                ),
+                children: [
+                  const TextSpan(text: "Are you sure you want to permanently delete "),
+                  TextSpan(
+                    text: "${student.fullName} (${student.displayRollNo})",
+                    style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+                  ),
+                  const TextSpan(text: " from "),
+                  TextSpan(
+                    text: "${student.building}, ${student.displayRoomAndBed}",
+                    style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF003896)),
+                  ),
+                  const TextSpan(text: "?\n\nThis will permanently delete:"),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDeleteWarningPoint("Resident profile and login credentials"),
+                  _buildDeleteWarningPoint("All issued bills, invoices, and payment receipts"),
+                  _buildDeleteWarningPoint("Complaints, tickets, and personal notes"),
+                  _buildDeleteWarningPoint("Room and bed occupancy records"),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "⚠️ This action is permanent and cannot be undone.",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(
+              "Cancel",
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: Text(
+              "Permanently Delete",
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete == true && mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text("Deleting student profile..."),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      try {
+        await FirestoreService().deleteStudentProfile(student.id);
+        if (mounted) Navigator.pop(context); // close loader
+        if (mounted) {
+          _showSnackbar("${student.fullName} has been permanently deleted from directory.", isSuccess: true);
+        }
+      } catch (e) {
+        if (mounted) Navigator.pop(context);
+        if (mounted) {
+          _showSnackbar("Failed to delete student: $e", isSuccess: false);
+        }
+      }
+    }
+  }
+
+  Future<void> _dismissDeletionRequest(StudentProfile student) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text(
+          "Dismiss Deletion Request?",
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 17),
+        ),
+        content: Text(
+          "This will clear the deletion request for ${student.fullName}. The student profile will remain active.",
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text("Cancel", style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text("Dismiss Request", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await FirestoreService().dismissDeletionRequest(student.id, userId: student.studentId);
+        if (mounted) {
+          _showSnackbar("Deletion request dismissed for ${student.fullName}.");
+        }
+      } catch (e) {
+        if (mounted) {
+          _showSnackbar("Failed to dismiss request: $e", isSuccess: false);
+        }
+      }
+    }
   }
 
   void _openSendBillBottomSheet(StudentProfile student) {
@@ -494,6 +750,32 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                                 ),
                               ),
                             ),
+                            if (student.deletionRequested) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFFECACA)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, size: 12, color: Color(0xFFDC2626)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "Deletion Requested",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFFDC2626),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 5),
@@ -553,6 +835,51 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                 ],
               ),
 
+              if (student.deletionRequested) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF1F2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFECDD3)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.person_remove_rounded, color: Color(0xFFE11D48), size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Resident requested account deletion${student.deletionRequestedAt != null ? ' on ${_formatDate(student.deletionRequestedAt!)}' : ''}",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF9F1239),
+                              ),
+                            ),
+                            if (student.deletionReason != null && student.deletionReason!.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                "Reason: ${student.deletionReason}",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11.5,
+                                  color: const Color(0xFFBE123C),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 14),
               const Divider(height: 1, color: Color(0xFFF1F5F9)),
               const SizedBox(height: 12),
@@ -591,6 +918,59 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                   // Action Buttons Right (Send Bill & Profile)
                   Row(
                     children: [
+                      // Deletion Request Actions
+                      if (student.deletionRequested && (widget.currentUser?.canEditStudents ?? true)) ...[
+                        ElevatedButton.icon(
+                          onPressed: () => _confirmDeleteStudent(student),
+                          icon: const Icon(
+                            Icons.delete_forever_rounded,
+                            size: 15,
+                            color: Colors.white,
+                          ),
+                          label: Text(
+                            "Delete",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFDC2626),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        OutlinedButton(
+                          onPressed: () => _dismissDeletionRequest(student),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFCBD5E1)),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: Text(
+                            "Dismiss",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+
                       // Only Super Admin can issue bills directly from Directory
                       if (widget.currentUser?.canManagePayments ?? true) ...[
                         OutlinedButton.icon(
@@ -647,6 +1027,38 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                           elevation: 0,
                         ),
                       ),
+                      if (widget.currentUser?.canEditStudents ?? true) ...[
+                        const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert_rounded, size: 20, color: Color(0xFF64748B)),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onSelected: (val) {
+                            if (val == 'delete') {
+                              _confirmDeleteStudent(student);
+                            }
+                          },
+                          itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.delete_forever_rounded, color: Color(0xFFDC2626), size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "Delete Resident",
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFFDC2626),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -968,9 +1380,11 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                     valueListenable: AcademicYearService.instance.selectedYearNotifier,
                     builder: (context, currentYear, _) {
                       final filtered = _filterStudents(allStudents, academicYear: currentYear);
+                      final pendingDeletionCount = allStudents.where((s) => s.deletionRequested).length;
 
+                      Widget content;
                       if (filtered.isEmpty) {
-                        return Center(
+                        content = Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -984,9 +1398,11 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                allStudents.isEmpty
-                                    ? "No students enrolled yet"
-                                    : "No residents for $currentYear",
+                                _showDeletionRequestsOnly
+                                    ? "No pending deletion requests"
+                                    : (allStudents.isEmpty
+                                        ? "No students enrolled yet"
+                                        : "No residents for $currentYear"),
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 17,
                                   fontWeight: FontWeight.bold,
@@ -995,15 +1411,27 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                allStudents.isEmpty
-                                    ? "Onboard your first real resident to get started."
-                                    : "No resident records match academic year $currentYear.",
+                                _showDeletionRequestsOnly
+                                    ? "All student accounts are currently active."
+                                    : (allStudents.isEmpty
+                                        ? "Onboard your first real resident to get started."
+                                        : "No resident records match academic year $currentYear."),
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 13,
                                   color: const Color(0xFF64748B),
                                 ),
                               ),
-                              if (allStudents.isEmpty) ...[
+                              if (_showDeletionRequestsOnly) ...[
+                                const SizedBox(height: 16),
+                                OutlinedButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _showDeletionRequestsOnly = false;
+                                    });
+                                  },
+                                  child: const Text("Show All Students"),
+                                ),
+                              ] else if (allStudents.isEmpty) ...[
                                 const SizedBox(height: 20),
                                 ElevatedButton.icon(
                                   onPressed: () {
@@ -1028,14 +1456,73 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
                             ],
                           ),
                         );
+                      } else {
+                        content = ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            return _buildStudentCard(filtered[index]);
+                          },
+                        );
                       }
 
-                      return ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          return _buildStudentCard(filtered[index]);
-                        },
+                      return Column(
+                        children: [
+                          if (pendingDeletionCount > 0)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _showDeletionRequestsOnly ? const Color(0xFFFEF2F2) : const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _showDeletionRequestsOnly ? const Color(0xFFFCA5A5) : const Color(0xFFFDE68A),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 20,
+                                    color: _showDeletionRequestsOnly ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      "$pendingDeletionCount Resident Deletion Request${pendingDeletionCount > 1 ? 's' : ''} Pending Review",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: _showDeletionRequestsOnly ? const Color(0xFF991B1B) : const Color(0xFF92400E),
+                                      ),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _showDeletionRequestsOnly = !_showDeletionRequestsOnly;
+                                      });
+                                    },
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: Text(
+                                      _showDeletionRequestsOnly ? "Show All Students" : "View Requests",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: _showDeletionRequestsOnly ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Expanded(child: content),
+                        ],
                       );
                     },
                   );

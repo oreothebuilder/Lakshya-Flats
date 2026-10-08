@@ -101,6 +101,10 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_student.deletionRequested) ...[
+            _buildDeletionRequestAlertBanner(),
+            const SizedBox(height: 12),
+          ],
           // Row 1: Profile photo, Name, Status Badge, Edit Button & Collapse Toggle
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -171,6 +175,32 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                             ),
                           ),
                         ),
+                        if (_student.deletionRequested) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, size: 11, color: Color(0xFFDC2626)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  "DELETE REQUESTED",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFFDC2626),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     if (_student.academicYears.isNotEmpty) ...[
@@ -4505,6 +4535,206 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
       } catch (e) {
         if (mounted) {
           _showSnackbar("Failed to update status: $e", isSuccess: false);
+        }
+      }
+    }
+  }
+
+  // ===========================================================================
+  // ACCOUNT DELETION REQUEST ACTIONS & BANNER
+  // ===========================================================================
+
+  Widget _buildDeletionRequestAlertBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFECACA), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFDC2626).withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Color(0xFFDC2626),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Resident Requested Account Deletion",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF991B1B),
+                      ),
+                    ),
+                    if (_student.deletionRequestedAt != null)
+                      Text(
+                        "Submitted on ${_formatDateTime(_student.deletionRequestedAt!)}",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFFB91C1C),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (_student.deletionReason != null && _student.deletionReason!.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Reason Provided by Resident:",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF7F1D1D),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    "\"${_student.deletionReason!.trim()}\"",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF450A0A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _dismissDeletionRequest,
+                  icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF475569)),
+                  label: Text(
+                    "Dismiss Request",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _confirmDeleteStudentProfile,
+                  icon: const Icon(Icons.delete_forever_rounded, size: 16, color: Colors.white),
+                  label: Text(
+                    "Delete Resident",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _dismissDeletionRequest() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text(
+          "Dismiss Deletion Request?",
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 17),
+        ),
+        content: Text(
+          "This will clear the pending account deletion request for ${_student.fullName}. The resident profile will remain active.",
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text("Cancel", style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text("Dismiss Request", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await FirestoreService().dismissDeletionRequest(_student.id, userId: _student.studentId);
+        if (mounted) {
+          setState(() {
+            _student = _student.copyWith(
+              clearDeletionRequest: true,
+            );
+          });
+          _showSnackbar("Deletion request dismissed for ${_student.fullName}.");
+        }
+      } catch (e) {
+        if (mounted) {
+          _showSnackbar("Failed to dismiss deletion request: $e", isSuccess: false);
         }
       }
     }

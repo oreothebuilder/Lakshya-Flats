@@ -59,6 +59,9 @@ class AppUser {
   final bool hasCompletedOnboardingTour;
   final bool hasChangedDefaultPassword;
   final bool hasDismissedPasswordNotice;
+  final bool deletionRequested;
+  final DateTime? deletionRequestedAt;
+  final String? deletionReason;
 
   AppUser({
     required this.uid,
@@ -77,6 +80,9 @@ class AppUser {
     this.hasCompletedOnboardingTour = false,
     this.hasChangedDefaultPassword = true,
     this.hasDismissedPasswordNotice = false,
+    this.deletionRequested = false,
+    this.deletionRequestedAt,
+    this.deletionReason,
   }) : createdAt = createdAt ?? DateTime.now();
 
   bool get isAdmin => role == AppRole.admin;
@@ -162,6 +168,10 @@ class AppUser {
     bool? hasCompletedOnboardingTour,
     bool? hasChangedDefaultPassword,
     bool? hasDismissedPasswordNotice,
+    bool? deletionRequested,
+    DateTime? deletionRequestedAt,
+    String? deletionReason,
+    bool clearDeletionRequest = false,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -180,6 +190,9 @@ class AppUser {
       hasCompletedOnboardingTour: hasCompletedOnboardingTour ?? this.hasCompletedOnboardingTour,
       hasChangedDefaultPassword: hasChangedDefaultPassword ?? this.hasChangedDefaultPassword,
       hasDismissedPasswordNotice: hasDismissedPasswordNotice ?? this.hasDismissedPasswordNotice,
+      deletionRequested: clearDeletionRequest ? false : (deletionRequested ?? this.deletionRequested),
+      deletionRequestedAt: clearDeletionRequest ? null : (deletionRequestedAt ?? this.deletionRequestedAt),
+      deletionReason: clearDeletionRequest ? null : (deletionReason ?? this.deletionReason),
     );
   }
 
@@ -207,6 +220,15 @@ class AppUser {
         parsedCreated = (data['createdAt'] as Timestamp).toDate();
       } else if (data['createdAt'] is String) {
         parsedCreated = DateTime.tryParse(data['createdAt']) ?? DateTime.now();
+      }
+    }
+
+    DateTime? delReqAt;
+    if (data['deletionRequestedAt'] != null) {
+      if (data['deletionRequestedAt'] is Timestamp) {
+        delReqAt = (data['deletionRequestedAt'] as Timestamp).toDate();
+      } else if (data['deletionRequestedAt'] is String) {
+        delReqAt = DateTime.tryParse(data['deletionRequestedAt']);
       }
     }
 
@@ -251,6 +273,9 @@ class AppUser {
       hasCompletedOnboardingTour: tourCompleted,
       hasChangedDefaultPassword: passwordChanged,
       hasDismissedPasswordNotice: noticeDismissed,
+      deletionRequested: data['deletionRequested'] == true,
+      deletionRequestedAt: delReqAt,
+      deletionReason: data['deletionReason']?.toString(),
     );
   }
 
@@ -273,6 +298,9 @@ class AppUser {
       'hasCompletedOnboardingTour': hasCompletedOnboardingTour,
       'hasChangedDefaultPassword': hasChangedDefaultPassword,
       'hasDismissedPasswordNotice': hasDismissedPasswordNotice,
+      'deletionRequested': deletionRequested,
+      if (deletionRequestedAt != null) 'deletionRequestedAt': deletionRequestedAt!.toIso8601String(),
+      if (deletionReason != null) 'deletionReason': deletionReason,
     };
   }
 }

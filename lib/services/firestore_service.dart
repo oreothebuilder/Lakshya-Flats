@@ -37,6 +37,7 @@ class FirestoreService {
   CollectionReference get _expenseBucketsRef => _db.collection('expense_buckets');
   CollectionReference get _expensesRef => _db.collection('expenses');
   CollectionReference get _regLookupRef => _db.collection('registration_lookup');
+  CollectionReference get _accountDeletionRequestsRef => _db.collection('account_deletion_requests');
 
   // =========================================================================
   // 1. STUDENT PROFILES & DIRECTORY
@@ -437,6 +438,143 @@ class FirestoreService {
           await doc.reference.delete().catchError((_) {});
         }
       } catch (_) {}
+    }
+
+    // 10. Clean up any pending Account Deletion Requests
+    for (final docId in allDocIdsToDelete) {
+      if (docId.trim().isEmpty) continue;
+      try {
+        await _accountDeletionRequestsRef.doc(docId).delete().catchError((_) {});
+      } catch (_) {}
+    }
+  }
+
+  /// Request account deletion by a resident student.
+  /// Sets deletionRequested flag on the user/student document and registers an entry
+  /// in account_deletion_requests collection with an urgent Admin Todo item.
+  Future<void> requestAccountDeletion({
+    required String userId,
+    required String studentId,
+    required String fullName,
+    required String email,
+    required String phone,
+    required String building,
+    required String room,
+    required String registrationNumber,
+    String? reason,
+  }) async {
+    final cleanUid = userId.trim();
+    final cleanSid = studentId.trim();
+    final now = FieldValue.serverTimestamp();
+
+    // 1. Mark in users collection
+    if (cleanUid.isNotEmpty) {
+      await _usersRef.doc(cleanUid).set({
+        'deletionRequested': true,
+        'deletionRequestedAt': now,
+        'deletionReason': reason ?? '',
+      }, SetOptions(merge: true));
+    }
+
+    // 2. Mark in students collection if separate document exists
+    if (cleanSid.isNotEmpty && cleanSid != cleanUid) {
+      await _studentsRef.doc(cleanSid).set({
+        'deletionRequested': true,
+        'deletionRequestedAt': now,
+        'deletionReason': reason ?? '',
+      }, SetOptions(merge: true));
+    }
+
+    // 3. Save into dedicated account_deletion_requests collection for audit & admin queue
+    final reqDocId = cleanUid.isNotEmpty ? cleanUid : cleanSid;
+    if (reqDocId.isNotEmpty) {
+      await _accountDeletionRequestsRef.doc(reqDocId).set({
+        'userId': cleanUid,
+        'studentId': cleanSid,
+        'fullName': fullName.trim(),
+        'email': email.trim(),
+        'phone': phone.trim(),
+        'building': building.trim(),
+        'room': room.trim(),
+        'registrationNumber': registrationNumber.trim(),
+        'reason': reason ?? '',
+        'status': 'Pending',
+        'requestedAt': now,
+      }, SetOptions(merge: true));
+    }
+
+    // 4. Create an Admin Todo to alert administrators
+    try {
+      await _adminTodosRef.add({
+        'title': 'Account Deletion Request: ${fullName.trim()}',
+        'description': 'Student ${fullName.trim()} ($building, Room $room) has requested account deletion. Reason: ${reason?.isNotEmpty == true ? reason : "Not specified"}. Review in Students Directory to delete.',
+        'category': 'Urgent',
+        'isCompleted': false,
+        'createdAt': now,
+        'relatedStudentId': cleanSid.isNotEmpty ? cleanSid : cleanUid,
+        'type': 'deletion_request',
+      });
+    } catch (e) {
+      debugPrint("Notice: could not create admin todo for deletion request: $e");
+    }
+  }
+
+  /// Cancels an in-progress account deletion request from the resident side.
+  Future<void> cancelAccountDeletionRequest(String userId, {String? studentId}) async {
+    final cleanUid = userId.trim();
+    final cleanSid = studentId?.trim() ?? '';
+
+    if (cleanUid.isNotEmpty) {
+      await _usersRef.doc(cleanUid).update({
+        'deletionRequested': false,
+        'deletionRequestedAt': FieldValue.delete(),
+        'deletionReason': FieldValue.delete(),
+      }).catchError((_) {});
+    }
+
+    if (cleanSid.isNotEmpty && cleanSid != cleanUid) {
+      await _studentsRef.doc(cleanSid).update({
+        'deletionRequested': false,
+        'deletionRequestedAt': FieldValue.delete(),
+        'deletionReason': FieldValue.delete(),
+      }).catchError((_) {});
+    }
+
+    final reqDocId = cleanUid.isNotEmpty ? cleanUid : cleanSid;
+    if (reqDocId.isNotEmpty) {
+      await _accountDeletionRequestsRef.doc(reqDocId).delete().catchError((_) {});
+    }
+  }
+
+  /// Allows administrator to dismiss a student's deletion request without deleting the account.
+  Future<void> dismissDeletionRequest(String studentId, {String? userId}) async {
+    final cleanSid = studentId.trim();
+    final cleanUid = userId?.trim() ?? '';
+
+    if (cleanSid.isNotEmpty) {
+      await _usersRef.doc(cleanSid).update({
+        'deletionRequested': false,
+        'deletionRequestedAt': FieldValue.delete(),
+        'deletionReason': FieldValue.delete(),
+      }).catchError((_) {});
+      await _studentsRef.doc(cleanSid).update({
+        'deletionRequested': false,
+        'deletionRequestedAt': FieldValue.delete(),
+        'deletionReason': FieldValue.delete(),
+      }).catchError((_) {});
+    }
+
+    if (cleanUid.isNotEmpty && cleanUid != cleanSid) {
+      await _usersRef.doc(cleanUid).update({
+        'deletionRequested': false,
+        'deletionRequestedAt': FieldValue.delete(),
+        'deletionReason': FieldValue.delete(),
+      }).catchError((_) {});
+    }
+
+    final reqDocId = cleanUid.isNotEmpty ? cleanUid : cleanSid;
+    if (reqDocId.isNotEmpty) {
+      await _accountDeletionRequestsRef.doc(reqDocId).delete().catchError((_) {});
     }
   }
 

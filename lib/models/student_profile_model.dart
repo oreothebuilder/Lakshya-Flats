@@ -42,6 +42,9 @@ class StudentProfile {
   final List<String> academicYears;
   final String? movedOutYear;
   final String? movedOutDate;
+  final bool deletionRequested;
+  final DateTime? deletionRequestedAt;
+  final String? deletionReason;
 
   StudentProfile({
     required this.id,
@@ -85,6 +88,9 @@ class StudentProfile {
     this.academicYears = const ["2026-2027"],
     this.movedOutYear,
     this.movedOutDate,
+    this.deletionRequested = false,
+    this.deletionRequestedAt,
+    this.deletionReason,
   }) : createdAt = createdAt ?? DateTime.now();
 
   factory StudentProfile.fromFirestore(DocumentSnapshot doc) {
@@ -99,6 +105,15 @@ class StudentProfile {
     final endDate = data['leaseEndDate']?.toString();
     if (resolvedAcademicYears.isEmpty) {
       resolvedAcademicYears = _deriveAcademicYears(startDate, endDate);
+    }
+
+    DateTime? delReqAt;
+    if (data['deletionRequestedAt'] != null) {
+      if (data['deletionRequestedAt'] is Timestamp) {
+        delReqAt = (data['deletionRequestedAt'] as Timestamp).toDate();
+      } else if (data['deletionRequestedAt'] is String) {
+        delReqAt = DateTime.tryParse(data['deletionRequestedAt']);
+      }
     }
 
     return StudentProfile(
@@ -147,6 +162,9 @@ class StudentProfile {
       academicYears: resolvedAcademicYears,
       movedOutYear: data['movedOutYear']?.toString(),
       movedOutDate: data['movedOutDate']?.toString(),
+      deletionRequested: data['deletionRequested'] == true,
+      deletionRequestedAt: delReqAt,
+      deletionReason: data['deletionReason']?.toString(),
     );
   }
 
@@ -222,6 +240,9 @@ class StudentProfile {
       'academicYears': academicYears,
       'movedOutYear': movedOutYear,
       'movedOutDate': movedOutDate,
+      'deletionRequested': deletionRequested,
+      if (deletionRequestedAt != null) 'deletionRequestedAt': deletionRequestedAt!.toIso8601String(),
+      if (deletionReason != null) 'deletionReason': deletionReason,
     };
   }
 
@@ -267,6 +288,10 @@ class StudentProfile {
     List<String>? academicYears,
     String? movedOutYear,
     String? movedOutDate,
+    bool? deletionRequested,
+    DateTime? deletionRequestedAt,
+    String? deletionReason,
+    bool clearDeletionRequest = false,
   }) {
     return StudentProfile(
       id: id ?? this.id,
@@ -310,6 +335,9 @@ class StudentProfile {
       academicYears: academicYears ?? this.academicYears,
       movedOutYear: movedOutYear ?? this.movedOutYear,
       movedOutDate: movedOutDate ?? this.movedOutDate,
+      deletionRequested: clearDeletionRequest ? false : (deletionRequested ?? this.deletionRequested),
+      deletionRequestedAt: clearDeletionRequest ? null : (deletionRequestedAt ?? this.deletionRequestedAt),
+      deletionReason: clearDeletionRequest ? null : (deletionReason ?? this.deletionReason),
     );
   }
 
