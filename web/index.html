@@ -1,52 +1,354 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Lakshya Residency - Premium Living & Hostel Management Platform">
 
-  <!-- iOS meta tags & icons -->
+  <!-- Viewport for Mobile & Notched iPhones (Dynamic Island / Safe Area) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+
+  <!-- Color theme for mobile browser headers -->
+  <meta name="theme-color" content="#541FE4">
+  <meta name="msapplication-TileColor" content="#541FE4">
+  <meta name="msapplication-TileImage" content="icons/Icon-192.png">
+
+  <!-- iOS Safari PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="lakshya_residency">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Lakshya">
+  <meta name="format-detection" content="telephone=no">
+
+  <!-- Apple Touch Icons for iPhone & iPad -->
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/apple-touch-icon-152x152.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="icons/apple-touch-icon-167x167.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-180x180.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>lakshya_residency</title>
+  <!-- Web App Manifest -->
   <link rel="manifest" href="manifest.json">
+
+  <title>Lakshya Residency</title>
+
+  <style>
+    /* Reset & Base Styles */
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #FBFBFE;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+
+    /* Branded Splash Screen for Instant App Feel */
+    #splash-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #FBFBFE;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999999;
+      transition: opacity 0.4s ease-out, visibility 0.4s ease-out;
+    }
+    #splash-container.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .splash-logo {
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      box-shadow: 0 10px 25px rgba(84, 31, 228, 0.25);
+      margin-bottom: 20px;
+      animation: pulseLogo 2s infinite ease-in-out;
+    }
+    .splash-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 8px;
+      letter-spacing: -0.3px;
+    }
+    .splash-subtitle {
+      font-size: 13px;
+      font-weight: 500;
+      color: #6B7280;
+      margin-bottom: 32px;
+    }
+    .splash-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #E5E7EB;
+      border-top-color: #541FE4;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes pulseLogo {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    /* PWA Install Banner for iPhone & Android */
+    .pwa-banner {
+      position: fixed;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - 32px);
+      max-width: 440px;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(84, 31, 228, 0.15);
+      border-radius: 18px;
+      padding: 14px 16px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(84, 31, 228, 0.08);
+      z-index: 100000;
+      display: none;
+      animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideUp {
+      from { transform: translate(-50%, 40px); opacity: 0; }
+      to { transform: translate(-50%, 0); opacity: 1; }
+    }
+    .pwa-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .pwa-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(84, 31, 228, 0.2);
+      flex-shrink: 0;
+    }
+    .pwa-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .pwa-text h4 {
+      margin: 0 0 2px 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: #111827;
+    }
+    .pwa-text p {
+      margin: 0;
+      font-size: 12px;
+      color: #4B5563;
+      line-height: 1.35;
+    }
+    .pwa-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #F3F4F6;
+    }
+    .pwa-btn {
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .pwa-btn-primary {
+      background: #541FE4;
+      color: #FFFFFF;
+      flex: 1;
+      text-align: center;
+    }
+    .pwa-btn-primary:hover {
+      background: #4517C7;
+    }
+    .pwa-btn-dismiss {
+      background: #F3F4F6;
+      color: #6B7280;
+    }
+    .pwa-btn-dismiss:hover {
+      background: #E5E7EB;
+    }
+    .share-icon {
+      display: inline-block;
+      vertical-align: middle;
+      width: 14px;
+      height: 14px;
+      margin: 0 2px;
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <!-- Native App Splash / Preloader -->
+  <div id="splash-container">
+    <img src="icons/Icon-192.png" alt="Lakshya Residency" class="splash-logo">
+    <div class="splash-title">Lakshya Residency</div>
+    <div class="splash-subtitle">Hostel & Living Management</div>
+    <div class="splash-spinner"></div>
+  </div>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <!-- Smart PWA Install Card for iOS and Android -->
+  <div id="pwa-install-banner" class="pwa-banner">
+    <div class="pwa-content">
+      <img src="icons/Icon-192.png" alt="App Icon" class="pwa-icon">
+      <div class="pwa-text">
+        <h4 id="pwa-title">Install Lakshya App</h4>
+        <p id="pwa-desc">Add to Home Screen for the full full-screen app experience on your phone.</p>
+      </div>
+    </div>
+    <div class="pwa-actions" id="pwa-actions">
+      <!-- Dynamic action buttons injected via JS -->
+    </div>
+  </div>
+
+  <!-- PDF.js Support -->
   <script src="//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" type="text/javascript"></script>
   <script type="text/javascript">
     if (typeof pdfjsLib !== 'undefined') {
       pdfjsLib.GlobalWorkerOptions.workerSrc = "//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
     }
   </script>
+
+  <!-- PWA & Flutter Lifecycle Scripts -->
+  <script>
+    // 1. Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then((reg) => {
+            console.log('Lakshya PWA Service Worker registered:', reg.scope);
+            // Check for updates
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('New Lakshya app version available.');
+                  }
+                });
+              }
+            });
+          })
+          .catch((err) => console.log('Service Worker registration note:', err));
+      });
+    }
+
+    // 2. Hide splash screen when Flutter app renders first frame
+    window.addEventListener('flutter-first-frame', () => {
+      const splash = document.getElementById('splash-container');
+      if (splash) {
+        splash.classList.add('hidden');
+        setTimeout(() => splash.remove(), 500);
+      }
+    });
+
+    // Fallback: If flutter-first-frame doesn't fire within 8s, remove splash
+    setTimeout(() => {
+      const splash = document.getElementById('splash-container');
+      if (splash && !splash.classList.contains('hidden')) {
+        splash.classList.add('hidden');
+      }
+    }, 8000);
+
+    // 3. PWA Smart Installation Handler (Specialized for iPhone iOS & Android)
+    (function initPwaInstall() {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                           window.navigator.standalone === true ||
+                           document.referrer.includes('android-app://');
+
+      // Do not show install prompt if already opened as installed standalone PWA
+      if (isStandalone) {
+        console.log('App running in standalone PWA mode');
+        return;
+      }
+
+      const dismissed = localStorage.getItem('lakshya_pwa_dismissed');
+      // If dismissed in last 24 hours, don't show
+      if (dismissed && (Date.now() - parseInt(dismissed, 10) < 24 * 60 * 60 * 1000)) {
+        return;
+      }
+
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      const banner = document.getElementById('pwa-install-banner');
+      const actions = document.getElementById('pwa-actions');
+      const desc = document.getElementById('pwa-desc');
+
+      if (!banner || !actions) return;
+
+      // Handle iOS Safari Add to Home Screen Prompt
+      if (isIOS) {
+        // Show after 2 seconds on iOS
+        setTimeout(() => {
+          desc.innerHTML = 'To install on iPhone: tap the <strong>Share</strong> button <svg class="share-icon" viewBox="0 0 24 24" fill="none" stroke="#541FE4" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> below and select <strong>"Add to Home Screen"</strong>.';
+          actions.innerHTML = `
+            <button class="pwa-btn pwa-btn-primary" onclick="dismissPwaPrompt()">Got It</button>
+            <button class="pwa-btn pwa-btn-dismiss" onclick="dismissPwaPrompt()">Dismiss</button>
+          `;
+          banner.style.display = 'block';
+        }, 2000);
+      } else {
+        // Handle Android / Chrome / Edge BeforeInstallPrompt
+        let deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          deferredPrompt = e;
+          desc.innerText = 'Install Lakshya on your device for fast offline access and app shortcuts.';
+          actions.innerHTML = `
+            <button class="pwa-btn pwa-btn-primary" id="btn-install-pwa">Install App</button>
+            <button class="pwa-btn pwa-btn-dismiss" onclick="dismissPwaPrompt()">Maybe Later</button>
+          `;
+          banner.style.display = 'block';
+
+          const installBtn = document.getElementById('btn-install-pwa');
+          if (installBtn) {
+            installBtn.addEventListener('click', async () => {
+              banner.style.display = 'none';
+              if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const choiceResult = await deferredPrompt.userChoice;
+                console.log('PWA install response:', choiceResult.outcome);
+                deferredPrompt = null;
+              }
+            });
+          }
+        });
+      }
+
+      window.dismissPwaPrompt = function() {
+        if (banner) banner.style.display = 'none';
+        localStorage.setItem('lakshya_pwa_dismissed', Date.now().toString());
+      };
+    })();
+  </script>
+
+  <!-- Flutter Loader Bootstrap -->
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
