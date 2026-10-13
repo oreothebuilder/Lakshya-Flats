@@ -4,7 +4,7 @@ class EmailConfig {
   /// Can be injected at build time via --dart-define=SMTP_SENDER_EMAIL=...
   static const String senderEmail = String.fromEnvironment(
     'SMTP_SENDER_EMAIL',
-    defaultValue: "sudhansu1906@gmail.com",
+    defaultValue: "lakshyaresidency@gmail.com",
   );
 
   /// Google App Password (16 characters generated from Google Account Security).

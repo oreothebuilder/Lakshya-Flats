@@ -242,8 +242,16 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
       rentalTerm: rentalTerm,
       lockInPeriod: lockInPeriod,
       termMonths: termMonths,
-      monthlyRent: _monthlyRentController.text.trim(),
-      securityDeposit: _securityDepositController.text.trim(),
+      monthlyRent: _selectedPlan == "Rent Only"
+          ? _monthlyRentController.text.trim()
+          : (_totalAcademicFeesController.text.trim().isNotEmpty
+              ? _totalAcademicFeesController.text.trim()
+              : _monthlyRentController.text.trim()),
+      securityDeposit: _selectedPlan == "Rent Only"
+          ? _securityDepositController.text.trim()
+          : (_premiumDepositController.text.trim().isNotEmpty
+              ? _premiumDepositController.text.trim()
+              : _securityDepositController.text.trim()),
       paymentFrequency: _paymentFrequency,
       installmentsCount: _installments.length,
       installments: _installments,

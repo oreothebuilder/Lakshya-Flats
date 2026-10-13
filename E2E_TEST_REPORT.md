@@ -98,7 +98,7 @@ The automated test suite executes across 11 distinct test files validating busin
 
 ### Journey 3: Management Portal Toggle & Super Admin Auto-Population
 - **Flow:** Switching to the Management portal displays "Staff" and "Admin" tabs.
-  - Admin tab auto-populates root super admin address (`sudhansu1906@gmail.com`).
+  - Admin tab references root super admin address (`lakshyaresidency@gmail.com`).
   - Switching to Staff clears field for custom warden/staff credentials.
 - **Automated Test:** `test/resident_e2e_flow_test.dart` (Journey 3)
 - **E2E Result:** **PASS**. RenderFlex overflow on small screens resolved via `Flexible` layout wrapping.
@@ -143,7 +143,7 @@ The automated test suite executes across 11 distinct test files validating busin
     * Monthly Revenue Collections vs Outstanding Unpaid Balances
     * Pending Payment Verification badge count
     * Open / Unresolved Maintenance Tickets badge count
-  - Super admin privilege fallback verifies `sudhansu1906@gmail.com`.
+  - Super admin privilege fallback verifies `lakshyaresidency@gmail.com`.
 - **Automated Test:** `test/admin_e2e_flow_test.dart` (Journey 1)
 - **E2E Result:** **PASS**. Identity validation and privilege escalation immunity confirmed.
 
@@ -207,7 +207,7 @@ The automated test suite executes across 11 distinct test files validating busin
 |---|:---:|:---:|---|
 | **Role-Based Access Control (RBAC)** | High | Verified | `AuthGate` strictly verifies Firestore role before granting access to `DashboardScreen`. Non-admin accounts attempting direct navigation are rejected. |
 | **Account Deactivation Handling** | High | Verified | Deactivated or suspended accounts trigger automatic sign-out and redirection to login screen. |
-| **Super Admin Fallback Safeguard** | Medium | Verified | Primary super admin email (`sudhansu1906@gmail.com`) contains fallback privilege restoration if user role document is ever dropped. |
+| **Super Admin Fallback Safeguard** | Medium | Verified | Primary super admin email (`lakshyaresidency@gmail.com`) contains fallback privilege restoration if user role document is ever dropped. |
 | **Payment Proof Tamper Resistance** | High | Verified | Payment verification requires explicit admin sign-off; student cannot flip status from `Pending Verification` to `Paid` on client side. |
 | **Financial Arithmetic Precision** | High | Verified | Balance calculations (`amount - paidAmount`) and Indian Rupee comma formatting (`₹1,25,000`) handle double floating points accurately without overflow. |
 | **Media Upload Security** | Medium | Verified | Cloudinary uploads utilize structured folder paths (`lakshya_residency/payments/`, `kyc/`) with timestamped filenames. |

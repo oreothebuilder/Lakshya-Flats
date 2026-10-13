@@ -125,7 +125,9 @@ class AuthGate extends StatelessWidget {
               final adminUser = AppUser(
                 uid: user.uid,
                 email: user.email!,
-                fullName: "Sudhanshu (Super Admin)",
+                fullName: user.email!.toLowerCase().contains("sudhansu")
+                    ? "Sudhanshu (Super Admin)"
+                    : "Lakshya Admin (Super Admin)",
                 role: AppRole.admin,
               );
               return DashboardScreen(currentUser: adminUser);

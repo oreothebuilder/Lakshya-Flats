@@ -43,8 +43,14 @@ class FirebaseAuthService {
       throw Exception("Please enter your email or registration number.");
     }
 
-    // Special case for primary admin username
-    if (clean.toLowerCase() == "sudhansu1906") {
+    // Special case for primary admin username / aliases
+    final lowerClean = clean.toLowerCase();
+    if (lowerClean == "lakshyaresidency" ||
+        lowerClean == "lakshya" ||
+        lowerClean == "admin") {
+      return "lakshyaresidency@gmail.com";
+    }
+    if (lowerClean == "sudhansu1906") {
       return "sudhansu1906@gmail.com";
     }
 
@@ -86,6 +92,12 @@ class FirebaseAuthService {
       // If primary admin and account doesn't exist in Firebase Auth yet, auto-provision on first setup
       if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) &&
           (authError.code == 'user-not-found' || authError.code == 'invalid-credential')) {
+        if (resolvedEmail == "lakshyaresidency@gmail.com" && password.trim() != "India@1234") {
+          throw FirebaseAuthException(
+            code: 'wrong-password',
+            message: "Incorrect password for admin account. Password is India@1234.",
+          );
+        }
         try {
           credential = await _auth.createUserWithEmailAndPassword(
             email: resolvedEmail,
@@ -102,6 +114,11 @@ class FirebaseAuthService {
         } catch (_) {
           rethrow;
         }
+      } else if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) && authError.code == 'wrong-password') {
+        throw FirebaseAuthException(
+          code: 'wrong-password',
+          message: "Incorrect password for admin account. Expected password: India@1234.",
+        );
       } else if (authError.code == 'user-not-found' || authError.code == 'invalid-credential') {
         // Resident student auto-provisioning fallback:
         // Check registration_lookup first (works unauthenticated), then users collection
@@ -162,7 +179,9 @@ class FirebaseAuthService {
         return AppUser(
           uid: uid,
           email: resolvedEmail,
-          fullName: "Sudhanshu (Super Admin)",
+          fullName: resolvedEmail.toLowerCase().contains("sudhansu")
+              ? "Sudhanshu (Super Admin)"
+              : "Lakshya Admin (Super Admin)",
           role: AppRole.admin,
         );
       }

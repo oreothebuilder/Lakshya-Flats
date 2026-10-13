@@ -37,6 +37,7 @@ class BillModel {
   final String? bed;
   final String? regNo;
   final String? studentDocId;
+  final double defaulterAmount;
 
   BillModel({
     required this.id,
@@ -47,6 +48,7 @@ class BillModel {
     required this.billType,
     required this.amount,
     this.paidAmount = 0.0,
+    this.defaulterAmount = 0.0,
     required this.status,
     required this.dueDate,
     required this.invoiceNo,
@@ -77,8 +79,9 @@ class BillModel {
     this.studentDocId,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  double get balance => (amount - paidAmount).clamp(0.0, amount);
-  bool get isPaid => (paidAmount >= amount && amount > 0) || status.toLowerCase() == 'paid';
+  double get totalPayable => amount + defaulterAmount;
+  double get balance => (totalPayable - paidAmount).clamp(0.0, totalPayable);
+  bool get isPaid => (paidAmount >= totalPayable && totalPayable > 0) || status.toLowerCase() == 'paid';
   
   String? get utrNumber => transactionRef;
 
@@ -252,6 +255,10 @@ class BillModel {
       billType: data['billType']?.toString() ?? 'Hostel Rent',
       amount: (data['amount'] as num?)?.toDouble() ?? 0.0,
       paidAmount: (data['paidAmount'] as num?)?.toDouble() ?? 0.0,
+      defaulterAmount: (data['defaulterAmount'] as num?)?.toDouble() ??
+          (data['lateFee'] as num?)?.toDouble() ??
+          (data['penalty'] as num?)?.toDouble() ??
+          0.0,
       status: data['status']?.toString() ?? 'Pending',
       dueDate: parsedDueDate,
       invoiceNo: data['invoiceNo']?.toString() ?? 'INV-${doc.id.length >= 6 ? doc.id.substring(0, 6) : doc.id}',
@@ -292,6 +299,7 @@ class BillModel {
       'billType': billType,
       'amount': amount,
       'paidAmount': paidAmount,
+      'defaulterAmount': defaulterAmount,
       'status': status,
       'dueDate': Timestamp.fromDate(dueDate),
       'invoiceNo': invoiceNo,
@@ -335,6 +343,7 @@ class BillModel {
     String? billType,
     double? amount,
     double? paidAmount,
+    double? defaulterAmount,
     String? status,
     DateTime? dueDate,
     String? invoiceNo,
@@ -373,6 +382,7 @@ class BillModel {
       billType: billType ?? this.billType,
       amount: amount ?? this.amount,
       paidAmount: paidAmount ?? this.paidAmount,
+      defaulterAmount: defaulterAmount ?? this.defaulterAmount,
       status: status ?? this.status,
       dueDate: dueDate ?? this.dueDate,
       invoiceNo: invoiceNo ?? this.invoiceNo,

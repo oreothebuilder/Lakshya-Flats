@@ -3,23 +3,36 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
-/// Data bundle for generating a personalized Lakshya Residency Payment Receipt PDF
+/// Data bundle for generating a personalized Lakshya Residency Payment Receipt & Bill PDF
 class PaymentReceiptData {
   final String receiptNo;
-  final String billIssueDate; // The day admin/owner confirms the payment
+  final String billIssueDate; // Date formatted for display or header
   final String payeeName;
   final String contactNumber;
   final String email;
   final String buildingAddress;
   final String roomAndBed;
-  final String paymentType; // e.g. "Installment 1 / Hostel Fees", "Electricity Bill"
+  final String paymentType; // e.g. "Hostel Rent", "Mess Bill", "Electricity Bill"
   final String paymentMethod; // e.g. "UPI", "Bank transfer", "Cash"
   final double amount;
   final String deadline; // Due Date
-  final String paidOn; // The day user paid and submitted for approval
-  final String paymentStatus; // "PAID"
+  final String paidOn; // The day user paid, or "Pending Payment"
+  final String paymentStatus; // "PAID", "PENDING", "DEFAULTER"
   final String? transactionRef;
   final String? adminRemarks;
+
+  // Enriched bill fields
+  final String billTitle; // Title of the bill fetched from the app
+  final String billInformedDate; // Date the bill was informed / issued
+  final double baseAmount; // Base bill amount
+  final double defaulterAmount; // Defaulter amount (0 by default, added if any)
+  final double totalAmount; // baseAmount + defaulterAmount
+  final double paidAmount; // Amount paid
+  final double balanceAmount; // Balance due
+  final bool isPaid;
+  final bool isDefaulter;
+  final int daysOverdue;
+  final String headerDate; // Date shown on the letterhead: dd/mm/yyyy
 
   PaymentReceiptData({
     required this.receiptNo,
@@ -37,13 +50,35 @@ class PaymentReceiptData {
     this.paymentStatus = "PAID",
     this.transactionRef,
     this.adminRemarks,
-  });
+    String? billTitle,
+    String? billInformedDate,
+    double? baseAmount,
+    this.defaulterAmount = 0.0,
+    double? totalAmount,
+    double? paidAmount,
+    double? balanceAmount,
+    bool? isPaid,
+    bool? isDefaulter,
+    this.daysOverdue = 0,
+    String? headerDate,
+  })  : billTitle = (billTitle != null && billTitle.trim().isNotEmpty) ? billTitle : paymentType,
+        billInformedDate = (billInformedDate != null && billInformedDate.trim().isNotEmpty) ? billInformedDate : billIssueDate,
+        baseAmount = baseAmount ?? amount,
+        totalAmount = totalAmount ?? (amount + defaulterAmount),
+        paidAmount = paidAmount ?? (paymentStatus.toUpperCase() == "PAID" ? (amount + defaulterAmount) : 0.0),
+        balanceAmount = balanceAmount ??
+            ((totalAmount ?? (amount + defaulterAmount)) -
+                    (paidAmount ?? (paymentStatus.toUpperCase() == "PAID" ? (amount + defaulterAmount) : 0.0)))
+                .clamp(0.0, double.infinity),
+        isPaid = isPaid ?? (paymentStatus.toUpperCase() == "PAID"),
+        isDefaulter = isDefaulter ?? (paymentStatus.toUpperCase().contains("DEFAULTER")),
+        headerDate = headerDate ?? billIssueDate;
 }
 
-/// Generates the official, legally compliant single-page Payment Receipt PDF
-/// matching the exact header and footer vector design of the Rent Agreement.
+/// Generates the official, legally compliant single-page Payment Receipt & Bill PDF
+/// matching the exact header and footer vector design of the official Lakshya Residency letterhead.
 class PaymentReceiptPdfService {
-  // Theme Colors matching AgreementPdfService
+  // Theme Colors matching Lakshya Residency letterhead
   static final PdfColor primaryNavy = PdfColor(31, 56, 100);
   static final PdfColor accentMagenta = PdfColor(255, 0, 157);
   static final PdfColor textDark = PdfColor(15, 23, 42);
@@ -53,6 +88,12 @@ class PaymentReceiptPdfService {
   static final PdfColor greenBg = PdfColor(240, 253, 244);
   static final PdfColor greenText = PdfColor(22, 101, 52);
   static final PdfColor greenBorder = PdfColor(187, 247, 208);
+  static final PdfColor alertBg = PdfColor(254, 242, 242);
+  static final PdfColor alertBorder = PdfColor(254, 202, 202);
+  static final PdfColor headerGrey = PdfColor(241, 245, 249);
+  static final PdfColor blueBg = PdfColor(239, 246, 255);
+  static final PdfColor blueBorder = PdfColor(191, 219, 254);
+  static final PdfColor redText = PdfColor(220, 38, 38);
 
   static PdfBitmap? _cachedLogoBitmap;
   static PdfBitmap? _cachedSignatureBitmap;
@@ -83,7 +124,7 @@ class PaymentReceiptPdfService {
     }
   }
 
-  /// Generates the complete 1-page Payment Receipt PDF
+  /// Generates the complete 1-page Payment Receipt & Bill PDF on the letterhead
   static Future<Uint8List> generateReceiptPdf(PaymentReceiptData data) async {
     final PdfDocument document = PdfDocument();
     document.pageSettings.margins.all = 36;
@@ -115,44 +156,64 @@ class PaymentReceiptPdfService {
     final PdfFont regular8 = PdfStandardFont(PdfFontFamily.helvetica, 8);
     final PdfFont bold8 = PdfStandardFont(PdfFontFamily.helvetica, 8, style: PdfFontStyle.bold);
     final PdfFont bold9 = PdfStandardFont(PdfFontFamily.helvetica, 9, style: PdfFontStyle.bold);
-    final PdfFont bold10 = PdfStandardFont(PdfFontFamily.helvetica, 10, style: PdfFontStyle.bold);
+    final PdfFont bold13 = PdfStandardFont(PdfFontFamily.helvetica, 13, style: PdfFontStyle.bold);
     final PdfFont bold14 = PdfStandardFont(PdfFontFamily.helvetica, 14, style: PdfFontStyle.bold);
     final PdfFont italic8 = PdfStandardFont(PdfFontFamily.helvetica, 8, style: PdfFontStyle.italic);
 
     final PdfPage page = document.pages.add();
 
-    // 1. Draw Exact Rent Agreement Header
-    _drawPageHeader(page, data.billIssueDate);
+    // 1. Draw Exact Letterhead Vector Header with Date & GST
+    _drawPageHeader(page, data.headerDate);
 
-    // 2. Draw Receipt Body
-    double y = 82;
+    // 2. Draw Bill Body (starts cleanly below the header)
+    double y = 104;
 
-    // Title: PAYMENT RECEIPT - LAKSHYA RESIDENCY
+    // Document Title: dynamic bill title from the app
+    final String mainTitle = data.billTitle.toUpperCase();
     page.graphics.drawString(
-      "PAYMENT RECEIPT - LAKSHYA RESIDENCY",
-      bold14,
+      mainTitle,
+      bold13,
       brush: PdfSolidBrush(primaryNavy),
-      bounds: const Rect.fromLTWH(0, 82, 523, 18),
+      bounds: const Rect.fromLTWH(0, 104, 523, 16),
       format: PdfStringFormat(alignment: PdfTextAlignment.center),
     );
-    y += 20;
+    y = 122;
 
-    // Verified badge banner
+    // Status Banner
+    final bool isPaidBill = data.isPaid || data.paymentStatus.toUpperCase() == "PAID";
+    final bool isDefaulterBill = data.isDefaulter || data.paymentStatus.toUpperCase().contains("DEFAULTER");
+
+    final PdfColor badgeBg = isPaidBill
+        ? greenBg
+        : (isDefaulterBill ? alertBg : cardBg);
+    final PdfColor badgeBorder = isPaidBill
+        ? greenBorder
+        : (isDefaulterBill ? alertBorder : borderGrey);
+    final PdfColor badgeText = isPaidBill
+        ? greenText
+        : (isDefaulterBill ? PdfColor(220, 38, 38) : primaryNavy);
+
+    final String statusBannerText = isPaidBill
+        ? "OFFICIAL BILL & RECEIPT  •  STATUS: PAID  •  RECEIPT NO: ${data.receiptNo}"
+        : (isDefaulterBill
+            ? "OFFICIAL BILL & OVERDUE NOTICE  •  STATUS: DEFAULTER ${data.daysOverdue > 0 ? '(${data.daysOverdue}D OVERDUE)' : ''}  •  INVOICE NO: ${data.receiptNo}"
+            : "OFFICIAL BILL & INVOICE  •  STATUS: ${data.paymentStatus.toUpperCase()}  •  INVOICE NO: ${data.receiptNo}");
+
     page.graphics.drawRectangle(
-      brush: PdfSolidBrush(greenBg),
-      pen: PdfPen(greenBorder, width: 1),
-      bounds: Rect.fromLTWH(0, y, 523, 26),
+      brush: PdfSolidBrush(badgeBg),
+      pen: PdfPen(badgeBorder, width: 1),
+      bounds: Rect.fromLTWH(0, y, 523, 22),
     );
     page.graphics.drawString(
-      "OFFICIAL RECEIPT  •  STATUS: ${data.paymentStatus.toUpperCase()}  •  RECEIPT NO: ${data.receiptNo}",
+      statusBannerText,
       bold9,
-      brush: PdfSolidBrush(greenText),
-      bounds: Rect.fromLTWH(0, y + 6, 523, 14),
+      brush: PdfSolidBrush(badgeText),
+      bounds: Rect.fromLTWH(0, y + 5, 523, 14),
       format: PdfStringFormat(alignment: PdfTextAlignment.center),
     );
-    y += 34;
+    y += 28;
 
-    // SECTION 1: TWO COLUMNS (TENANT DETAILS & PAYMENT RECIPIENT)
+    // SECTION 1: TWO COLUMNS (TENANT DETAILS & BILL ISSUER)
     const double colW = 255;
     const double colGap = 13;
 
@@ -160,11 +221,10 @@ class PaymentReceiptPdfService {
     page.graphics.drawRectangle(
       brush: PdfSolidBrush(cardBg),
       pen: PdfPen(borderGrey, width: 1),
-      bounds: Rect.fromLTWH(0, y, colW, 116),
+      bounds: Rect.fromLTWH(0, y, colW, 110),
     );
-    // Header banner inside left box
     page.graphics.drawRectangle(
-      brush: PdfSolidBrush(PdfColor(241, 245, 249)),
+      brush: PdfSolidBrush(headerGrey),
       bounds: Rect.fromLTWH(0, y, colW, 20),
     );
     page.graphics.drawString(
@@ -174,121 +234,185 @@ class PaymentReceiptPdfService {
       bounds: Rect.fromLTWH(8, y + 4.5, colW - 16, 12),
     );
 
-    double ly = y + 26;
-    _drawKVRow(page, "Payee Name:", data.payeeName.isNotEmpty ? data.payeeName : "Student", 0, ly, colW, bold8, regular8);
-    ly += 17;
-    _drawKVRow(page, "Contact No:", data.contactNumber.isNotEmpty ? data.contactNumber : "On file", 0, ly, colW, bold8, regular8);
-    ly += 17;
-    _drawKVRow(page, "Email:", data.email.isNotEmpty ? data.email : "On file", 0, ly, colW, bold8, regular8);
-    ly += 17;
+    double ly = y + 25;
+    _drawKVRow(page, "Tenant Name:", data.payeeName.isNotEmpty ? data.payeeName : "Tenant", 0, ly, colW, bold8, regular8);
+    ly += 16;
     _drawKVRow(page, "Building:", data.buildingAddress.isNotEmpty ? data.buildingAddress : "Lakshya Residency", 0, ly, colW, bold8, regular8);
-    ly += 17;
+    ly += 16;
     _drawKVRow(page, "Room & Bed:", data.roomAndBed.isNotEmpty ? data.roomAndBed : "Assigned", 0, ly, colW, bold8, regular8);
+    ly += 16;
+    _drawKVRow(page, "Contact No:", data.contactNumber.isNotEmpty ? data.contactNumber : "On file", 0, ly, colW, bold8, regular8);
+    ly += 16;
+    _drawKVRow(page, "Email:", data.email.isNotEmpty ? data.email : "On file", 0, ly, colW, bold8, regular8);
 
-    // Right Box: PAYMENT RECIPIENT
+    // Right Box: BILL ISSUER
     page.graphics.drawRectangle(
       brush: PdfSolidBrush(cardBg),
       pen: PdfPen(borderGrey, width: 1),
-      bounds: Rect.fromLTWH(colW + colGap, y, colW, 116),
+      bounds: Rect.fromLTWH(colW + colGap, y, colW, 110),
     );
-    // Header banner inside right box
     page.graphics.drawRectangle(
-      brush: PdfSolidBrush(PdfColor(241, 245, 249)),
+      brush: PdfSolidBrush(headerGrey),
       bounds: Rect.fromLTWH(colW + colGap, y, colW, 20),
     );
     page.graphics.drawString(
-      "PAYMENT RECIPIENT",
+      "BILL ISSUER / LAKSHYA RESIDENCY",
       bold8,
       brush: PdfSolidBrush(primaryNavy),
       bounds: Rect.fromLTWH(colW + colGap + 8, y + 4.5, colW - 16, 12),
     );
 
-    double ry = y + 26;
-    _drawKVRow(page, "Organisation:", "Lakshya residency", colW + colGap, ry, colW, bold8, regular8);
-    ry += 17;
-    _drawKVRow(page, "Managed by:", "Ajay singh", colW + colGap, ry, colW, bold8, regular8);
-    ry += 17;
+    double ry = y + 25;
+    _drawKVRow(page, "Organisation:", "Lakshya Residency", colW + colGap, ry, colW, bold8, regular8);
+    ry += 16;
+    _drawKVRow(page, "Managed by:", "Ajay Singh (Founder)", colW + colGap, ry, colW, bold8, regular8);
+    ry += 16;
     _drawKVRow(page, "Mail:", "lakshyaresidency@gmail.com", colW + colGap, ry, colW, bold8, regular8);
-    ry += 17;
-    _drawKVRow(page, "Phone number:", "+91 97840 70543", colW + colGap, ry, colW, bold8, regular8);
-    ry += 17;
+    ry += 16;
+    _drawKVRow(page, "Phone:", "+91 97840 70543", colW + colGap, ry, colW, bold8, regular8);
+    ry += 16;
     _drawKVRow(page, "Website:", "www.lakshyaresidency.com", colW + colGap, ry, colW, bold8, regular8);
 
-    y += 126;
+    y += 118;
 
-    // SECTION 2: PAYMENT DETAILS (Table Grid)
+    // SECTION 2: BILL PARTICULARS & DATES
+    final double particularsH = (data.transactionRef != null && data.transactionRef!.isNotEmpty) ? 116.0 : 100.0;
     page.graphics.drawRectangle(
       brush: PdfSolidBrush(cardBg),
       pen: PdfPen(borderGrey, width: 1),
-      bounds: Rect.fromLTWH(0, y, 523, 184),
+      bounds: Rect.fromLTWH(0, y, 523, particularsH),
     );
-    // Header banner
     page.graphics.drawRectangle(
-      brush: PdfSolidBrush(PdfColor(241, 245, 249)),
-      bounds: Rect.fromLTWH(0, y, 523, 22),
+      brush: PdfSolidBrush(headerGrey),
+      bounds: Rect.fromLTWH(0, y, 523, 20),
     );
     page.graphics.drawString(
-      "PAYMENT DETAILS",
-      bold9,
+      "BILL PARTICULARS & DATES",
+      bold8,
       brush: PdfSolidBrush(primaryNavy),
-      bounds: Rect.fromLTWH(10, y + 5, 500, 14),
+      bounds: Rect.fromLTWH(10, y + 4.5, 500, 12),
     );
 
-    double py = y + 28;
-    _drawFullKVRow(page, "Receipt Number", data.receiptNo, py, bold9, bold9, isHighlightVal: true);
-    py += 17;
-    _drawFullKVRow(page, "Bill Issue Date", data.billIssueDate, py, bold8, regular8);
-    py += 17;
-    _drawFullKVRow(page, "Payment Type", data.paymentType, py, bold8, regular8);
-    py += 17;
-    _drawFullKVRow(page, "Payment Method Used", data.paymentMethod, py, bold8, regular8);
-    py += 17;
+    double py = y + 25;
+    _drawFullKVRow(page, "Bill Title / Purpose", data.billTitle, py, bold8, regular8);
+    py += 15;
+    _drawFullKVRow(page, "Invoice / Receipt Number", data.receiptNo, py, bold8, bold8, isHighlightVal: true);
+    py += 15;
+    _drawFullKVRow(page, "Date Informed / Issued", data.billInformedDate, py, bold8, regular8);
+    py += 15;
+    _drawFullKVRow(page, "Payment Due Date", data.deadline, py, bold8, regular8);
+    py += 15;
+    _drawFullKVRow(
+      page,
+      isPaidBill ? "Paid On (Payment Date)" : "Date of Payment",
+      isPaidBill ? data.paidOn : "Pending Payment",
+      py,
+      bold8,
+      isPaidBill ? bold8 : regular8,
+    );
     if (data.transactionRef != null && data.transactionRef!.isNotEmpty) {
+      py += 15;
       _drawFullKVRow(page, "Transaction Ref / UTR", data.transactionRef!, py, bold8, regular8);
-      py += 17;
     }
-    _drawFullKVRow(page, "Deadline (Due Date)", data.deadline, py, bold8, regular8);
-    py += 17;
-    _drawFullKVRow(page, "Paid On", data.paidOn, py, bold8, regular8);
-    py += 17;
-    _drawFullKVRow(page, "Payment Status", data.paymentStatus, py, bold9, bold9, isHighlightVal: true);
-    py += 18;
 
-    // Total Amount Box inside Payment Details
+    y += particularsH + 8;
+
+    // SECTION 3: AMOUNT BREAKDOWN & DEFAULTER CALCULATION
+    const double breakdownH = 142.0;
     page.graphics.drawRectangle(
-      brush: PdfSolidBrush(PdfColor(239, 246, 255)),
-      pen: PdfPen(PdfColor(191, 219, 254), width: 1),
-      bounds: Rect.fromLTWH(10, py, 503, 26),
+      brush: PdfSolidBrush(cardBg),
+      pen: PdfPen(borderGrey, width: 1),
+      bounds: Rect.fromLTWH(0, y, 523, breakdownH),
+    );
+    page.graphics.drawRectangle(
+      brush: PdfSolidBrush(headerGrey),
+      bounds: Rect.fromLTWH(0, y, 523, 20),
     );
     page.graphics.drawString(
-      "TOTAL AMOUNT PAID",
-      bold10,
+      "AMOUNT BREAKDOWN & DEFAULTER CALCULATION",
+      bold8,
       brush: PdfSolidBrush(primaryNavy),
-      bounds: Rect.fromLTWH(20, py + 6, 200, 16),
+      bounds: Rect.fromLTWH(10, y + 4.5, 500, 12),
+    );
+
+    double ay = y + 25;
+    _drawFullKVRow(page, "Base Bill Amount (${data.billTitle})", "Rs. ${data.baseAmount.toStringAsFixed(2)}", ay, bold8, regular8);
+    ay += 15;
+    final String defText = data.defaulterAmount > 0
+        ? "+ Rs. ${data.defaulterAmount.toStringAsFixed(2)} (Defaulter Added)"
+        : "Rs. 0.00 (No Defaulter Charges)";
+    _drawFullKVRow(
+      page,
+      "Amount of Defaulter",
+      defText,
+      ay,
+      bold8,
+      data.defaulterAmount > 0 ? bold8 : regular8,
+      isHighlightVal: data.defaulterAmount > 0,
+    );
+    ay += 15;
+    _drawFullKVRow(page, "Total Bill Amount Payable", "Rs. ${data.totalAmount.toStringAsFixed(2)}", ay, bold9, bold9, isHighlightVal: true);
+    ay += 15;
+    _drawFullKVRow(page, "Amount Paid", "Rs. ${data.paidAmount.toStringAsFixed(2)}", ay, bold8, isPaidBill ? bold8 : regular8);
+    ay += 15;
+    final String balText = data.balanceAmount <= 0
+        ? "Rs. 0.00 (Fully Settled)"
+        : "Rs. ${data.balanceAmount.toStringAsFixed(2)} (Balance Due)";
+    _drawFullKVRow(page, "Balance Remaining", balText, ay, bold8, data.balanceAmount > 0 ? bold8 : regular8);
+    ay += 17;
+
+    // Highlight Banner at bottom of Breakdown box
+    final PdfColor summaryBoxBg = isPaidBill
+        ? greenBg
+        : (isDefaulterBill ? alertBg : blueBg);
+    final PdfColor summaryBoxBorder = isPaidBill
+        ? greenBorder
+        : (isDefaulterBill ? alertBorder : blueBorder);
+    final PdfColor summaryBoxText = isPaidBill
+        ? greenText
+        : (isDefaulterBill ? redText : primaryNavy);
+
+    page.graphics.drawRectangle(
+      brush: PdfSolidBrush(summaryBoxBg),
+      pen: PdfPen(summaryBoxBorder, width: 1),
+      bounds: Rect.fromLTWH(8, ay, 507, 26),
+    );
+    final String summaryLabel = isPaidBill
+        ? "TOTAL AMOUNT PAID (ON ${data.paidOn.toUpperCase()})"
+        : (isDefaulterBill ? "TOTAL OVERDUE AMOUNT" : "NET AMOUNT DUE (BY ${data.deadline.toUpperCase()})");
+    final String summaryVal = isPaidBill
+        ? "Rs. ${data.paidAmount.toStringAsFixed(0)}"
+        : "Rs. ${(data.balanceAmount > 0 ? data.balanceAmount : data.totalAmount).toStringAsFixed(0)}";
+
+    page.graphics.drawString(
+      summaryLabel,
+      bold9,
+      brush: PdfSolidBrush(summaryBoxText),
+      bounds: Rect.fromLTWH(18, ay + 7, 320, 14),
     );
     page.graphics.drawString(
-      "Rs. ${data.amount.toStringAsFixed(0)}",
+      summaryVal,
       bold14,
-      brush: PdfSolidBrush(primaryNavy),
-      bounds: Rect.fromLTWH(300, py + 4, 200, 18),
+      brush: PdfSolidBrush(summaryBoxText),
+      bounds: Rect.fromLTWH(340, ay + 4, 165, 18),
       format: PdfStringFormat(alignment: PdfTextAlignment.right),
     );
 
-    y += 194;
+    y += breakdownH + 8;
 
-    // SECTION 3: TERMS AND CONDITIONS
+    // SECTION 4: TERMS AND CONDITIONS
     page.graphics.drawString(
       "TERMS AND CONDITIONS",
-      bold9,
+      bold8,
       brush: PdfSolidBrush(textDark),
-      bounds: Rect.fromLTWH(0, y, 523, 14),
+      bounds: Rect.fromLTWH(0, y, 523, 12),
     );
-    y += 16;
+    y += 14;
 
     final List<String> terms = [
-      "This receipt serves as an acknowledgement of the payment made by the tenant through the applicable payment method for the services/charges mentioned above.",
-      "In case an online payment fails or is unsuccessful, this receipt shall be considered null and void.",
-      "No refund, adjustment, or discount shall be entertained against this receipt.",
+      "This official bill/receipt acknowledges charges for Lakshya Residency as recorded in the management system.",
+      "Defaulter charges or late payment penalties (if applicable) are levied in accordance with hostel policy.",
+      "All online payments are subject to bank verification. Unsuccessful transactions shall render this receipt void.",
     ];
 
     for (final term in terms) {
@@ -296,22 +420,22 @@ class PaymentReceiptPdfService {
         "•  $term",
         regular8,
         brush: PdfSolidBrush(textMuted),
-        bounds: Rect.fromLTWH(0, y, 523, 18),
+        bounds: Rect.fromLTWH(0, y, 523, 13),
       );
-      y += 15;
+      y += 13;
     }
 
-    y += 8;
+    y += 4;
 
-    // Draw Authorized Signature Image if available
+    // SECTION 5: AUTHORISED SIGNATORY
     if (_cachedSignatureBitmap != null) {
       page.graphics.drawImage(
         _cachedSignatureBitmap!,
-        Rect.fromLTWH(395, y, 95, 34),
+        Rect.fromLTWH(395, y, 95, 30),
       );
-      y += 36;
+      y += 32;
     } else {
-      y += 20;
+      y += 18;
     }
 
     // Divider line above Authorised Signatory
@@ -320,25 +444,25 @@ class PaymentReceiptPdfService {
       Offset(370, y),
       Offset(510, y),
     );
-    y += 5;
+    y += 4;
 
     // Signatures / Seal row
     page.graphics.drawString(
       "Authorised Signatory",
       bold9,
       brush: PdfSolidBrush(textDark),
-      bounds: Rect.fromLTWH(360, y, 163, 14),
+      bounds: Rect.fromLTWH(360, y, 163, 12),
       format: PdfStringFormat(alignment: PdfTextAlignment.center),
     );
     page.graphics.drawString(
       "Lakshya Residency Management",
       italic8,
       brush: PdfSolidBrush(textMuted),
-      bounds: Rect.fromLTWH(360, y + 14, 163, 12),
+      bounds: Rect.fromLTWH(360, y + 12, 163, 11),
       format: PdfStringFormat(alignment: PdfTextAlignment.center),
     );
 
-    // 3. Draw Exact Rent Agreement Footer
+    // 3. Draw Exact Letterhead Vector Footer
     _drawPageFooter(page);
 
     final List<int> bytes = document.saveSync();

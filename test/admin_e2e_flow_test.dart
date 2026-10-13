@@ -15,6 +15,8 @@ void main() {
       final firestoreService = FirestoreService();
 
       // Primary admin email has root privileges
+      expect(firestoreService.isPrimaryAdminEmail('lakshyaresidency@gmail.com'), isTrue);
+      expect(firestoreService.isPrimaryAdminEmail('LAKSHYARESIDENCY@GMAIL.COM'), isTrue);
       expect(firestoreService.isPrimaryAdminEmail('sudhansu1906@gmail.com'), isTrue);
       expect(firestoreService.isPrimaryAdminEmail('SUDHANSU1906@GMAIL.COM'), isTrue);
 
@@ -24,8 +26,8 @@ void main() {
 
       final adminUser = AppUser(
         uid: 'adm_root_001',
-        email: 'sudhansu1906@gmail.com',
-        fullName: 'Sudhanshu (Super Admin)',
+        email: 'lakshyaresidency@gmail.com',
+        fullName: 'Lakshya Admin (Super Admin)',
         role: AppRole.admin,
       );
 

@@ -1946,6 +1946,25 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => _openReceiptDialog(bill),
+                      icon: const Icon(Icons.description_outlined, size: 14, color: Color(0xFF64748B)),
+                      label: Text(
+                        "Bill",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11.5,
+                          color: const Color(0xFF475569),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFE2E8F0)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () => _openPaymentModal(bill),
                       icon: Icon(

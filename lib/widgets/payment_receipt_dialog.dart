@@ -42,21 +42,55 @@ class PaymentReceiptDialog extends StatefulWidget {
             ? bill.transactionRef!.trim()
             : bill.invoiceNo;
 
-    final String billIssueDate = bill.receiptIssuedAt != null
-        ? _formatDate(bill.receiptIssuedAt!)
-        : (bill.paidDate != null && bill.paidDate!.isNotEmpty)
-            ? bill.paidDate!
-            : _formatDate(DateTime.now());
+    // Title of the bill fetched from the app
+    final String billTitle = (bill.billingMonth.isNotEmpty &&
+            bill.billingMonth.trim().toLowerCase() != bill.billType.trim().toLowerCase())
+        ? "${bill.billType} (${bill.billingMonth})"
+        : bill.billType;
 
-    final String paidOnDate = bill.submittedAt != null
-        ? _formatDate(bill.submittedAt!)
-        : (bill.paidDate != null && bill.paidDate!.isNotEmpty)
-            ? bill.paidDate!
-            : _formatDate(bill.createdAt);
+    // Date informed / issued fetched from the app
+    final DateTime informedDate = bill.receiptIssuedAt ?? bill.createdAt;
+    final String billInformedDate = _formatDate(informedDate);
+
+    final bool isPaidBill = bill.isPaid;
+    final bool isDefaulterBill = bill.isDefaulter;
+    final String paymentStatusStr = isPaidBill
+        ? "PAID"
+        : (isDefaulterBill ? "DEFAULTER" : (bill.isPendingVerification ? "PENDING VERIFICATION" : "PENDING"));
+
+    final double baseAmount = bill.amount;
+    final double defaulterAmount = bill.defaulterAmount;
+    final double totalAmount = baseAmount + defaulterAmount;
+    final double paidAmount = bill.paidAmount > 0
+        ? bill.paidAmount
+        : (isPaidBill ? totalAmount : 0.0);
+    final double balanceAmount = (totalAmount - paidAmount).clamp(0.0, totalAmount);
+
+    // Paid on date
+    String paidOnDate = "Pending Payment";
+    DateTime? paidDateTime;
+    if (isPaidBill || paidAmount > 0) {
+      if (bill.paidDate != null && bill.paidDate!.trim().isNotEmpty) {
+        paidDateTime = DateTime.tryParse(bill.paidDate!.trim());
+        paidOnDate = paidDateTime != null ? _formatDate(paidDateTime) : bill.paidDate!.trim();
+      } else if (bill.submittedAt != null) {
+        paidDateTime = bill.submittedAt;
+        paidOnDate = _formatDate(bill.submittedAt!);
+      } else if (bill.receiptIssuedAt != null) {
+        paidDateTime = bill.receiptIssuedAt;
+        paidOnDate = _formatDate(bill.receiptIssuedAt!);
+      } else {
+        paidOnDate = _formatDate(bill.createdAt);
+      }
+    }
+
+    // Header Date: dd/mm/yyyy matching official letterhead
+    final DateTime headerDateTime = (isPaidBill && paidDateTime != null) ? paidDateTime : informedDate;
+    final String headerDateStr = _formatDateSlash(headerDateTime);
 
     final String roomAndBed = [
       if (bill.room.isNotEmpty) "Room ${bill.room}",
-      if ((bill.bed != null && bill.bed!.isNotEmpty))
+      if (bill.bed != null && bill.bed!.isNotEmpty)
         "Bed ${bill.bed}"
       else if (profile != null && profile.bedNumber.isNotEmpty)
         "Bed ${profile.bedNumber}"
@@ -66,22 +100,33 @@ class PaymentReceiptDialog extends StatefulWidget {
 
     final data = PaymentReceiptData(
       receiptNo: receiptNo,
-      billIssueDate: billIssueDate,
+      billIssueDate: isPaidBill ? paidOnDate : billInformedDate,
+      headerDate: headerDateStr,
       payeeName: bill.studentName.isNotEmpty ? bill.studentName : (profile?.fullName ?? "Tenant"),
       contactNumber: bill.phone.isNotEmpty ? bill.phone : (profile?.phone ?? "On File"),
       email: (bill.studentEmail != null && bill.studentEmail!.isNotEmpty)
           ? bill.studentEmail!
           : (profile?.email ?? "On File"),
-      buildingAddress: "Lakshya Residency, Building ${bill.building}",
+      buildingAddress: bill.building.toLowerCase().contains("building")
+          ? bill.building
+          : "Lakshya Residency, Building ${bill.building}",
       roomAndBed: roomAndBed,
-      paymentType: (bill.billingMonth.isNotEmpty && bill.billingMonth != bill.billType)
-          ? "${bill.billType} (${bill.billingMonth})"
-          : bill.billType,
-      paymentMethod: bill.paymentMethod ?? (bill.isCash ? "Cash Handover" : "UPI / Online"),
-      amount: bill.paidAmount > 0 ? bill.paidAmount : bill.amount,
+      paymentType: bill.billType,
+      billTitle: billTitle,
+      billInformedDate: billInformedDate,
+      baseAmount: baseAmount,
+      defaulterAmount: defaulterAmount,
+      totalAmount: totalAmount,
+      paidAmount: paidAmount,
+      balanceAmount: balanceAmount,
+      isPaid: isPaidBill,
+      isDefaulter: isDefaulterBill,
+      daysOverdue: bill.daysOverdue,
+      paymentMethod: bill.paymentMethod ?? (bill.isCash ? "Cash Handover" : (isPaidBill ? "UPI / Online" : "To Be Paid")),
+      amount: totalAmount,
       deadline: _formatDate(bill.dueDate),
       paidOn: paidOnDate,
-      paymentStatus: "PAID",
+      paymentStatus: paymentStatusStr,
       transactionRef: bill.transactionRef,
       adminRemarks: bill.adminRemarks,
     );
@@ -113,6 +158,10 @@ class PaymentReceiptDialog extends StatefulWidget {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return "${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}";
+  }
+
+  static String _formatDateSlash(DateTime d) {
+    return "${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}";
   }
 
   @override
@@ -280,18 +329,18 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. EXACT VECTOR HEADER FROM RENT AGREEMENT
-                  _buildExactPdfHeader(d.billIssueDate),
+                  // 1. EXACT VECTOR HEADER FROM OFFICIAL LETTERHEAD
+                  _buildExactPdfHeader(d.headerDate),
 
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 28, vertical: 18),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // TITLE
+                        // TITLE OF THE BILL FETCHED FROM THE APP
                         Center(
                           child: Text(
-                            "PAYMENT RECEIPT - LAKSHYA RESIDENCY",
+                            d.billTitle.toUpperCase(),
                             style: GoogleFonts.merriweather(
                               fontSize: isMobile ? 14 : 16,
                               fontWeight: FontWeight.w900,
@@ -303,26 +352,46 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
                         ),
                         const SizedBox(height: 10),
 
-                        // Green Status Banner
+                        // Dynamic Status Banner
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF0FDF4),
+                            color: d.isPaid
+                                ? const Color(0xFFF0FDF4)
+                                : (d.isDefaulter ? const Color(0xFFFEF2F2) : const Color(0xFFEFF6FF)),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFBBF7D0)),
+                            border: Border.all(
+                              color: d.isPaid
+                                  ? const Color(0xFFBBF7D0)
+                                  : (d.isDefaulter ? const Color(0xFFFECACA) : const Color(0xFFBFDBFE)),
+                            ),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF16A34A)),
+                              Icon(
+                                d.isPaid
+                                    ? Icons.verified_rounded
+                                    : (d.isDefaulter ? Icons.warning_amber_rounded : Icons.info_outline_rounded),
+                                size: 16,
+                                color: d.isPaid
+                                    ? const Color(0xFF16A34A)
+                                    : (d.isDefaulter ? const Color(0xFFDC2626) : const Color(0xFF1E3A8A)),
+                              ),
                               const SizedBox(width: 8),
                               Flexible(
                                 child: Text(
-                                  "OFFICIAL RECEIPT  •  STATUS: ${d.paymentStatus.toUpperCase()}  •  RECEIPT NO: ${d.receiptNo}",
+                                  d.isPaid
+                                      ? "OFFICIAL BILL & RECEIPT  •  STATUS: PAID  •  RECEIPT NO: ${d.receiptNo}"
+                                      : (d.isDefaulter
+                                          ? "OFFICIAL BILL & OVERDUE NOTICE  •  STATUS: DEFAULTER ${d.daysOverdue > 0 ? '(${d.daysOverdue}D OVERDUE)' : ''}  •  INVOICE NO: ${d.receiptNo}"
+                                          : "OFFICIAL BILL & INVOICE  •  STATUS: ${d.paymentStatus.toUpperCase()}  •  INVOICE NO: ${d.receiptNo}"),
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: isMobile ? 10.5 : 12,
                                     fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF15803D),
+                                    color: d.isPaid
+                                        ? const Color(0xFF15803D)
+                                        : (d.isDefaulter ? const Color(0xFFDC2626) : const Color(0xFF1E3A8A)),
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
@@ -332,7 +401,7 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
                         ),
                         const SizedBox(height: 20),
 
-                        // TWO COLUMNS: TENANT DETAILS & PAYMENT RECIPIENT
+                        // TWO COLUMNS: TENANT DETAILS & BILL ISSUER
                         if (isMobile) ...[
                           _buildTenantDetailsCard(d),
                           const SizedBox(height: 14),
@@ -349,8 +418,12 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
                         ],
                         const SizedBox(height: 20),
 
-                        // PAYMENT DETAILS CARD
-                        _buildPaymentDetailsCard(d),
+                        // BILL PARTICULARS & DATES CARD
+                        _buildBillParticularsCard(d),
+                        const SizedBox(height: 20),
+
+                        // AMOUNT BREAKDOWN & DEFAULTER CALCULATION CARD
+                        _buildAmountBreakdownCard(d),
                         const SizedBox(height: 20),
 
                         // TERMS AND CONDITIONS
@@ -554,11 +627,11 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
             padding: const EdgeInsets.all(12),
             child: Column(
               children: [
-                _buildInfoRow("Payee Name", d.payeeName, isBoldVal: true),
-                _buildInfoRow("Contact No", d.contactNumber),
-                _buildInfoRow("Email", d.email),
+                _buildInfoRow("Tenant Name", d.payeeName, isBoldVal: true),
                 _buildInfoRow("Building", d.buildingAddress),
-                _buildInfoRow("Room & Bed", d.roomAndBed, isLast: true),
+                _buildInfoRow("Room & Bed", d.roomAndBed),
+                _buildInfoRow("Contact No", d.contactNumber),
+                _buildInfoRow("Email", d.email, isLast: true),
               ],
             ),
           ),
@@ -584,7 +657,7 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
               borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
             ),
             child: Text(
-              "PAYMENT RECIPIENT",
+              "BILL ISSUER / LAKSHYA RESIDENCY",
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -597,10 +670,10 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
             padding: const EdgeInsets.all(12),
             child: Column(
               children: [
-                _buildInfoRow("Organisation", "Lakshya residency", isBoldVal: true),
-                _buildInfoRow("Managed by", "Ajay singh"),
+                _buildInfoRow("Organisation", "Lakshya Residency", isBoldVal: true),
+                _buildInfoRow("Managed by", "Ajay Singh (Founder)"),
                 _buildInfoRow("Mail", "lakshyaresidency@gmail.com"),
-                _buildInfoRow("Phone number", "+91 97840 70543"),
+                _buildInfoRow("Phone", "+91 97840 70543"),
                 _buildInfoRow("Website", "www.lakshyaresidency.com", isLast: true),
               ],
             ),
@@ -610,7 +683,7 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
     );
   }
 
-  Widget _buildPaymentDetailsCard(PaymentReceiptData d) {
+  Widget _buildBillParticularsCard(PaymentReceiptData d) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
@@ -627,7 +700,7 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
               borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
             ),
             child: Text(
-              "PAYMENT DETAILS",
+              "BILL PARTICULARS & DATES",
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -640,40 +713,129 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
             padding: const EdgeInsets.all(14),
             child: Column(
               children: [
-                _buildInfoRow("Receipt Number", d.receiptNo, isBoldVal: true, isHighlightVal: true),
-                _buildInfoRow("Bill Issue Date", d.billIssueDate),
-                _buildInfoRow("Payment Type", d.paymentType),
+                _buildInfoRow("Bill Title / Purpose", d.billTitle),
+                _buildInfoRow("Invoice / Receipt Number", d.receiptNo, isBoldVal: true, isHighlightVal: true),
+                _buildInfoRow("Date Informed / Issued", d.billInformedDate),
+                _buildInfoRow("Payment Due Date", d.deadline),
+                _buildInfoRow(
+                  d.isPaid ? "Paid On (Date Paid)" : "Date of Payment",
+                  d.isPaid ? d.paidOn : "Pending Payment",
+                  isBoldVal: d.isPaid,
+                ),
                 _buildInfoRow("Payment Method", d.paymentMethod),
                 if (d.transactionRef != null && d.transactionRef!.isNotEmpty)
-                  _buildInfoRow("Transaction Ref / UTR", d.transactionRef!),
-                _buildInfoRow("Deadline (Due Date)", d.deadline),
-                _buildInfoRow("Paid On", d.paidOn),
-                _buildInfoRow("Payment Status", d.paymentStatus, isBoldVal: true, isHighlightVal: true),
+                  _buildInfoRow("Transaction Ref / UTR", d.transactionRef!, isLast: true)
+                else
+                  _buildInfoRow("Payment Status", d.paymentStatus, isBoldVal: true, isHighlightVal: true, isLast: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAmountBreakdownCard(PaymentReceiptData d) {
+    final bool isPaid = d.isPaid;
+    final bool isDefaulter = d.isDefaulter;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
+            ),
+            child: Text(
+              "AMOUNT BREAKDOWN & DEFAULTER CALCULATION",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF1F3864),
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              children: [
+                _buildInfoRow("Base Bill Amount (${d.billTitle})", "₹${d.baseAmount.toStringAsFixed(0)}"),
+                _buildInfoRow(
+                  "Amount of Defaulter",
+                  d.defaulterAmount > 0
+                      ? "+ ₹${d.defaulterAmount.toStringAsFixed(0)} (Defaulter Added)"
+                      : "₹0 (No Defaulter Charges)",
+                  isBoldVal: d.defaulterAmount > 0,
+                  isHighlightVal: d.defaulterAmount > 0,
+                ),
+                _buildInfoRow(
+                  "Total Bill Amount Payable",
+                  "₹${d.totalAmount.toStringAsFixed(0)}",
+                  isBoldVal: true,
+                  isHighlightVal: true,
+                ),
+                _buildInfoRow(
+                  "Amount Paid",
+                  "₹${d.paidAmount.toStringAsFixed(0)}",
+                  isBoldVal: isPaid,
+                ),
+                _buildInfoRow(
+                  "Balance Remaining",
+                  d.balanceAmount <= 0
+                      ? "₹0 (Fully Settled)"
+                      : "₹${d.balanceAmount.toStringAsFixed(0)} (Due)",
+                  isBoldVal: d.balanceAmount > 0,
+                ),
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
+                    color: isPaid
+                        ? const Color(0xFFF0FDF4)
+                        : (isDefaulter ? const Color(0xFFFEF2F2) : const Color(0xFFEFF6FF)),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                    border: Border.all(
+                      color: isPaid
+                          ? const Color(0xFFBBF7D0)
+                          : (isDefaulter ? const Color(0xFFFECACA) : const Color(0xFFBFDBFE)),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        "TOTAL AMOUNT PAID",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF1E3A8A),
+                      Expanded(
+                        child: Text(
+                          isPaid
+                              ? "TOTAL AMOUNT PAID (ON ${d.paidOn.toUpperCase()})"
+                              : (isDefaulter ? "TOTAL OVERDUE AMOUNT" : "NET AMOUNT DUE (BY ${d.deadline.toUpperCase()})"),
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: isPaid
+                                ? const Color(0xFF15803D)
+                                : (isDefaulter ? const Color(0xFFDC2626) : const Color(0xFF1E3A8A)),
+                          ),
                         ),
                       ),
                       Text(
-                        "₹${d.amount.toStringAsFixed(0)}",
+                        isPaid
+                            ? "₹${d.paidAmount.toStringAsFixed(0)}"
+                            : "₹${(d.balanceAmount > 0 ? d.balanceAmount : d.totalAmount).toStringAsFixed(0)}",
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
+                          fontSize: 17,
                           fontWeight: FontWeight.w900,
-                          color: const Color(0xFF1E3A8A),
+                          color: isPaid
+                              ? const Color(0xFF15803D)
+                              : (isDefaulter ? const Color(0xFFDC2626) : const Color(0xFF1E3A8A)),
                         ),
                       ),
                     ],

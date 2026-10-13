@@ -452,7 +452,7 @@ class _LoginScreenState extends State<LoginScreen> {
             filled: true,
             fillColor: inputBgColor,
             hintText: _managementSubRole == ManagementSubRole.admin
-                ? "admin@lakshya.com"
+                ? "lakshyaresidency@gmail.com"
                 : "staff@lakshya.com",
             hintStyle: GoogleFonts.plusJakartaSans(
               color: const Color(0xFF94A3B8),

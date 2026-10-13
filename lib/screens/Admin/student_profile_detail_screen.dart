@@ -1144,6 +1144,21 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
                       elevation: 0,
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _openReceiptDialog(bill),
+                    icon: const Icon(Icons.description_outlined, size: 15),
+                    label: Text(
+                      "Bill",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1F3864),
+                      side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
                 ],
                 const Spacer(),
                 IconButton(
@@ -1244,10 +1259,6 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
 
   // Receipt / Download Bill Dialog
   void _openReceiptDialog(BillModel item) {
-    if (!item.isPaid && !item.isDepositHeld && !item.isDepositReturned) {
-      _showSnackbar("Receipts are available for paid fees and security deposits only.", isSuccess: false);
-      return;
-    }
     PaymentReceiptDialog.show(context, bill: item);
   }
 

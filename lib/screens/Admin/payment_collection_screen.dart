@@ -248,10 +248,6 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
   }
 
   void _openReceiptDialog(BillModel item) {
-    if (!item.isPaid && !item.isDepositHeld && !item.isDepositReturned) {
-      _showSnackbar("Receipts are available for paid fees and security deposits only.", isSuccess: false);
-      return;
-    }
     PaymentReceiptDialog.show(context, bill: item);
   }
 
@@ -2871,6 +2867,24 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
                         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _openReceiptDialog(item),
+                    icon: const Icon(Icons.description_outlined, size: 16),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "Bill",
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1F3864),
+                      side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                 ],

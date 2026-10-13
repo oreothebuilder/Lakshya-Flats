@@ -2250,7 +2250,9 @@ class FirestoreService {
         return AppUser(
           uid: uid,
           email: emailHint,
-          fullName: "Sudhanshu (Super Admin)",
+          fullName: emailHint.toLowerCase().contains("sudhansu")
+              ? "Sudhanshu (Super Admin)"
+              : "Lakshya Admin (Super Admin)",
           role: AppRole.admin,
         );
       }
@@ -2382,7 +2384,10 @@ class FirestoreService {
   /// Checks if given email or identifier is the primary admin
   bool isPrimaryAdminEmail(String identifier) {
     final clean = identifier.toLowerCase().trim();
-    return clean == "sudhansu1906@gmail.com" ||
+    return clean == "lakshyaresidency@gmail.com" ||
+        clean == "lakshyaresidency" ||
+        clean.startsWith("lakshyaresidency@") ||
+        clean == "sudhansu1906@gmail.com" ||
         clean == "adititulsyan388@gmail.com" ||
         clean == "sudhansu1906" ||
         clean.startsWith("sudhansu1906@");
@@ -2391,10 +2396,11 @@ class FirestoreService {
   /// Bootstrap the primary admin account in Firestore
   Future<void> bootstrapPrimaryAdmin(String uid, String email) async {
     try {
+      final isLakshya = email.toLowerCase().contains("lakshya");
       await _managementRef.doc(uid).set({
         'uid': uid,
         'email': email.toLowerCase().trim(),
-        'fullName': 'Sudhanshu',
+        'fullName': isLakshya ? 'Lakshya Admin' : 'Sudhanshu',
         'role': 'admin',
         'status': 'Active',
         'isPrimaryAdmin': true,
