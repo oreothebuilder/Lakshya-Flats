@@ -17,6 +17,7 @@ import '../screens/Admin/expense_tracker_screen.dart';
 import '../screens/Admin/personal_todo_screen.dart';
 import '../screens/Admin/staff_screen.dart';
 import '../services/academic_year_service.dart';
+import 'change_payment_details_dialog.dart';
 import 'app_toast.dart';
 
 class AdminDrawer extends StatelessWidget {
@@ -301,10 +302,24 @@ class AdminDrawer extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const PaymentCollectionScreen(),
+                            builder: (context) => PaymentCollectionScreen(currentUser: currentUser),
                           ),
                         );
                       }
+                    },
+                  ),
+                  const SizedBox(height: 4),
+                  _buildDrawerItem(
+                    context: context,
+                    icon: Icons.account_balance_rounded,
+                    title: "Payment Details",
+                    isSelected: activeItem == "Payment Details",
+                    onTap: () {
+                      Navigator.pop(context);
+                      ChangePaymentDetailsDialog.show(
+                        context,
+                        currentUser: currentUser,
+                      );
                     },
                   ),
                 ],

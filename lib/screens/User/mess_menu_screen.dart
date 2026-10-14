@@ -41,10 +41,14 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
   ];
 
   void _handleBackToHome() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: widget.currentUser)),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: widget.currentUser)),
+        (route) => false,
+      );
+    }
   }
 
   @override
@@ -71,7 +75,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
             _selectedDay.toLowerCase() == MessMenuService().getCurrentDayName().toLowerCase();
 
         return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToHome();

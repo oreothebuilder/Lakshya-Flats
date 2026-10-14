@@ -12,6 +12,7 @@ import '../../widgets/app_toast.dart';
 import '../../widgets/building_photo_selector.dart';
 import '../../services/mess_menu_service.dart';
 import '../../services/academic_year_service.dart';
+import '../../widgets/change_payment_details_dialog.dart';
 
 class BuildingSpaceScreen extends StatefulWidget {
   final BuildingModel building;
@@ -1962,6 +1963,17 @@ class _BuildingSpaceScreenState extends State<BuildingSpaceScreen>
               ],
             ),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.account_balance_rounded, color: Color(0xFF003896)),
+                tooltip: "Payment Details for ${currentBuilding.name}",
+                onPressed: () {
+                  ChangePaymentDetailsDialog.show(
+                    context,
+                    initialBuilding: currentBuilding.name,
+                    currentUser: widget.currentUser,
+                  );
+                },
+              ),
               IconButton(
                 icon: const Icon(Icons.edit_outlined, color: Color(0xFF0F172A)),
                 tooltip: "Edit Building & Capacity",

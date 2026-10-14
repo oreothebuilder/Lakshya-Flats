@@ -42,22 +42,34 @@ class OnboardingWelcomeModal extends StatelessWidget {
     required String userName,
     required VoidCallback onContinue,
     required VoidCallback onDismiss,
-  }) {
-    return showDialog<bool>(
+  }) async {
+    final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogCtx) => OnboardingWelcomeModal(
-        userName: userName,
-        onContinue: () {
-          Navigator.pop(dialogCtx, true);
-          onContinue();
+      builder: (dialogCtx) => PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (didPop, popResult) {
+          if (didPop && popResult == null) {
+            onDismiss();
+          }
         },
-        onDismiss: () {
-          Navigator.pop(dialogCtx, false);
-          onDismiss();
-        },
+        child: OnboardingWelcomeModal(
+          userName: userName,
+          onContinue: () {
+            Navigator.pop(dialogCtx, true);
+            onContinue();
+          },
+          onDismiss: () {
+            Navigator.pop(dialogCtx, false);
+            onDismiss();
+          },
+        ),
       ),
     );
+    if (result == null) {
+      onDismiss();
+    }
+    return result;
   }
 
   @override

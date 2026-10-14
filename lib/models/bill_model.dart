@@ -38,6 +38,12 @@ class BillModel {
   final String? regNo;
   final String? studentDocId;
   final double defaulterAmount;
+  final String? payeeAccountName;
+  final String? payeeBankName;
+  final String? payeeAccountNumber;
+  final String? payeeIfscCode;
+  final String? payeeUpiId;
+  final String? payeeQrCodeUrl;
 
   BillModel({
     required this.id,
@@ -77,6 +83,12 @@ class BillModel {
     this.bed,
     this.regNo,
     this.studentDocId,
+    this.payeeAccountName,
+    this.payeeBankName,
+    this.payeeAccountNumber,
+    this.payeeIfscCode,
+    this.payeeUpiId,
+    this.payeeQrCodeUrl,
   }) : createdAt = createdAt ?? DateTime.now();
 
   double get totalPayable => amount + defaulterAmount;
@@ -287,6 +299,12 @@ class BillModel {
       bed: data['bed']?.toString() ?? data['bedNumber']?.toString(),
       regNo: data['regNo']?.toString() ?? data['registrationNumber']?.toString(),
       studentDocId: data['studentDocId']?.toString(),
+      payeeAccountName: data['payeeAccountName']?.toString(),
+      payeeBankName: data['payeeBankName']?.toString(),
+      payeeAccountNumber: data['payeeAccountNumber']?.toString(),
+      payeeIfscCode: data['payeeIfscCode']?.toString(),
+      payeeUpiId: data['payeeUpiId']?.toString(),
+      payeeQrCodeUrl: data['payeeQrCodeUrl']?.toString(),
     );
   }
 
@@ -331,6 +349,12 @@ class BillModel {
       if (regNo != null) 'regNo': regNo,
       if (regNo != null) 'registrationNumber': regNo,
       if (studentDocId != null) 'studentDocId': studentDocId,
+      if (payeeAccountName != null) 'payeeAccountName': payeeAccountName,
+      if (payeeBankName != null) 'payeeBankName': payeeBankName,
+      if (payeeAccountNumber != null) 'payeeAccountNumber': payeeAccountNumber,
+      if (payeeIfscCode != null) 'payeeIfscCode': payeeIfscCode,
+      if (payeeUpiId != null) 'payeeUpiId': payeeUpiId,
+      if (payeeQrCodeUrl != null) 'payeeQrCodeUrl': payeeQrCodeUrl,
     };
   }
 
@@ -372,6 +396,12 @@ class BillModel {
     String? bed,
     String? regNo,
     String? studentDocId,
+    String? payeeAccountName,
+    String? payeeBankName,
+    String? payeeAccountNumber,
+    String? payeeIfscCode,
+    String? payeeUpiId,
+    String? payeeQrCodeUrl,
   }) {
     return BillModel(
       id: id ?? this.id,
@@ -411,6 +441,12 @@ class BillModel {
       bed: bed ?? this.bed,
       regNo: regNo ?? this.regNo,
       studentDocId: studentDocId ?? this.studentDocId,
+      payeeAccountName: payeeAccountName ?? this.payeeAccountName,
+      payeeBankName: payeeBankName ?? this.payeeBankName,
+      payeeAccountNumber: payeeAccountNumber ?? this.payeeAccountNumber,
+      payeeIfscCode: payeeIfscCode ?? this.payeeIfscCode,
+      payeeUpiId: payeeUpiId ?? this.payeeUpiId,
+      payeeQrCodeUrl: payeeQrCodeUrl ?? this.payeeQrCodeUrl,
     );
   }
 }

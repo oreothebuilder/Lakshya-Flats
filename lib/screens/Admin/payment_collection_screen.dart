@@ -5,11 +5,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/admin_drawer.dart';
 import '../../widgets/document_viewer_modal.dart';
 import '../../widgets/payment_receipt_dialog.dart';
+import '../../widgets/change_payment_details_dialog.dart';
 import '../../widgets/app_toast.dart';
 import '../../services/firestore_service.dart';
 import '../../services/email_service.dart';
 import '../../models/bill_model.dart';
 import '../../models/student_profile_model.dart';
+import '../../models/user_role_model.dart';
+import '../../models/payment_details_model.dart';
 import 'broadcast_notification_screen.dart';
 import 'dashboard_screen.dart';
 import '../../services/academic_year_service.dart';
@@ -17,11 +20,13 @@ import '../../services/academic_year_service.dart';
 class PaymentCollectionScreen extends StatefulWidget {
   final String? initialFilter; // 'All', 'Pending', 'Defaulters', 'Collected'
   final bool openIssueBillModal;
+  final AppUser? currentUser;
 
   const PaymentCollectionScreen({
     super.key,
     this.initialFilter,
     this.openIssueBillModal = false,
+    this.currentUser,
   });
 
   @override
@@ -1329,6 +1334,60 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
                         ),
                       ),
 
+                    if (isStudentSelected)
+                      StreamBuilder<PaymentDetailsModel>(
+                        stream: FirestoreService().getPaymentDetailsStream(buildingName: selectedStudent!.building),
+                        builder: (ctx, paySnap) {
+                          final pDetails = paySnap.data ??
+                              PaymentDetailsModel.defaultDetails(buildingName: selectedStudent!.building);
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDF4),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFBBF7D0)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.account_balance_wallet_rounded, size: 15, color: Color(0xFF16A34A)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    "Student will pay to: ${pDetails.bankName} (${pDetails.upiId})",
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF15803D),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: () {
+                                    ChangePaymentDetailsDialog.show(
+                                      context,
+                                      initialBuilding: selectedStudent!.building,
+                                      currentUser: widget.currentUser,
+                                    );
+                                  },
+                                  child: Text(
+                                    "Change",
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF16A34A),
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -1545,6 +1604,17 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
                     _isSearching = true;
                   }
                 });
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.account_balance_rounded, color: Color(0xFF003896)),
+              tooltip: "Change Payment Details",
+              onPressed: () {
+                ChangePaymentDetailsDialog.show(
+                  context,
+                  initialBuilding: _selectedBuilding != "All Buildings" ? _selectedBuilding : null,
+                  currentUser: widget.currentUser,
+                );
               },
             ),
             IconButton(
@@ -2067,6 +2137,82 @@ class _PaymentCollectionScreenState extends State<PaymentCollectionScreen>
                       ),
                     ],
                   ),
+                ),
+
+                // Student Payment Receiving Details Status Bar
+                StreamBuilder<PaymentDetailsModel>(
+                  stream: FirestoreService().getPaymentDetailsStream(
+                    buildingName: _selectedBuilding != "All Buildings" ? _selectedBuilding : null,
+                  ),
+                  builder: (context, paySnap) {
+                    final payDetails = paySnap.data ??
+                        PaymentDetailsModel.defaultDetails(
+                          buildingName: _selectedBuilding != "All Buildings" ? _selectedBuilding : null,
+                        );
+                    final isBuildingScope = payDetails.scope == 'building' && payDetails.buildingName != null;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFBBF7D0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.account_balance_wallet_rounded, size: 16, color: Color(0xFF16A34A)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "Student Payment Details: ${payDetails.bankName} • ${payDetails.upiId}${isBuildingScope ? ' (${payDetails.buildingName})' : ' (Global Default)'}",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF14532D),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: () {
+                                ChangePaymentDetailsDialog.show(
+                                  context,
+                                  initialBuilding: _selectedBuilding != "All Buildings" ? _selectedBuilding : null,
+                                  currentUser: widget.currentUser,
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF16A34A),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.edit_rounded, size: 12, color: Colors.white),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "Change",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
 
                 // Filters Bar: Buildings & Types (in one non-scrollable line)

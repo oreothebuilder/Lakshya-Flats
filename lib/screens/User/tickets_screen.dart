@@ -452,10 +452,14 @@ class _TicketsScreenState extends State<TicketsScreen> {
   }
 
   void _handleBackToHome() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: _user ?? widget.currentUser)),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: _user ?? widget.currentUser)),
+        (route) => false,
+      );
+    }
   }
 
   @override
@@ -475,7 +479,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
         : FirestoreService().getComplaintsStream();
 
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToHome();
@@ -707,7 +711,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          "${(_user?.room?.isNotEmpty ?? false) ? _user!.room! : 'Resident'}\nComplaints",
+                          "Helpdesk &\nSupport",
                           style: GoogleFonts.plusJakartaSans(
                             color: Colors.white,
                             fontSize: 26,
