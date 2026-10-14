@@ -175,8 +175,19 @@ class CloudinaryService {
   /// Transforms a Cloudinary URL into a direct attachment download URL
   static String getAttachmentDownloadUrl(String url, {String? fileName}) {
     if (url.contains('/upload/')) {
-      final cleanFileName = fileName != null ? fileName.replaceAll(RegExp(r'[^\w\.\-]'), '_') : '';
-      final attachmentParam = cleanFileName.isNotEmpty ? 'fl_attachment:$cleanFileName/' : 'fl_attachment/';
+      String attachmentParam = 'fl_attachment/';
+      if (fileName != null && fileName.trim().isNotEmpty) {
+        var clean = fileName.trim();
+        // Remove file extension if present so Cloudinary doesn't mistake '.' for a flag delimiter
+        final dotIndex = clean.lastIndexOf('.');
+        if (dotIndex > 0) {
+          clean = clean.substring(0, dotIndex);
+        }
+        clean = clean.replaceAll(RegExp(r'[^\w\-]'), '_');
+        if (clean.isNotEmpty) {
+          attachmentParam = 'fl_attachment:$clean/';
+        }
+      }
       return url.replaceFirst('/upload/', '/upload/$attachmentParam');
     }
     return url;

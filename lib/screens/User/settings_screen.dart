@@ -34,7 +34,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Preference State
   String _selectedLanguage = "English (US)";
-  bool _isLightTheme = true;
 
   // Deletion State
   bool _deletionRequested = false;
@@ -638,16 +637,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _handleBackToHome() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: widget.currentUser)),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: widget.currentUser)),
+        (route) => false,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToHome();
@@ -1033,105 +1036,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             });
                           }
                         },
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Theme Selection (Light/Dark buttons)
-                      Text(
-                        "Theme",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          // Light button
-                          Expanded(
-                            child: InkWell(
-                              onTap: () {
-                                setState(() {
-                                  _isLightTheme = true;
-                                });
-                              },
-                              borderRadius: BorderRadius.circular(10),
-                              child: Container(
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: _isLightTheme ? const Color(0xFF1D4ED8) : const Color(0xFFE2E8F0),
-                                    width: _isLightTheme ? 1.5 : 1.0,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.wb_sunny_outlined,
-                                      color: _isLightTheme ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      "Light",
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: _isLightTheme ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Dark button
-                          Expanded(
-                            child: InkWell(
-                              onTap: () {
-                                setState(() {
-                                  _isLightTheme = false;
-                                });
-                              },
-                              borderRadius: BorderRadius.circular(10),
-                              child: Container(
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: !_isLightTheme ? const Color(0xFF1D4ED8) : const Color(0xFFE2E8F0),
-                                    width: !_isLightTheme ? 1.5 : 1.0,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.nightlight_round_outlined,
-                                      color: !_isLightTheme ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      "Dark",
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: !_isLightTheme ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),

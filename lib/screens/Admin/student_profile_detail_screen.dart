@@ -10,6 +10,7 @@ import '../../services/cloudinary_service.dart';
 import '../../config/cloudinary_config.dart';
 import '../../services/media_picker_service.dart';
 import '../../widgets/document_viewer_modal.dart';
+import '../../services/agreement_pdf_service.dart';
 import '../../widgets/payment_receipt_dialog.dart';
 import '../../widgets/app_toast.dart';
 import '../../services/email_service.dart';
@@ -3678,7 +3679,7 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
               if (hasDoc) ...[
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _openImageFullscreen(url, title: title),
+                    onPressed: () => _openImageFullscreen(url, title: title, docKey: docKey),
                     icon: const Icon(Icons.visibility_rounded, size: 16),
                     label: Text(
                       "View Document",
@@ -3816,9 +3817,66 @@ class _StudentProfileDetailScreenState extends State<StudentProfileDetailScreen>
     );
   }
 
+  RentalAgreementData _buildRentalAgreementData() {
+    final now = DateTime.now();
+    final dayStr = now.day.toString().padLeft(2, '0');
+    final monthStr = now.month.toString().padLeft(2, '0');
+    final dateStr = "$dayStr/$monthStr/${now.year}";
+
+    final startDateStr = _student.leaseStartDate?.isNotEmpty == true
+        ? _student.leaseStartDate!
+        : dateStr;
+    final endDateStr = _student.leaseEndDate?.isNotEmpty == true
+        ? _student.leaseEndDate!
+        : "$dayStr/$monthStr/${now.year + 1}";
+
+    return RentalAgreementData(
+      agreementDate: dateStr,
+      commencementDate: startDateStr,
+      endingDate: endDateStr,
+      studentFullName: _student.fullName.isNotEmpty ? _student.fullName : "Resident",
+      mobileNumber: _student.phone,
+      email: _student.email.isNotEmpty ? _student.email : "resident@email.com",
+      regNumber: _student.registrationNumber.isNotEmpty ? _student.registrationNumber : "N/A",
+      dob: _student.dob,
+      course: _student.course,
+      branch: _student.branch,
+      hometownAddress: _student.hometownAddress,
+      building: _student.building.isNotEmpty ? _student.building : "Lakshya Residency",
+      roomNumber: _student.room.isNotEmpty ? _student.room : "Room",
+      bedNumber: _student.bedNumber.isNotEmpty ? _student.bedNumber : "Bed",
+      flatConfig: "2 BHK",
+      guardianName: _student.guardianName,
+      guardianRelationship: _student.guardianRelationship,
+      guardianPhone: _student.guardianPhone,
+      dietaryPreference: _student.dietaryPreference.isNotEmpty ? _student.dietaryPreference : "Vegetarian",
+      plan: _student.plan.isNotEmpty ? _student.plan : "Rent Only",
+      monthlyRent: _student.monthlyRent.isNotEmpty ? _student.monthlyRent : "15000",
+      securityDeposit: _student.securityDeposit.isNotEmpty ? _student.securityDeposit : "15000",
+      rentalTerm: _student.rentalTerm ?? "Complete Year (July to May)",
+      inventoryItems: _student.inventory,
+      notes: _student.notes,
+      collegeIdUploaded: _student.collegeIdUrl != null && _student.collegeIdUrl!.isNotEmpty,
+      govtIdUploaded: _student.govtIdUrl != null && _student.govtIdUrl!.isNotEmpty,
+    );
+  }
+
   // Interactive document, PDF, and photo viewer modal
-  void _openImageFullscreen(String url, {required String title}) {
-    DocumentViewerModal.show(context, url: url, title: title);
+  void _openImageFullscreen(String url, {required String title, String? docKey}) {
+    DocumentViewerModal.show(
+      context,
+      url: url,
+      title: title,
+      fileName: docKey == 'rentAgreementUrl'
+          ? "Rental_Agreement_${_student.studentId.isNotEmpty ? _student.studentId : 'Student'}.pdf"
+          : null,
+      onGenerateFallbackBytes: docKey == 'rentAgreementUrl'
+          ? () async {
+              final data = _buildRentalAgreementData();
+              return await AgreementPdfService.generateAgreementPdf(data);
+            }
+          : null,
+    );
   }
 
   // Edit Basic Profile Information Dialog

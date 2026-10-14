@@ -10,6 +10,7 @@ import '../../services/firebase_auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/media_picker_service.dart';
 import '../../config/cloudinary_config.dart';
+import '../../services/agreement_pdf_service.dart';
 import '../../widgets/document_viewer_modal.dart';
 import '../../widgets/app_toast.dart';
 import 'notifications_screen.dart';
@@ -86,6 +87,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _govtIdAddLater = false;
   String? _rentAgreementUrl;
   bool _isUploadingDoc = false;
+  Map<String, dynamic> _additionalDocs = {};
 
   // Stay details values
   String _building = "Lakshya";
@@ -358,6 +360,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       _rentAgreementUrl = studentData['rentAgreementUrl']?.toString();
 
+      if (studentData['additionalDocs'] is Map) {
+        _additionalDocs = Map<String, dynamic>.from(studentData['additionalDocs'] as Map);
+      } else {
+        _additionalDocs = {};
+      }
+
       final rawNotes = studentData['notes'];
       if (rawNotes is List) {
         _notes = rawNotes.map((e) => e.toString()).toList();
@@ -381,22 +389,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     AppToast.show(context, msg, isSuccess: isSuccess);
   }
 
-  Future<void> _uploadAddLaterDoc({
+  String _getEffectiveStudentDocId() {
+    if (_studentDocId.isNotEmpty) return _studentDocId;
+    final userUid = widget.currentUser?.uid;
+    if (userUid != null && userUid.isNotEmpty) return userUid;
+    final authUid = FirebaseAuthService().currentUser?.uid;
+    if (authUid != null && authUid.isNotEmpty) return authUid;
+    if (_studentId.isNotEmpty) return _studentId;
+    return "";
+  }
+
+  Future<void> _uploadOrReplaceDocument({
     required String title,
     required String docKey,
-    required String addLaterKey,
+    String? addLaterKey,
   }) async {
-    if (_studentDocId.isEmpty) {
+    final effectiveDocId = _getEffectiveStudentDocId();
+    if (effectiveDocId.isEmpty) {
       _showSnackbar("Unable to locate student profile record to upload document.", isSuccess: false);
       return;
     }
 
     try {
+      final isPhoto = docKey == 'photoUrl';
       final res = await MediaPickerService.showPickerAndUpload(
         context: context,
         title: "Upload $title",
         folder: CloudinaryConfig.folderStudentDocs,
-        allowPdf: true,
+        allowPdf: !isPhoto,
       );
       if (res == null) return;
 
@@ -405,12 +425,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final url = res.url;
       if (url.isNotEmpty) {
-        await FirestoreService().uploadStudentAddLaterDocument(
-          _studentDocId,
-          docKey: docKey,
-          url: url,
-          addLaterKey: addLaterKey,
-        );
+        final Map<String, dynamic> docPayload = {docKey: url};
+        if (addLaterKey != null && addLaterKey.isNotEmpty) {
+          docPayload[addLaterKey] = false;
+        }
+        if (docKey == 'photoUrl') {
+          docPayload['profilePhoto'] = url;
+          docPayload['photoAddLater'] = false;
+        } else if (docKey == 'collegeIdUrl') {
+          docPayload['collegeIdAddLater'] = false;
+        } else if (docKey == 'govtIdUrl') {
+          docPayload['govtIdAddLater'] = false;
+        }
+
+        await FirestoreService().updateStudentDocuments(effectiveDocId, docPayload);
 
         setState(() {
           if (docKey == 'photoUrl') {
@@ -422,10 +450,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           } else if (docKey == 'govtIdUrl') {
             _govtIdUrl = url;
             _govtIdAddLater = false;
+          } else if (docKey == 'rentAgreementUrl') {
+            _rentAgreementUrl = url;
           }
         });
 
-        _showSnackbar("$title uploaded and permanently saved!");
+        _showSnackbar("$title uploaded and saved successfully!");
       } else {
         _showSnackbar("Failed to upload document", isSuccess: false);
       }
@@ -433,6 +463,360 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showSnackbar("Error uploading document: $e", isSuccess: false);
     } finally {
       if (mounted) setState(() => _isUploadingDoc = false);
+    }
+  }
+
+  Future<void> _uploadAddLaterDoc({
+    required String title,
+    required String docKey,
+    required String addLaterKey,
+  }) async {
+    await _uploadOrReplaceDocument(
+      title: title,
+      docKey: docKey,
+      addLaterKey: addLaterKey,
+    );
+  }
+
+  void _openAddNewDocumentDialog() {
+    final nameCtrl = TextEditingController();
+    String? errorText;
+
+    final List<String> presetSuggestions = [
+      "Police Verification Form",
+      "Parent / Guardian Consent",
+      "Fee Payment Receipt",
+      "Medical Certificate",
+      "Passport Copy",
+      "Driving License",
+      "Electricity Bill",
+      "Other Document",
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (bottomSheetCtx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFCBD5E1),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.note_add_rounded, color: Color(0xFF0056D2), size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Upload New Document",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 16.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                "Attach additional verification documents (PDF or Image)",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "Quick Document Types",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF475569),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: presetSuggestions.map((suggestion) {
+                        final isSelected = nameCtrl.text.trim() == suggestion;
+                        return InkWell(
+                          onTap: () {
+                            setSheetState(() {
+                              nameCtrl.text = suggestion;
+                              errorText = null;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFFDBEAFE) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFF3B82F6) : Colors.transparent,
+                                width: 1.2,
+                              ),
+                            ),
+                            child: Text(
+                              suggestion,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11.5,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF334155),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "Document Name / Title",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF475569),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: InputDecoration(
+                        hintText: "e.g. Police Verification Form",
+                        hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF94A3B8)),
+                        errorText: errorText,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF0056D2), width: 1.5),
+                        ),
+                      ),
+                      onChanged: (_) {
+                        if (errorText != null) {
+                          setSheetState(() => errorText = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(bottomSheetCtx),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              side: const BorderSide(color: Color(0xFFCBD5E1)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text(
+                              "Cancel",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final docName = nameCtrl.text.trim();
+                              if (docName.isEmpty) {
+                                setSheetState(() => errorText = "Please enter or select a document name");
+                                return;
+                              }
+                              Navigator.pop(bottomSheetCtx);
+                              await _performAddNewDocument(docName);
+                            },
+                            icon: const Icon(Icons.folder_open_rounded, size: 18),
+                            label: Text(
+                              "Select & Upload File",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0056D2),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _performAddNewDocument(String docName) async {
+    final effectiveDocId = _getEffectiveStudentDocId();
+    if (effectiveDocId.isEmpty) {
+      _showSnackbar("Unable to locate student profile record to upload document.", isSuccess: false);
+      return;
+    }
+
+    try {
+      final res = await MediaPickerService.showPickerAndUpload(
+        context: context,
+        title: "Upload $docName",
+        folder: CloudinaryConfig.folderStudentDocs,
+        allowPdf: true,
+      );
+      if (res == null) return;
+
+      setState(() => _isUploadingDoc = true);
+      _showSnackbar("Uploading and attaching $docName...");
+
+      final url = res.url;
+      if (url.isNotEmpty) {
+        final updatedDocs = Map<String, dynamic>.from(_additionalDocs);
+        updatedDocs[docName] = url;
+
+        await FirestoreService().updateStudentDocuments(effectiveDocId, {
+          'additionalDocs': updatedDocs,
+        });
+
+        setState(() {
+          _additionalDocs = updatedDocs;
+        });
+
+        _showSnackbar("$docName uploaded and attached successfully!");
+      } else {
+        _showSnackbar("Failed to upload document", isSuccess: false);
+      }
+    } catch (e) {
+      _showSnackbar("Error uploading document: $e", isSuccess: false);
+    } finally {
+      if (mounted) setState(() => _isUploadingDoc = false);
+    }
+  }
+
+  Future<void> _replaceAdditionalDocument(String docName) async {
+    final effectiveDocId = _getEffectiveStudentDocId();
+    if (effectiveDocId.isEmpty) return;
+
+    try {
+      final res = await MediaPickerService.showPickerAndUpload(
+        context: context,
+        title: "Update $docName",
+        folder: CloudinaryConfig.folderStudentDocs,
+        allowPdf: true,
+      );
+      if (res == null) return;
+
+      setState(() => _isUploadingDoc = true);
+      _showSnackbar("Updating $docName...");
+
+      final url = res.url;
+      if (url.isNotEmpty) {
+        final updatedDocs = Map<String, dynamic>.from(_additionalDocs);
+        updatedDocs[docName] = url;
+        await FirestoreService().updateStudentDocuments(effectiveDocId, {'additionalDocs': updatedDocs});
+        setState(() => _additionalDocs = updatedDocs);
+        _showSnackbar("$docName updated successfully!");
+      }
+    } catch (e) {
+      _showSnackbar("Error updating document: $e", isSuccess: false);
+    } finally {
+      if (mounted) setState(() => _isUploadingDoc = false);
+    }
+  }
+
+  Future<void> _deleteAdditionalDocument(String docName) async {
+    final effectiveDocId = _getEffectiveStudentDocId();
+    if (effectiveDocId.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          "Delete Document",
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: Text(
+          "Are you sure you want to remove '$docName' from your profile?",
+          style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: const Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text("Cancel", style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text("Delete", style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final updatedDocs = Map<String, dynamic>.from(_additionalDocs);
+      updatedDocs.remove(docName);
+      await FirestoreService().updateStudentDocuments(effectiveDocId, {'additionalDocs': updatedDocs});
+      setState(() => _additionalDocs = updatedDocs);
+      _showSnackbar("Document '$docName' removed successfully.");
+    } catch (e) {
+      _showSnackbar("Failed to delete document: $e", isSuccess: false);
     }
   }
 
@@ -2259,6 +2643,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildAttachedDocumentsCard() {
+    final bool isPhotoMissing = _photoUrl == null || _photoUrl!.isEmpty;
+    final bool isCollegeIdMissing = _collegeIdUrl == null || _collegeIdUrl!.isEmpty;
+    final bool isGovtIdMissing = _govtIdUrl == null || _govtIdUrl!.isEmpty;
+    final int missingCount = (isPhotoMissing ? 1 : 0) + (isCollegeIdMissing ? 1 : 0) + (isGovtIdMissing ? 1 : 0);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -2272,21 +2661,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.folder_shared_outlined, color: Color(0xFF1D4ED8), size: 20),
-              const SizedBox(width: 8),
-              Text(
-                "Attached Documents & Verification",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF0F172A),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.folder_shared_outlined, color: Color(0xFF1D4ED8), size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Attached Documents & Verification",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    Text(
+                      missingCount > 0
+                          ? "$missingCount required document${missingCount > 1 ? 's' : ''} missing"
+                          : "All required KYC documents verified & on file",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11.5,
+                        color: missingCount > 0 ? const Color(0xFFD97706) : const Color(0xFF16A34A),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
+
+          if (missingCount > 0) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "You have $missingCount missing document${missingCount > 1 ? 's' : ''}. Tap 'Upload Document' below to submit your verification files.",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           const Divider(height: 24, color: Color(0xFFE2E8F0)),
+
+          // 1. Student Profile Photo
           _buildDocumentRow(
             title: "Student Profile Photo",
+            subtitle: isPhotoMissing ? "Passport-sized photograph or selfie" : null,
             url: _photoUrl,
             isAddLater: _photoAddLater,
             docKey: "photoUrl",
@@ -2294,8 +2740,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: Icons.person_rounded,
           ),
           const SizedBox(height: 14),
+
+          // 2. College ID Card
           _buildDocumentRow(
             title: "College ID Card",
+            subtitle: isCollegeIdMissing ? "Valid college / university ID card (Image or PDF)" : null,
             url: _collegeIdUrl,
             isAddLater: _collegeIdAddLater,
             docKey: "collegeIdUrl",
@@ -2303,8 +2752,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: Icons.badge_rounded,
           ),
           const SizedBox(height: 14),
+
+          // 3. Government Authorized ID
           _buildDocumentRow(
             title: "Government Authorized ID",
+            subtitle: isGovtIdMissing ? "Aadhaar, PAN, Voter ID, or Passport (Image or PDF)" : null,
             url: _govtIdUrl,
             isAddLater: _govtIdAddLater,
             docKey: "govtIdUrl",
@@ -2312,9 +2764,120 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: Icons.credit_card_rounded,
           ),
           const SizedBox(height: 14),
+
+          // 4. Rent Agreement
           _buildAgreementDocumentRow(),
+
+          // 5. Additional Uploaded Documents (if any)
+          if (_additionalDocs.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Icon(Icons.attach_file_rounded, size: 16, color: Color(0xFF475569)),
+                const SizedBox(width: 6),
+                Text(
+                  "Additional Documents (${_additionalDocs.length})",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF334155),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ..._additionalDocs.entries.map((entry) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: _buildAdditionalDocumentRow(
+                  title: entry.key,
+                  url: entry.value?.toString(),
+                ),
+              );
+            }),
+          ],
+
+          const SizedBox(height: 16),
+
+          // 6. Upload New Document Button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _openAddNewDocumentDialog,
+              icon: const Icon(Icons.note_add_rounded, size: 18),
+              label: Text(
+                "Upload New Document",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF0056D2),
+                backgroundColor: const Color(0xFFF8FAFC),
+                side: const BorderSide(color: Color(0xFF93C5FD), width: 1.4),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  RentalAgreementData _buildRentalAgreementData() {
+    final now = DateTime.now();
+    final dayStr = now.day.toString().padLeft(2, '0');
+    final monthStr = now.month.toString().padLeft(2, '0');
+    final dateStr = "$dayStr/$monthStr/${now.year}";
+
+    final startDateStr = _moveInDate.isNotEmpty ? _moveInDate : "15/07/${now.year}";
+    final endDateStr = "$dayStr/$monthStr/${now.year + 1}";
+
+    return RentalAgreementData(
+      agreementDate: dateStr,
+      commencementDate: startDateStr,
+      endingDate: endDateStr,
+      studentFullName: _nameController.text.trim().isNotEmpty
+          ? _nameController.text.trim()
+          : (_name.isNotEmpty ? _name : "Resident"),
+      mobileNumber: _phoneController.text.trim().isNotEmpty
+          ? _phoneController.text.trim()
+          : _phone,
+      email: _emailController.text.trim().isNotEmpty
+          ? _emailController.text.trim()
+          : (_email.isNotEmpty ? _email : "resident@email.com"),
+      regNumber: _regController.text.trim().isNotEmpty
+          ? _regController.text.trim()
+          : (_reg.isNotEmpty ? _reg : "N/A"),
+      dob: _dobController.text.trim().isNotEmpty ? _dobController.text.trim() : _dob,
+      course: _courseController.text.trim().isNotEmpty ? _courseController.text.trim() : _course,
+      branch: _branchController.text.trim().isNotEmpty ? _branchController.text.trim() : _branch,
+      hometownAddress: _hometownAddressController.text.trim().isNotEmpty
+          ? _hometownAddressController.text.trim()
+          : _hometownAddress,
+      building: _building.isNotEmpty ? _building : "Lakshya Residency",
+      roomNumber: _room.isNotEmpty ? _room : "Room",
+      bedNumber: _bed.isNotEmpty ? _bed : "Bed",
+      flatConfig: "2 BHK",
+      guardianName: _emergencyNameController.text.trim().isNotEmpty
+          ? _emergencyNameController.text.trim()
+          : _emergencyName,
+      guardianRelationship: _emergencyRelationshipController.text.trim().isNotEmpty
+          ? _emergencyRelationshipController.text.trim()
+          : _emergencyRelationship,
+      guardianPhone: _emergencyPhoneController.text.trim().isNotEmpty
+          ? _emergencyPhoneController.text.trim()
+          : _emergencyPhone,
+      dietaryPreference: _dietaryPreference.isNotEmpty ? _dietaryPreference : "Vegetarian",
+      plan: _plan.isNotEmpty ? _plan : "Rent Only",
+      monthlyRent: _monthlyRent.isNotEmpty ? _monthlyRent : "15000",
+      securityDeposit: _securityDeposit.isNotEmpty ? _securityDeposit : "15000",
+      inventoryItems: _inventory,
+      notes: _notes,
+      collegeIdUploaded: _collegeIdUrl != null && _collegeIdUrl!.isNotEmpty,
+      govtIdUploaded: _govtIdUrl != null && _govtIdUrl!.isNotEmpty,
     );
   }
 
@@ -2378,6 +2941,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -2396,35 +2960,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          if (hasDoc)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  DocumentViewerModal.show(
-                    context,
-                    url: _rentAgreementUrl!,
-                    title: "Rental & License Agreement",
-                    fileName: "Rental_Agreement_${_studentId.isNotEmpty ? _studentId : 'Student'}.pdf",
-                  );
-                },
-                icon: const Icon(Icons.visibility_rounded, size: 16),
-                label: Text(
-                  "View & Download Agreement",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.bold,
+          if (hasDoc) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      DocumentViewerModal.show(
+                        context,
+                        url: _rentAgreementUrl!,
+                        title: "Rental & License Agreement",
+                        fileName: "Rental_Agreement_${_studentId.isNotEmpty ? _studentId : 'Student'}.pdf",
+                        onGenerateFallbackBytes: () async {
+                          final agreementData = _buildRentalAgreementData();
+                          return await AgreementPdfService.generateAgreementPdf(agreementData);
+                        },
+                      );
+                    },
+                    icon: const Icon(Icons.visibility_rounded, size: 16),
+                    label: Text(
+                      "View & Download Agreement",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0056D2),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
                   ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0056D2),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _isUploadingDoc
+                      ? null
+                      : () => _uploadOrReplaceDocument(
+                            title: "Rental & License Agreement",
+                            docKey: "rentAgreementUrl",
+                          ),
+                  icon: const Icon(Icons.sync_rounded, size: 15),
+                  label: Text(
+                    "Replace",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF475569),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
-              ),
-            )
-          else
+              ],
+            ),
+          ] else ...[
             Text(
               "Agreement copy will be available once finalized by management.",
               style: GoogleFonts.plusJakartaSans(
@@ -2433,6 +3028,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 fontStyle: FontStyle.italic,
               ),
             ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isUploadingDoc
+                    ? null
+                    : () => _uploadOrReplaceDocument(
+                          title: "Signed Rental Agreement",
+                          docKey: "rentAgreementUrl",
+                        ),
+                icon: const Icon(Icons.upload_file_rounded, size: 15),
+                label: Text(
+                  "Upload Signed Agreement Copy",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF0056D2),
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF93C5FD)),
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2440,6 +3063,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildDocumentRow({
     required String title,
+    String? subtitle,
     required String? url,
     required bool isAddLater,
     required String docKey,
@@ -2456,7 +3080,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         border: Border.all(
           color: hasDoc
               ? const Color(0xFF86EFAC)
-              : (isAddLater ? const Color(0xFFFDE68A) : const Color(0xFFE2E8F0)),
+              : (isAddLater ? const Color(0xFFFDE68A) : const Color(0xFFFECACA)),
           width: 1.2,
         ),
       ),
@@ -2474,7 +3098,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       decoration: BoxDecoration(
                         color: hasDoc
                             ? const Color(0xFFDCFCE7)
-                            : (isAddLater ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9)),
+                            : (isAddLater ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2)),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
@@ -2482,18 +3106,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         size: 18,
                         color: hasDoc
                             ? const Color(0xFF15803D)
-                            : (isAddLater ? const Color(0xFFB45309) : const Color(0xFF64748B)),
+                            : (isAddLater ? const Color(0xFFB45309) : const Color(0xFFDC2626)),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        title,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF0F172A),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          if (subtitle != null && subtitle.isNotEmpty)
+                            Text(
+                              subtitle,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -2506,7 +3143,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: BoxDecoration(
                   color: hasDoc
                       ? const Color(0xFFDCFCE7)
-                      : (isAddLater ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9)),
+                      : (isAddLater ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2)),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -2519,7 +3156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       size: 12,
                       color: hasDoc
                           ? const Color(0xFF15803D)
-                          : (isAddLater ? const Color(0xFFB45309) : const Color(0xFF64748B)),
+                          : (isAddLater ? const Color(0xFFB45309) : const Color(0xFFDC2626)),
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -2529,7 +3166,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         fontWeight: FontWeight.w700,
                         color: hasDoc
                             ? const Color(0xFF15803D)
-                            : (isAddLater ? const Color(0xFFB45309) : const Color(0xFF64748B)),
+                            : (isAddLater ? const Color(0xFFB45309) : const Color(0xFFDC2626)),
                       ),
                     ),
                   ],
@@ -2538,42 +3175,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          // Action button: View Document (if uploaded) or Upload Document (if Add Later)
-          if (hasDoc)
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => DocumentViewerModal.show(context, url: url, title: title),
-                icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
-                label: Text(
-                  "View Document",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1D4ED8),
+          // Action button: View + Replace (if uploaded) or Upload Document (if Missing or Add Later)
+          if (hasDoc) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => DocumentViewerModal.show(context, url: url, title: title),
+                    icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
+                    label: Text(
+                      "View Document",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1D4ED8),
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFBFDBFE)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
                   ),
                 ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFBFDBFE)),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _isUploadingDoc
+                      ? null
+                      : () => _uploadOrReplaceDocument(
+                            title: title,
+                            docKey: docKey,
+                            addLaterKey: addLaterKey,
+                          ),
+                  icon: const Icon(Icons.sync_rounded, size: 15),
+                  label: Text(
+                    "Replace",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF475569),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
-              ),
-            )
-          else if (isAddLater)
+              ],
+            ),
+          ] else ...[
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _isUploadingDoc
                     ? null
-                    : () => _uploadAddLaterDoc(
+                    : () => _uploadOrReplaceDocument(
                           title: title,
                           docKey: docKey,
                           addLaterKey: addLaterKey,
                         ),
                 icon: const Icon(Icons.upload_file_rounded, size: 16),
                 label: Text(
-                  "Upload Document",
+                  isAddLater ? "Upload Document (Add Later)" : "Upload Missing Document",
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12.5,
                     fontWeight: FontWeight.bold,
@@ -2582,20 +3246,156 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0056D2),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdditionalDocumentRow({
+    required String title,
+    required String? url,
+  }) {
+    final bool hasDoc = url != null && url.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: hasDoc ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: hasDoc ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.insert_drive_file_outlined,
+                        size: 18,
+                        color: hasDoc ? const Color(0xFF15803D) : const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            "Additional Document",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check_circle_rounded, size: 12, color: Color(0xFF15803D)),
+                    const SizedBox(width: 4),
+                    Text(
+                      "Uploaded",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF15803D),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: hasDoc ? () => DocumentViewerModal.show(context, url: url, title: title) : null,
+                  icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
+                  label: Text(
+                    "View Document",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1D4ED8),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFBFDBFE)),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _isUploadingDoc ? null : () => _replaceAdditionalDocument(title),
+                icon: const Icon(Icons.sync_rounded, size: 15),
+                label: Text(
+                  "Replace",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
-            )
-          else
-            Text(
-              "Document upload pending administrator review.",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: const Color(0xFF94A3B8),
-                fontStyle: FontStyle.italic,
+              const SizedBox(width: 6),
+              IconButton(
+                onPressed: () => _deleteAdditionalDocument(title),
+                icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Color(0xFFDC2626)),
+                tooltip: "Delete Document",
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               ),
-            ),
+            ],
+          ),
         ],
       ),
     );

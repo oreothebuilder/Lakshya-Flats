@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/bill_model.dart';
 import '../../models/user_role_model.dart';
+import '../../models/payment_details_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../services/cloudinary_service.dart';
@@ -12,6 +14,7 @@ import '../../config/cloudinary_config.dart';
 import '../../widgets/document_viewer_modal.dart';
 import '../../widgets/user_drawer.dart';
 import '../../widgets/payment_receipt_dialog.dart';
+import '../../widgets/change_payment_details_dialog.dart';
 import '../../widgets/app_toast.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
@@ -343,175 +346,329 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                   ),
                   const SizedBox(height: 18),
 
-                  // 1. Official Hostel Bank & UPI Details Card
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB), size: 18),
+                  // 1. Official Hostel Bank & UPI Details Card (Dynamic from Firestore)
+                  StreamBuilder<PaymentDetailsModel>(
+                    stream: FirestoreService().getPaymentDetailsStream(buildingName: bill.building),
+                    builder: (context, paySnap) {
+                      final details = paySnap.data ?? PaymentDetailsModel.defaultDetails(buildingName: bill.building);
+
+                      final effectiveAccountName = (bill.payeeAccountName != null && bill.payeeAccountName!.isNotEmpty)
+                          ? bill.payeeAccountName!
+                          : details.accountHolderName;
+                      final effectiveBankName = (bill.payeeBankName != null && bill.payeeBankName!.isNotEmpty)
+                          ? bill.payeeBankName!
+                          : details.bankName;
+                      final effectiveAccountNo = (bill.payeeAccountNumber != null && bill.payeeAccountNumber!.isNotEmpty)
+                          ? bill.payeeAccountNumber!
+                          : details.accountNumber;
+                      final effectiveIfsc = (bill.payeeIfscCode != null && bill.payeeIfscCode!.isNotEmpty)
+                          ? bill.payeeIfscCode!
+                          : details.ifscCode;
+                      final effectiveUpiId = (bill.payeeUpiId != null && bill.payeeUpiId!.isNotEmpty)
+                          ? bill.payeeUpiId!
+                          : details.upiId;
+                      final effectiveQrUrl = (bill.payeeQrCodeUrl != null && bill.payeeQrCodeUrl!.isNotEmpty)
+                          ? bill.payeeQrCodeUrl
+                          : details.qrCodeUrl;
+                      final effectiveInstructions = (details.instructions != null && details.instructions!.isNotEmpty)
+                          ? details.instructions!
+                          : "Please transfer or hand over the exact fee amount through your preferred method, then select the method below and submit proof to notify administration.";
+
+                      final canEdit = _user?.isAdmin == true || _user?.canManagePayments == true;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                "Official Hostel Bank & UPI Details",
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF0F172A),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _buildPaymentInfoRow("Account Name", "Lakshya Student Residences"),
-                        const SizedBox(height: 6),
-                        _buildPaymentInfoRow("Bank Name", "ICICI Bank"),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              "Account Number",
-                              style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
-                            ),
-                            Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  "002105018921",
-                                  style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF0F172A), fontWeight: FontWeight.w700),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB), size: 18),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Official Hostel Bank & UPI Details",
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                          if (details.scope == 'building' && details.buildingName != null)
+                                            Text(
+                                              "Specific to ${details.buildingName}",
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: const Color(0xFF2563EB),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (canEdit)
+                                      InkWell(
+                                        onTap: () {
+                                          ChangePaymentDetailsDialog.show(
+                                            context,
+                                            initialBuilding: bill.building,
+                                            currentUser: _user,
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFEFF6FF),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: const Color(0xFFDBEAFE)),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.edit_outlined, size: 13, color: Color(0xFF2563EB)),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                "Edit Details",
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: const Color(0xFF2563EB),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
-                                const SizedBox(width: 6),
-                                InkWell(
-                                  onTap: () {
-                                    Clipboard.setData(const ClipboardData(text: "002105018921"));
-                                    AppToast.showSuccess(context, "Account number copied!");
-                                  },
-                                  child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
+                                const SizedBox(height: 12),
+                                _buildPaymentInfoRow("Account Name", effectiveAccountName),
+                                const SizedBox(height: 6),
+                                _buildPaymentInfoRow("Bank Name", effectiveBankName),
+                                const SizedBox(height: 6),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      "Account Number",
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                                    ),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          effectiveAccountNo,
+                                          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF0F172A), fontWeight: FontWeight.w700),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        InkWell(
+                                          onTap: () {
+                                            Clipboard.setData(ClipboardData(text: effectiveAccountNo));
+                                            AppToast.showSuccess(context, "Account number copied!");
+                                          },
+                                          child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              "IFSC Code",
-                              style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
-                            ),
-                            Row(
-                              children: [
-                                Text(
-                                  "ICIC0000021",
-                                  style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF0F172A), fontWeight: FontWeight.w700),
+                                const SizedBox(height: 6),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      "IFSC Code",
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                                    ),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          effectiveIfsc,
+                                          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF0F172A), fontWeight: FontWeight.w700),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        InkWell(
+                                          onTap: () {
+                                            Clipboard.setData(ClipboardData(text: effectiveIfsc));
+                                            AppToast.showSuccess(context, "IFSC code copied!");
+                                          },
+                                          child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 6),
-                                InkWell(
-                                  onTap: () {
-                                    Clipboard.setData(const ClipboardData(text: "ICIC0000021"));
-                                    AppToast.showSuccess(context, "IFSC code copied!");
-                                  },
-                                  child: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
+                                const SizedBox(height: 10),
+                                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                                const SizedBox(height: 10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Hostel UPI ID",
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
+                                          ),
+                                          Text(
+                                            effectiveUpiId,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        TextButton.icon(
+                                          onPressed: () {
+                                            Clipboard.setData(ClipboardData(text: effectiveUpiId));
+                                            AppToast.showSuccess(context, "UPI ID copied to clipboard!");
+                                          },
+                                          icon: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
+                                          label: Text(
+                                            "Copy UPI",
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF2563EB),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "Hostel UPI ID",
-                                    style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
-                                  ),
-                                  Text(
-                                    "lakshyastays@icici",
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF0F172A),
+                                if (effectiveQrUrl != null && effectiveQrUrl.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  InkWell(
+                                    onTap: () {
+                                      DocumentViewerModal.show(
+                                        context,
+                                        url: effectiveQrUrl,
+                                        title: "Hostel UPI QR Code",
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Image.network(
+                                              effectiveQrUrl,
+                                              width: 48,
+                                              height: 48,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (ctx, e, st) => Container(
+                                                width: 48,
+                                                height: 48,
+                                                color: const Color(0xFFF1F5F9),
+                                                child: const Icon(Icons.qr_code_rounded, color: Color(0xFF94A3B8)),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  "Official QR Code Attached",
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: const Color(0xFF0F172A),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  "Tap to enlarge and scan with any UPI app",
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    fontSize: 11,
+                                                    color: const Color(0xFF2563EB),
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const Icon(Icons.fullscreen_rounded, size: 20, color: Color(0xFF2563EB)),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ],
-                              ),
-                            ),
-                            TextButton.icon(
-                              onPressed: () {
-                                Clipboard.setData(const ClipboardData(text: "lakshyastays@icici"));
-                                AppToast.showSuccess(context, "UPI ID copied to clipboard!");
-                              },
-                              icon: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF2563EB)),
-                              label: Text(
-                                "Copy UPI",
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF2563EB),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // 2. Instructions Notice
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFDBEAFE)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.info_outline_rounded, color: Color(0xFF2563EB), size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            "Please transfer or hand over the exact fee amount through your preferred method, then select the method below and submit proof to notify administration.",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11.5,
-                              color: const Color(0xFF1E40AF),
-                              height: 1.35,
+                              ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(height: 14),
+
+                          // 2. Instructions Notice (Dynamic from Admin settings)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFDBEAFE)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.info_outline_rounded, color: Color(0xFF2563EB), size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    effectiveInstructions,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11.5,
+                                      color: const Color(0xFF1E40AF),
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                        ],
+                      );
+                    },
                   ),
-                  const SizedBox(height: 18),
 
                   // 3. Payment Method: Three Radio Buttons
                   Text(
@@ -1150,10 +1307,14 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
   }
 
   void _handleBackToHome() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: _user ?? widget.currentUser)),
-      (route) => false,
-    );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => UserHomeScreen(currentUser: _user ?? widget.currentUser)),
+        (route) => false,
+      );
+    }
   }
 
   @override
@@ -1169,7 +1330,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
     final effectiveRegNo = _user?.registrationNumber ?? widget.currentUser?.registrationNumber;
 
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _handleBackToHome();
@@ -1235,6 +1396,18 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
             ],
           ),
           actions: [
+            if (_user?.isAdmin == true || _user?.canManagePayments == true)
+              IconButton(
+                icon: const Icon(Icons.account_balance_rounded, color: Color(0xFF1A65D6)),
+                tooltip: "Change Payment Details",
+                onPressed: () {
+                  ChangePaymentDetailsDialog.show(
+                    context,
+                    initialBuilding: _user?.building ?? widget.currentUser?.building,
+                    currentUser: _user ?? widget.currentUser,
+                  );
+                },
+              ),
             StreamBuilder<List<Map<String, dynamic>>>(
               stream: FirestoreService().getStudentNotificationsStream(
                 effectiveStudentId,
@@ -1553,7 +1726,165 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+
+                  // Official Payment Account Details Banner
+                  StreamBuilder<PaymentDetailsModel>(
+                    stream: FirestoreService().getPaymentDetailsStream(
+                      buildingName: _user?.building ?? widget.currentUser?.building,
+                    ),
+                    builder: (context, paySnap) {
+                      final payDetails = paySnap.data ??
+                          PaymentDetailsModel.defaultDetails(
+                            buildingName: _user?.building ?? widget.currentUser?.building,
+                          );
+                      final canEdit = _user?.isAdmin == true || _user?.canManagePayments == true;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB), size: 18),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        "Official Payment Account",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                      if (payDetails.scope == 'building' && payDetails.buildingName != null) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFEFF6FF),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            payDetails.buildingName!,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF2563EB),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "${payDetails.bankName} • A/C: ${payDetails.accountNumber} • UPI: ${payDetails.upiId}",
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11,
+                                      color: const Color(0xFF64748B),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (canEdit) ...[
+                              InkWell(
+                                onTap: () {
+                                  ChangePaymentDetailsDialog.show(
+                                    context,
+                                    initialBuilding: _user?.building ?? widget.currentUser?.building,
+                                    currentUser: _user ?? widget.currentUser,
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEFF6FF),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFDBEAFE)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.edit_outlined, size: 13, color: Color(0xFF2563EB)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        "Change",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF2563EB),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ] else ...[
+                              InkWell(
+                                onTap: () {
+                                  Clipboard.setData(ClipboardData(text: payDetails.upiId));
+                                  AppToast.showSuccess(context, "UPI ID copied: ${payDetails.upiId}");
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.copy_rounded, size: 12, color: Color(0xFF475569)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        "Copy UPI",
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF475569),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
 
                   // Segmented Tab Bar Switcher
                   Container(

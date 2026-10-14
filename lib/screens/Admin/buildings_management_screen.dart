@@ -13,6 +13,7 @@ import '../../widgets/app_toast.dart';
 import '../../widgets/building_photo_selector.dart';
 import '../../services/mess_menu_service.dart';
 import '../../services/academic_year_service.dart';
+import '../../widgets/change_payment_details_dialog.dart';
 
 class BuildingsManagementScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -1346,6 +1347,16 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                                 ],
                               ),
                             ),
+                            PopupMenuItem(
+                              value: 'payment_details',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.account_balance_rounded, size: 18, color: Color(0xFF16A34A)),
+                                  const SizedBox(width: 10),
+                                  Text("Payment Details", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
                             const PopupMenuDivider(),
                             PopupMenuItem(
                               value: 'delete',
@@ -1371,6 +1382,12 @@ class _BuildingsManagementScreenState extends State<BuildingsManagementScreen> {
                               );
                             } else if (val == 'edit') {
                               _openBuildingEditorModal(existing: building);
+                            } else if (val == 'payment_details') {
+                              ChangePaymentDetailsDialog.show(
+                                context,
+                                initialBuilding: building.name,
+                                currentUser: widget.currentUser,
+                              );
                             } else if (val == 'delete') {
                               _confirmDeleteBuilding(building);
                             }

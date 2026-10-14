@@ -16,6 +16,7 @@ import 'profile_screen.dart';
 import 'notifications_screen.dart';
 import '../../widgets/onboarding_tour_overlay.dart';
 import '../../widgets/app_toast.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserHomeScreen extends StatefulWidget {
   final AppUser? currentUser;
@@ -47,11 +48,96 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   int _currentTourIndex = 0;
   List<TourStep> _tourSteps = [];
   static final Set<String> _dismissedPasswordNoticeUids = {};
+  static final Set<String> _completedTourIdentifiers = {};
+
+  List<String> _collectUserIdentifiers(AppUser? user) {
+    if (user == null) return [];
+    final list = <String>[
+      user.uid,
+      if (user.studentId != null) user.studentId!,
+      user.email,
+      if (user.registrationNumber != null) user.registrationNumber!,
+      if (FirebaseAuthService().currentUser?.uid != null) FirebaseAuthService().currentUser!.uid,
+      if (FirebaseAuthService().currentUser?.email != null) FirebaseAuthService().currentUser!.email!,
+    ];
+    return list
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  bool _isTourCompletedForUser(AppUser? user) {
+    if (user == null) return true;
+    if (user.hasCompletedOnboardingTour) return true;
+    final ids = _collectUserIdentifiers(user);
+    for (final id in ids) {
+      if (_completedTourIdentifiers.contains(id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _recordTourCompletedInMemory(AppUser? user) {
+    if (user == null) return;
+    final ids = _collectUserIdentifiers(user);
+    _completedTourIdentifiers.addAll(ids);
+  }
+
+  Future<bool> _isTourCompletedInPrefs(AppUser? user) async {
+    if (user == null) return true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ids = _collectUserIdentifiers(user);
+      for (final id in ids) {
+        if (prefs.getBool('onboarding_tour_completed_$id') == true) {
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking tour in prefs: $e");
+    }
+    return false;
+  }
+
+  Future<void> _saveTourCompletedToPrefs(AppUser? user) async {
+    if (user == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ids = _collectUserIdentifiers(user);
+      for (final id in ids) {
+        await prefs.setBool('onboarding_tour_completed_$id', true);
+      }
+    } catch (e) {
+      debugPrint("Error saving tour to prefs: $e");
+    }
+  }
+
+  Future<void> _persistTourCompletedEverywhere(AppUser? user) async {
+    if (user == null) return;
+    _recordTourCompletedInMemory(user);
+    await _saveTourCompletedToPrefs(user);
+
+    final uid = user.uid.isNotEmpty ? user.uid : (FirebaseAuthService().currentUser?.uid ?? '');
+    if (uid.isNotEmpty) {
+      await FirestoreService().markTourCompleted(
+        uid,
+        studentId: user.studentId,
+        email: user.email,
+        regNo: user.registrationNumber,
+      );
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _activeUser = widget.currentUser;
+    if (_activeUser != null && _activeUser!.hasCompletedOnboardingTour) {
+      _recordTourCompletedInMemory(_activeUser);
+      _saveTourCompletedToPrefs(_activeUser);
+    }
     _refreshActiveUser();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToActiveMeal();
@@ -64,8 +150,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     if (uid != null && uid.isNotEmpty) {
       final updated = await FirestoreService().getAppUser(uid, emailHint: widget.currentUser?.email);
       if (updated != null && mounted) {
+        final tourDone = updated.hasCompletedOnboardingTour || _isTourCompletedForUser(updated);
+        final resolvedUser = updated.copyWith(hasCompletedOnboardingTour: tourDone);
+        if (tourDone) {
+          _recordTourCompletedInMemory(resolvedUser);
+        }
         setState(() {
-          _activeUser = updated;
+          _activeUser = resolvedUser;
         });
       }
     }
@@ -167,31 +258,60 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     }
   }
 
-  void _checkFirstTimeUser() {
-    if (_activeUser != null && _activeUser!.isStudent && !_activeUser!.hasCompletedOnboardingTour) {
-      OnboardingWelcomeModal.show(
-        context,
-        userName: _activeUser!.fullName,
-        onContinue: () {
-          _startTour();
-        },
-        onDismiss: () {
-          _dismissTour();
-        },
-      );
-    } else if (_activeUser != null &&
-        _activeUser!.isStudent &&
-        !_activeUser!.hasChangedDefaultPassword &&
-        !_hasUserDismissedPasswordNotice()) {
+  Future<void> _checkFirstTimeUser() async {
+    if (!mounted) return;
+    final user = _activeUser ?? widget.currentUser;
+    if (user == null || !user.isStudent) return;
+
+    // 1. In-memory fast check (prevents repeating within the same app session / after clicking back)
+    if (_isTourCompletedForUser(user)) {
+      _recordTourCompletedInMemory(user);
       _checkSecurityPasswordPrompt();
+      return;
+    }
+
+    // 2. Persistent SharedPreferences check (persists across reloads & sessions on device)
+    final completedInPrefs = await _isTourCompletedInPrefs(user);
+    if (!mounted) return;
+    if (completedInPrefs) {
+      _recordTourCompletedInMemory(user);
+      setState(() {
+        _activeUser = _activeUser?.copyWith(hasCompletedOnboardingTour: true);
+      });
+      _checkSecurityPasswordPrompt();
+      return;
+    }
+
+    // 3. Mark in-memory immediately so no back button or screen switch triggers it again
+    _recordTourCompletedInMemory(user);
+
+    // 4. Present welcome modal
+    final result = await OnboardingWelcomeModal.show(
+      context,
+      userName: user.fullName,
+      onContinue: () {
+        _startTour();
+      },
+      onDismiss: () {
+        _dismissTour();
+      },
+    );
+
+    // 5. If modal was dismissed via back button or outside gesture (result == null):
+    if (result == null && mounted && !_isTourActive) {
+      _dismissTour();
     }
   }
 
   void _startTour() {
+    final user = _activeUser ?? widget.currentUser;
+    _persistTourCompletedEverywhere(user);
+
     _tourSteps = _buildTourSteps();
     setState(() {
       _isTourActive = true;
       _currentTourIndex = 0;
+      _activeUser = _activeUser?.copyWith(hasCompletedOnboardingTour: true);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _goToTourStep(0);
@@ -221,17 +341,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   }
 
   Future<void> _dismissTour() async {
+    final user = _activeUser ?? widget.currentUser;
     setState(() {
       _isTourActive = false;
+      _activeUser = _activeUser?.copyWith(hasCompletedOnboardingTour: true);
     });
-    final uid = _activeUser?.uid ?? FirebaseAuthService().currentUser?.uid;
-    if (uid != null && uid.isNotEmpty) {
-      await FirestoreService().markTourCompleted(uid);
-    }
+    await _persistTourCompletedEverywhere(user);
     if (mounted) {
-      setState(() {
-        _activeUser = _activeUser?.copyWith(hasCompletedOnboardingTour: true);
-      });
       if (!_activeUser!.hasChangedDefaultPassword && !_hasUserDismissedPasswordNotice()) {
         _checkSecurityPasswordPrompt();
       }
@@ -239,17 +355,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   }
 
   Future<void> _finishTour() async {
+    final user = _activeUser ?? widget.currentUser;
     setState(() {
       _isTourActive = false;
+      _activeUser = _activeUser?.copyWith(hasCompletedOnboardingTour: true);
     });
-    final uid = _activeUser?.uid ?? FirebaseAuthService().currentUser?.uid;
-    if (uid != null && uid.isNotEmpty) {
-      await FirestoreService().markTourCompleted(uid);
-    }
+    await _persistTourCompletedEverywhere(user);
     if (mounted) {
-      setState(() {
-        _activeUser = _activeUser?.copyWith(hasCompletedOnboardingTour: true);
-      });
       AppToast.showSuccess(
         context,
         "You're all set! Enjoy your stay at Lakshya Residency.",
@@ -632,8 +744,16 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
+    return PopScope(
+      canPop: !_isTourActive,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_isTourActive) {
+          _dismissTour();
+        }
+      },
+      child: Stack(
+        children: [
         Scaffold(
           backgroundColor: const Color(0xFFF8FAFC),
       drawer: UserDrawer(activeItem: "Home", currentUser: _activeUser ?? widget.currentUser),
@@ -1115,7 +1235,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => NotificationsScreen(currentUser: widget.currentUser),
+                                    builder: (context) => NotificationsScreen(currentUser: _activeUser ?? widget.currentUser),
                                   ),
                                 );
                               },
@@ -1318,7 +1438,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => MessMenuScreen(currentUser: widget.currentUser),
+                                    builder: (context) => MessMenuScreen(currentUser: _activeUser ?? widget.currentUser),
                                   ),
                                 );
                               },
@@ -1531,7 +1651,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => PaymentsBillsScreen(currentUser: widget.currentUser),
+                                    builder: (context) => PaymentsBillsScreen(currentUser: _activeUser ?? widget.currentUser),
                                   ),
                                 );
                               },
@@ -1609,7 +1729,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => PaymentsBillsScreen(currentUser: widget.currentUser),
+                                        builder: (context) => PaymentsBillsScreen(currentUser: _activeUser ?? widget.currentUser),
                                       ),
                                     );
                                   },
@@ -1622,7 +1742,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => PaymentsBillsScreen(currentUser: widget.currentUser),
+                                      builder: (context) => PaymentsBillsScreen(currentUser: _activeUser ?? widget.currentUser),
                                     ),
                                   );
                                 },
@@ -1696,7 +1816,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => TicketsScreen(currentUser: widget.currentUser),
+                              builder: (context) => TicketsScreen(currentUser: _activeUser ?? widget.currentUser),
                             ),
                           );
                         },
@@ -1733,7 +1853,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => TicketsScreen(currentUser: widget.currentUser),
+                                builder: (context) => TicketsScreen(currentUser: _activeUser ?? widget.currentUser),
                               ),
                             );
                           },
@@ -1840,8 +1960,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           onDismiss: _dismissTour,
         ),
       ),
-  ],
-);
+      ],
+    ),
+  );
 }
 
   Widget _buildMealTile({

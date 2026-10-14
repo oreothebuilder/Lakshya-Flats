@@ -13,6 +13,7 @@ import '../models/admin_todo_model.dart';
 import '../models/expense_bucket_model.dart';
 import '../models/expense_model.dart';
 import '../models/personal_todo_model.dart';
+import '../models/payment_details_model.dart';
 import 'email_service.dart';
 import 'push_notification_service.dart';
 import 'academic_year_service.dart';
@@ -38,6 +39,7 @@ class FirestoreService {
   CollectionReference get _expensesRef => _db.collection('expenses');
   CollectionReference get _regLookupRef => _db.collection('registration_lookup');
   CollectionReference get _accountDeletionRequestsRef => _db.collection('account_deletion_requests');
+  CollectionReference get _paymentSettingsRef => _db.collection('payment_settings');
 
   // =========================================================================
   // 1. STUDENT PROFILES & DIRECTORY
@@ -52,22 +54,64 @@ class FirestoreService {
   }
 
   /// Mark onboarding tour as completed for a user so it never appears again
-  Future<void> markTourCompleted(String uid, {String? studentId}) async {
+  Future<void> markTourCompleted(
+    String uid, {
+    String? studentId,
+    String? email,
+    String? regNo,
+  }) async {
     try {
-      await _usersRef.doc(uid).set({
+      final cleanUid = uid.trim();
+      final cleanSid = studentId?.trim() ?? '';
+      final cleanEmail = email?.trim().toLowerCase() ?? '';
+      final cleanReg = regNo?.trim().toUpperCase() ?? '';
+
+      final updateData = {
         'hasCompletedOnboardingTour': true,
         'tourCompletedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      };
 
-      if (studentId != null && studentId.isNotEmpty && studentId != uid) {
-        await _usersRef.doc(studentId).set({
-          'hasCompletedOnboardingTour': true,
-          'tourCompletedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-        await _studentsRef.doc(studentId).set({
-          'hasCompletedOnboardingTour': true,
-          'tourCompletedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+      if (cleanUid.isNotEmpty) {
+        await _usersRef.doc(cleanUid).set(updateData, SetOptions(merge: true));
+      }
+
+      if (cleanSid.isNotEmpty && cleanSid != cleanUid) {
+        await _usersRef.doc(cleanSid).set(updateData, SetOptions(merge: true));
+        await _studentsRef.doc(cleanSid).set(updateData, SetOptions(merge: true));
+      }
+
+      // Sync across any matching authUid and studentId docs in users
+      if (cleanUid.isNotEmpty) {
+        try {
+          final snap = await _usersRef.where('authUid', isEqualTo: cleanUid).get();
+          for (final doc in snap.docs) {
+            await doc.reference.set(updateData, SetOptions(merge: true));
+          }
+        } catch (_) {}
+      }
+
+      if (cleanSid.isNotEmpty) {
+        try {
+          final snap = await _usersRef.where('studentId', isEqualTo: cleanSid).get();
+          for (final doc in snap.docs) {
+            await doc.reference.set(updateData, SetOptions(merge: true));
+          }
+          final sSnap = await _studentsRef.where('studentId', isEqualTo: cleanSid).get();
+          for (final doc in sSnap.docs) {
+            await doc.reference.set(updateData, SetOptions(merge: true));
+          }
+        } catch (_) {}
+      }
+
+      // Also persist to registration_lookup for instant resolution
+      if (cleanReg.isNotEmpty) {
+        await _regLookupRef.doc(cleanReg).set(updateData, SetOptions(merge: true)).catchError((_) {});
+      }
+      if (cleanSid.isNotEmpty) {
+        await _regLookupRef.doc(cleanSid).set(updateData, SetOptions(merge: true)).catchError((_) {});
+      }
+      if (cleanEmail.isNotEmpty) {
+        await _regLookupRef.doc(cleanEmail).set(updateData, SetOptions(merge: true)).catchError((_) {});
       }
     } catch (e) {
       debugPrint("markTourCompleted error: $e");
@@ -864,6 +908,117 @@ class FirestoreService {
   // =========================================================================
   // 2. BILLS & PAYMENT COLLECTION
   // =========================================================================
+
+  /// Normalizes a building name to a stable alphanumeric key
+  static String normalizeBuildingKey(String buildingName) {
+    return buildingName
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+  }
+
+  /// Stream payment receiving details for a student paying a bill.
+  /// Checks for building-specific override first, then global default, and finally fallback.
+  Stream<PaymentDetailsModel> getPaymentDetailsStream({String? buildingName}) {
+    return _paymentSettingsRef.snapshots().map((snapshot) {
+      if (snapshot.docs.isEmpty) {
+        return PaymentDetailsModel.defaultDetails(buildingName: buildingName);
+      }
+
+      // 1. If buildingName is provided and not "All Buildings", search for building override
+      if (buildingName != null &&
+          buildingName.trim().isNotEmpty &&
+          buildingName.trim().toLowerCase() != 'all' &&
+          buildingName.trim().toLowerCase() != 'all buildings') {
+        final bNorm = buildingName.trim().toLowerCase();
+        for (final doc in snapshot.docs) {
+          final data = doc.data() as Map<String, dynamic>? ?? {};
+          final docBuilding = (data['buildingName'] ?? '').toString().trim().toLowerCase();
+          final docScope = (data['scope'] ?? '').toString().toLowerCase();
+          if (docScope == 'building' && docBuilding.isNotEmpty) {
+            if (docBuilding == bNorm || bNorm.contains(docBuilding) || docBuilding.contains(bNorm)) {
+              return PaymentDetailsModel.fromFirestore(doc);
+            }
+          }
+        }
+      }
+
+      // 2. Check for global default document
+      for (final doc in snapshot.docs) {
+        if (doc.id == 'default' || (doc.data() as Map<String, dynamic>?)?['scope'] == 'global') {
+          return PaymentDetailsModel.fromFirestore(doc);
+        }
+      }
+
+      return PaymentDetailsModel.defaultDetails(buildingName: buildingName);
+    });
+  }
+
+  /// Fetch payment details once for a student or admin preview
+  Future<PaymentDetailsModel> getPaymentDetails({String? buildingName}) async {
+    try {
+      final snap = await _paymentSettingsRef.get();
+      if (snap.docs.isEmpty) {
+        return PaymentDetailsModel.defaultDetails(buildingName: buildingName);
+      }
+
+      if (buildingName != null &&
+          buildingName.trim().isNotEmpty &&
+          buildingName.trim().toLowerCase() != 'all' &&
+          buildingName.trim().toLowerCase() != 'all buildings') {
+        final bNorm = buildingName.trim().toLowerCase();
+        for (final doc in snap.docs) {
+          final data = doc.data() as Map<String, dynamic>? ?? {};
+          final docBuilding = (data['buildingName'] ?? '').toString().trim().toLowerCase();
+          final docScope = (data['scope'] ?? '').toString().toLowerCase();
+          if (docScope == 'building' && docBuilding.isNotEmpty) {
+            if (docBuilding == bNorm || bNorm.contains(docBuilding) || docBuilding.contains(bNorm)) {
+              return PaymentDetailsModel.fromFirestore(doc);
+            }
+          }
+        }
+      }
+
+      for (final doc in snap.docs) {
+        if (doc.id == 'default' || (doc.data() as Map<String, dynamic>?)?['scope'] == 'global') {
+          return PaymentDetailsModel.fromFirestore(doc);
+        }
+      }
+    } catch (e) {
+      debugPrint("getPaymentDetails error: $e");
+    }
+    return PaymentDetailsModel.defaultDetails(buildingName: buildingName);
+  }
+
+  /// Save or update payment details for all students or a specific building
+  Future<void> savePaymentDetails(PaymentDetailsModel details) async {
+    final isBuilding = details.scope == 'building' &&
+        details.buildingName != null &&
+        details.buildingName!.trim().isNotEmpty &&
+        details.buildingName!.trim().toLowerCase() != 'all buildings';
+
+    final docId = isBuilding
+        ? 'building_${normalizeBuildingKey(details.buildingName!)}'
+        : 'default';
+
+    await _paymentSettingsRef.doc(docId).set({
+      ...details.toMap(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  /// Reset payment details for a specific building or global to defaults
+  Future<void> resetPaymentDetails({String? buildingName}) async {
+    final isBuilding = buildingName != null &&
+        buildingName.trim().isNotEmpty &&
+        buildingName.trim().toLowerCase() != 'all buildings';
+    final docId = isBuilding
+        ? 'building_${normalizeBuildingKey(buildingName)}'
+        : 'default';
+
+    await _paymentSettingsRef.doc(docId).delete();
+  }
 
   Future<DocumentReference> issueBill(Map<String, dynamic> billData) async {
     return await _billsRef.add({
@@ -2913,10 +3068,45 @@ class FirestoreService {
 
   /// Update document URLs (college ID, govt ID, rent agreement, etc.)
   Future<void> updateStudentDocuments(String studentId, Map<String, dynamic> docData) async {
-    await _usersRef.doc(studentId).set({
+    final cleanId = studentId.trim();
+    if (cleanId.isEmpty) return;
+
+    final updateData = {
       ...docData,
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+
+    await _usersRef.doc(cleanId).set(updateData, SetOptions(merge: true));
+
+    // Also sync linked authUid or studentId doc if present
+    try {
+      final snap = await _usersRef.doc(cleanId).get();
+      if (snap.exists && snap.data() is Map) {
+        final data = snap.data() as Map<String, dynamic>;
+        final authUid = data['authUid']?.toString().trim();
+        final linkedStudentId = data['studentId']?.toString().trim();
+
+        if (authUid != null && authUid.isNotEmpty && authUid != cleanId) {
+          await _usersRef.doc(authUid).set(updateData, SetOptions(merge: true));
+        }
+        if (linkedStudentId != null && linkedStudentId.isNotEmpty && linkedStudentId != cleanId) {
+          await _usersRef.doc(linkedStudentId).set(updateData, SetOptions(merge: true));
+        }
+
+        try {
+          final sDoc = await _studentsRef.doc(cleanId).get();
+          if (sDoc.exists) {
+            await _studentsRef.doc(cleanId).set(updateData, SetOptions(merge: true));
+          }
+          if (linkedStudentId != null && linkedStudentId.isNotEmpty) {
+            final sDoc2 = await _studentsRef.doc(linkedStudentId).get();
+            if (sDoc2.exists) {
+              await _studentsRef.doc(linkedStudentId).set(updateData, SetOptions(merge: true));
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   /// Upload document that was marked 'Add Later', automatically clearing the AddLater flag
@@ -2926,11 +3116,10 @@ class FirestoreService {
     required String url,
     required String addLaterKey,
   }) async {
-    await _usersRef.doc(studentId).set({
+    await updateStudentDocuments(studentId, {
       docKey: url,
       addLaterKey: false,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
   }
 
   /// Update custom student profile fields (bed number, phone, email, etc.)
