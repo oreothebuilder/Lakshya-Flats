@@ -37,7 +37,7 @@ class BillModel {
   final String? bed;
   final String? regNo;
   final String? studentDocId;
-  final double defaulterAmount;
+  final double _storedDefaulterAmount;
   final String? payeeAccountName;
   final String? payeeBankName;
   final String? payeeAccountNumber;
@@ -54,7 +54,7 @@ class BillModel {
     required this.billType,
     required this.amount,
     this.paidAmount = 0.0,
-    this.defaulterAmount = 0.0,
+    double defaulterAmount = 0.0,
     required this.status,
     required this.dueDate,
     required this.invoiceNo,
@@ -89,11 +89,38 @@ class BillModel {
     this.payeeIfscCode,
     this.payeeUpiId,
     this.payeeQrCodeUrl,
-  }) : createdAt = createdAt ?? DateTime.now();
+  })  : _storedDefaulterAmount = defaulterAmount,
+        createdAt = createdAt ?? DateTime.now();
+
+  bool get _isStatusPaid => status.toLowerCase() == 'paid';
+
+  /// Calculates late payment / defaulter fee in accordance with hostel policy & Clause 5.10:
+  /// - 3-day grace period following due date: Rs. 0
+  /// - From Day 4 onwards: Rs. 100 per day
+  /// - Capped at Rs. 3,000 per 30-day month (e.g. Days 1-30 after grace: Rs. 100/day up to Rs. 3,000;
+  ///   Days 31-60 after grace: up to Rs. 6,000; Days 61-90: up to Rs. 9,000, and so on).
+  static double calculateDefaulterFee(int daysOverdue) {
+    if (daysOverdue <= 3) return 0.0;
+    final chargeableDays = daysOverdue - 3;
+    final fullMonths = chargeableDays ~/ 30;
+    final remDays = chargeableDays % 30;
+    return (fullMonths * 3000.0) + (remDays * 100.0);
+  }
+
+  /// Dynamic or recorded defaulter fee for this bill.
+  /// Unpaid/pending bills dynamically calculate fee past the 3-day grace period.
+  /// Once paid or returned, the settled/stored fee is preserved.
+  double get defaulterAmount {
+    if (_isStatusPaid || isDepositReturned) {
+      return _storedDefaulterAmount;
+    }
+    final dynamicFee = calculateDefaulterFee(daysOverdue);
+    return dynamicFee > _storedDefaulterAmount ? dynamicFee : _storedDefaulterAmount;
+  }
 
   double get totalPayable => amount + defaulterAmount;
   double get balance => (totalPayable - paidAmount).clamp(0.0, totalPayable);
-  bool get isPaid => (paidAmount >= totalPayable && totalPayable > 0) || status.toLowerCase() == 'paid';
+  bool get isPaid => _isStatusPaid || (paidAmount >= totalPayable && totalPayable > 0);
   
   String? get utrNumber => transactionRef;
 
@@ -110,7 +137,7 @@ class BillModel {
   }
 
   bool get isDepositHeld {
-    return isSecurityDeposit && (isPaid || status.toLowerCase() == 'paid') && !isDepositReturned;
+    return isSecurityDeposit && (_isStatusPaid || isPaid) && !isDepositReturned;
   }
   
   bool get isProofRejected {
@@ -124,7 +151,7 @@ class BillModel {
   }
   
   bool get isPendingVerification {
-    if (isPaid || status.toLowerCase() == 'paid' || isDepositReturned) return false;
+    if (_isStatusPaid || isDepositReturned) return false;
     final s = status.toLowerCase();
     final ps = (paymentStatus ?? '').toLowerCase();
     if (s == 'proof rejected' || ps == 'proof rejected') return false;
@@ -154,7 +181,7 @@ class BillModel {
   }
 
   int get daysOverdue {
-    if (isPaid || isPendingVerification || isDepositReturned) return 0;
+    if (_isStatusPaid || isPendingVerification || isDepositReturned) return 0;
     final now = DateTime.now();
     final endOfDueDate = DateTime(dueDate.year, dueDate.month, dueDate.day, 23, 59, 59);
     if (now.isAfter(endOfDueDate)) {

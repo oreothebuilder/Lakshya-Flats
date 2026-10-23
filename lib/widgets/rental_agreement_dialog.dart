@@ -225,7 +225,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
           onPressed: _isGeneratingPdf ? null : () => Navigator.pop(context),
         ),
         title: Text(
-          "Rental & License Agreement (20 Pages)",
+          "Rental & License Agreement (23 Pages)",
           style: GoogleFonts.plusJakartaSans(
             fontSize: 13.5,
             fontWeight: FontWeight.bold,
@@ -319,7 +319,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               ),
                               const SizedBox(height: 28),
 
-                              // Table of Contents matching Page 2 of PDF
+                                                            // Table of Contents matching Pages 2 & 3 of PDF
                               _buildTableOfContents(),
                               const SizedBox(height: 32),
 
@@ -337,7 +337,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               _buildParagraph(
                                 "1.1 The Owner is the lawful owner and/or authorised managing operator of the residential unit(s) known as Lakshya Residency, and is competent to let out/license the said premises for residential and allied purposes.\n\n"
                                 "1.2 The Tenant has approached the Owner seeking accommodation on a rental / leave-and-license basis at the Residency, either on a standalone rent basis or coupled with certain optional package-based facilities (meals, transport, laundry, cleaning, Wi-Fi, etc.), and the Owner has agreed to provide the same on the terms and conditions recorded in this Agreement.\n\n"
-                                "1.3 This Agreement, together with its Schedules (A, B, C, D and E) and Annexure I, and any further Annexures executed in writing by both Parties, constitutes the entire understanding between the Parties in relation to the subject matter herein.\n\n"
+                                "1.3 This Agreement, together with its Schedules (A,D and Annexure I, and any further Annexures executed in writing by both Parties, constitutes the entire understanding between the Parties in relation to the subject matter herein.\n\n"
                                 "1.4 This Agreement, along with any rent receipts, notices, and renewal confirmations, will also be maintained on the Lakshya Residency mobile application (\"the App\") for administrative and compliance purposes.\n\n"
                                 "1.5 This Agreement, including Schedule A, is auto-generated using the information the Tenant submits at the time of onboarding on the App — including personal, academic, identity, room-allocation, guardian, and payment-plan details — and such App records shall be read together with, and form an integral part of, this Agreement. Upon completion of onboarding, the Tenant shall review and digitally sign this auto-generated Agreement on the App, which shall also bear the Owner's digital countersignature.",
                               ),
@@ -354,15 +354,15 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               // Section 3: Definitions and Interpretation
                               _buildClauseTitle("3. Definitions and Interpretation", keyId: "section_3"),
                               _buildParagraph(
-                                "3.1 \"Premises\" means the specific flat/room (Building ${d.building}, Room/Flat ${d.roomNumber}${d.bedNumber.isNotEmpty ? ', Bed ${d.bedNumber}' : ''}), along with fittings, fixtures, furniture and appliances provided therein, allotted to the Tenant at Lakshya Residency, as recorded in the app.\n"
-                                "3.2 \"Common Areas\" means all shared spaces within the Residency including but not limited to corridors, staircases, terrace, dining hall, common kitchen, lounge, and parking area, which are not for the exclusive use of any single Tenant.\n"
-                                "3.3 \"Package Facilities\" means the optional services listed in Schedule C which the Tenant may avail in addition to the base rent, including meals, pick-up and drop transport, laundry, cleaning, and Wi-Fi/internet access.\n"
-                                "3.4 \"App\" means the official Lakshya Residency mobile application through which onboarding, rent/fee payments, service requests, complaints, digital copies of this Agreement, notices, and communication between Owner and Tenant are facilitated.\n"
-                                "3.5 \"Booking Amount\" means the amount paid by the Tenant to reserve a room/bed prior to move-in, as recorded in Schedule B, which is non-refundable in the manner described in Clause 5.\n"
-                                "3.6 \"Security Deposit\" means the interest-free amount collected by the Owner from the Tenant as security against damage, unpaid dues, or breach of this Agreement (Rs. ${d.securityDeposit}, as recorded in Schedule B), refundable subject to Clause 16.\n"
-                                "3.7 \"Academic Session\" or \"Lock-in Period\" means the period for which the Tenant has subscribed, as determined by the Plan (${d.plan}) and the Rental Term selected by the Tenant at onboarding on the App (${d.lockInPeriod}), which is the minimum period for which the Tenant commits to reside at the Premises.\n"
-                                "3.8 \"Minor\" means any individual who has not completed eighteen (18) years of age as on the date of the relevant event.\n"
-                                "3.9 \"Authorised Occupant\" means only the Tenant named (${d.studentFullName}) who is onboarded on the Lakshya Residency app and any additional occupant(s) whose details have been disclosed to and expressly approved in writing (including via the App) by the Owner prior to occupation.\n"
+                                "3.1 \"Premises\" means the specific flat/room (Building ${d.building}, Room/Flat ${d.roomNumber}${d.bedNumber.isNotEmpty ? ', Bed ${d.bedNumber}' : ''}), along with fittings, fixtures, furniture and appliances provided therein, allotted to the Tenant at Lakshya Residency, as recorded in the app.\n\n"
+                                "3.2 \"Common Areas\" means all shared spaces within the Residency including but not limited to corridors, staircases, terrace, dining hall, common kitchen, lounge, and parking area, which are not for the exclusive use of any single Tenant.\n\n"
+                                "3.3 \"Package Facilities\" means the optional services which the Tenant may avail in addition to the base rent, including meals, pick-up and drop transport, laundry, cleaning, and Wi-Fi/internet access.\n\n"
+                                "3.4 \"App\" means the official Lakshya Residency mobile application through which onboarding, rent/fee payments, service requests, complaints, digital copies of this Agreement, notices, and communication between Owner and Tenant are facilitated.\n\n"
+                                "3.5 \"Booking Amount\" means the amount paid by the Tenant to reserve a room/bed prior to move-in, as recorded in Schedule B, which is non-refundable in the manner described in Clause 5.\n\n"
+                                "3.6 \"Security Deposit\" means the interest-free amount collected by the Owner from the Tenant as security against damage, unpaid dues, or breach of this Agreement, refundable subject to Clause 16.\n\n"
+                                "3.7 \"Academic Session\" or \"Lock-in Period\" means the period for which the Tenant has subscribed, as determined by the Plan (${d.plan}) and the Rental Term selected by the Tenant at onboarding on the App (${d.lockInPeriod}), which is the minimum period for which the Tenant commits to reside at the Premises.\n\n"
+                                "3.8 \"Minor\" means any individual who has not completed eighteen (18) years of age as on the date of the relevant event.\n\n"
+                                "3.9 \"Authorised Occupant\" means only the Tenant named who is onboarded on the Lakshya Residency app and any additional occupant(s) whose details have been disclosed to and expressly approved in writing (including via the App) by the Owner prior to occupation.\n\n"
                                 "3.10 Words importing the singular include the plural and vice versa; words importing any gender include all genders; references to \"writing\" include communication through the App unless stated otherwise.",
                               ),
                               const SizedBox(height: 24),
@@ -370,7 +370,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               // Section 4: Term, Lock-In Period and Renewal
                               _buildClauseTitle("4. Term, Lock-In Period and Renewal", keyId: "section_4"),
                               _buildParagraph(
-                                "4.1 The Academic Session / Term of this Agreement shall be the Rental Term / Lock-in Period corresponding to the Plan and the duration selected by the Tenant at onboarding on the App (${d.plan} — ${d.rentalTerm}, ${d.commencementDate} to ${d.endingDate}) OR/AND period for which the tenant is extending their stay at Lakshya residency, unless terminated earlier under Clause 17.\n\n"
+                                "4.1 The Academic Session / Term of this Agreement shall be the Rental Term / Lock-in Period corresponding to the Plan and the duration selected by the Tenant at onboarding on the App OR/AND period for which the tenant is extending their stay at Lakshya residency, unless terminated earlier under Clause 17.\n\n"
                                 "4.2 The Tenant undertakes to remain in occupation of the Premises for the full Lock-in Period coinciding with the Academic Session. The Lock-in Period applies uniformly to Tenants on a rental-only basis and to Tenants who have opted for the Package Facilities.\n\n"
                                 "4.3 If the Tenant does not take possession of the Premises within 30 days of the agreed move-in date thereafter, the Owner may treat this as a showup breach and terminate this Agreement forthwith, with the consequences set out in Clause 16.4 and Clause 18.\n\n"
                                 "4.4 Renewal: This Agreement may be renewed for a further Academic Session on mutually agreed terms. If failed to inform the person in charge, the Tenant shall vacate the Premises on or before the last day of the Term.\n\n"
@@ -391,48 +391,47 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                                 "5.7 Non-Refundability on Early Exit: If the Tenant leaves, discontinues occupation, or withdraws from this Agreement before completing the full specified Period / Academic Session referred to in Clause 4, both the Security Deposit and the Booking Amount shall stand fully and absolutely forfeited and shall not be refunded under any circumstance, and outstanding Rent/Package charges for the remainder of the Academic Session shall remain payable. This applies equally whether the early departure is on account of the Tenant's personal choice, academic withdrawal, disciplinary action, or any other reason not attributable to the Owner's default.\n\n"
                                 "5.10 Late Payment Charge: Beyond a grace period of 3 (three) days from the due date, a late payment charge shall accrue for every day of delay, without prejudice to the Owner's right to treat persistent default as a material breach under Clause 17.\n\n"
                                 "5.11 Payments declaration Only Through the App — No Other Channel Accepted: ALL payments to the Owner (Booking Amount, Security Deposit, Rent, installments, Package charges, fines, or any other dues) shall be made ONLY through the payment details listed on the App — namely the bank account number and UPI ID displayed within the App. The Owner does NOT accept, authorise, or acknowledge any payment made through any other bank account, UPI ID, cash collection, or any individual or agent, however described. The Tenant and their parent/guardian must never trust or make payment to any person claiming to represent Lakshya Residency outside the App, and the Owner shall bear no responsibility whatsoever for payments made to any unauthorised or fraudulent party.\n\n"
-                                "5.12 KYC and Verification: The Tenant shall submit, through the App at onboarding, valid identity documents (a Government-issued photo ID and College ID, as recorded in the app) and a recent photograph, and shall cooperate with any police verification, tenant registration, or similar formality required under applicable local law.\n\n"
-                                "5.13 All applicable taxes, government levies, or statutory charges arising in relation to the Rent or Package Facilities shall be borne as per applicable law and may be passed on to the Tenant with prior written notice.\n\n"
-                                "5.14 Summer and Winter Break Charges: The Lock-in Period excludes the summer and winter breaks. Where the Tenant retains the Premises during the summer break or the winter break, such break period may be charged additionally. This additional charge shall not apply to a Tenant who has subscribed exclusively for the Summer Break or the Winter Break Rental Term.",
+                                "5.12 KYC and Verification: The Tenant shall submit, through the App at onboarding, valid identity documents (a Government-issued photo ID and College ID, as recorded in the app) and a recent photograph, and shall cooperate with any police verification, tenant registration, or similar process required by the Owner or local administration.\n\n"
+                                "5.13 Mode of Payment: All payments under this Agreement shall be made through UPI, net banking, debit/credit card, or other digital payment methods configured on the App. Cash payments are discouraged and, if exceptionally accepted by the Owner, must be accompanied by an official receipt issued through the App.\n\n"
+                                "5.14 Taxes: All amounts payable by the Tenant are exclusive of applicable Goods and Services Tax (GST) or other statutory levies, which shall be charged additionally if and when applicable by law.",
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 14),
 
-                              // Payment Fraud Warning Box
                               _buildPdfWarningBox(
-                                title: "PAYMENT FRAUD WARNING",
-                                text: "Lakshya Residency accepts payment ONLY through the bank account and UPI ID displayed on the official App. Do not pay cash, or transfer money, to anyone who contacts you claiming to be from Lakshya Residency outside the App. If in doubt, verify directly with the Owner through the App before making any payment.",
+                                title: "CRITICAL FRAUD ALERT — MANDATORY PAYMENT INSTRUCTION",
+                                text: "ALL PAYMENTS MUST BE MADE SOLELY THROUGH THE OFFICIAL LAKSHYA RESIDENCY APP / PLATFORM.\n"
+                                    "Do NOT pay cash, transfer funds to personal UPI IDs, or make bank transfers to any person claiming to be an agent, broker, manager, warden, or owner outside of the verified account details displayed inside the Lakshya Residency App.\n"
+                                    "The Owner shall NOT be liable or responsible for any payment made outside the App.",
                               ),
                               const SizedBox(height: 24),
 
                               // Section 6: Package-Based Facilities
                               _buildClauseTitle("6. Package-Based Facilities (Optional Value-Added Services)", keyId: "section_6"),
                               _buildParagraph(
-                                "Lakshya Residency offers, in addition to standalone room rental, bundled package plans comprising the facilities listed below. The Tenant may opt for none, some, or all of these facilities, as recorded in Schedule C. Charges for opted facilities are payable along with the Rent through the App, as per the Payment Plan chosen under Clause 5.5.",
+                                "The Tenant may choose to avail one or more optional facilities offered by the Owner as part of a consolidated Package, subject to additional payment of applicable Package Charges. The specific facilities opted for by the Tenant, the duration for which they are opted, and the corresponding charges are set out in Schedule C to this Agreement. The following terms govern each package facility:",
                               ),
                               const SizedBox(height: 12),
-                              _buildPackageFacilitiesTable(d),
-                              const SizedBox(height: 14),
 
                               _buildSubClauseTitle("6.A Meals", keyId: "section_6_a"),
                               _buildParagraph(
-                                "6.1 Where opted, meal service shall comprise up to three (3) meals a day (breakfast, lunch, and dinner) served at fixed timings communicated by the Residency management/App. Menu, timing, and portion policies are subject to reasonable modification by the Owner with advance notice on the App.\n\n"
-                                "6.2 The Tenant shall inform the Owner/App of any food allergies, medical dietary restrictions, and their vegetarian/non-vegetarian preference (as recorded in the app: ${d.dietaryPreference}) in advance. The Owner is not liable for reactions arising from undisclosed allergies.\n\n"
-                                "6.3 Wastage of food, misuse of the mess/dining facility (including removing common utensils, cooking unauthorised items in the common kitchen, or misusing the facility for commercial resale of food) is strictly prohibited and may result in withdrawal of the meal package without refund for the withdrawn period.",
+                                "6.1 Where opted, meals shall be provided in accordance with the meal plan and menu published by the Residency from time to time.\n\n"
+                                "6.2 Meal timings shall be communicated via the App. A Tenant missing a meal during scheduled hours shall not be entitled to a replacement, takeaway, or refund.\n\n"
+                                "6.3 The Owner shall take reasonable care in food preparation and hygiene. The Tenant shall inform the management of any severe food allergies at the time of admission; the Owner does not guarantee allergen-free preparation in a communal kitchen environment.\n\n"
+                                "6.4 Taking Residency cutlery, utensils, or bulk food items out of the dining hall or into individual rooms without written permission from the warden is prohibited.",
                               ),
                               const SizedBox(height: 12),
 
                               _buildSubClauseTitle("6.B Pick-up and Drop to College/Institute", keyId: "section_6_b"),
                               _buildParagraph(
-                                "6.4 Where opted, transport service shall be provided between the Residency and the Tenant's specified college/institute at fixed timings and routes as communicated via the App. The Tenant must be ready at the designated pick-up point at the scheduled time; the vehicle shall not be obligated to wait beyond a reasonable grace period.\n\n"
-                                "6.5 This facility is meant solely for the named Tenant's commute to and from their registered institution and shall not be used to carry unauthorised persons, goods for commercial purposes, or personal errands outside the agreed route, without the Owner's prior written approval and applicable additional charge.\n\n"
-                                "6.6 The Tenant shall conduct themselves safely during transit and comply with reasonable instructions of the driver/attendant.",
+                                "6.5 Where opted, transport shall operate on schedules coinciding with standard college class hours, as notified on the App. The vehicle shall operate on fixed routes with designated stops.\n\n"
+                                "6.6 The Tenant shall adhere strictly to pickup and departure times. The vehicle shall not wait for late passengers. The Owner shall not be liable for any Tenant missing a class or exam on account of unavoidable traffic delay, vehicle breakdown, or weather conditions.\n"
+                                "The transportation facilities are outsourced, so the tenants are requested to contact the concerned cab person/driver for anything regarding the cab. Cab charges are non-refundable under any circumstances. In case the cab is not available on any day, the Tenant must arrange their own transport.",
                               ),
                               const SizedBox(height: 12),
 
                               _buildSubClauseTitle("6.C Laundry and Cleaning", keyId: "section_6_c"),
                               _buildParagraph(
-                                "6.7 Where opted, laundry service shall be provided at the frequency specified in the package details. The Owner/service provider shall exercise reasonable care but shall not be liable for ordinary wear, shrinkage, or colour-run inherent to fabric type, nor for items left unclaimed beyond thirty (30) days. The Tenant is advised to verify items at the time of delivery; complaints raised thereafter may not be entertained.\n\n"
-                                "6.8 Where opted, cleaning service for the room/common areas shall be provided at regular intervals, at reasonable hours communicated in advance.",
+                                "6.7 Where opted, laundry service will be provided. The Owner/service shall not be liable for ordinary wear, shrinkage, or colour-run inherent to fabric type, nor for items left unclaimed beyond thirty (30) days. The Tenant is advised to verify items at the time of delivery; complaints raised thereafter may not be entertained. The laundry services are outsourced so the tenants are requested to contact the concerned laundry person for anything regarding the laundry.",
                               ),
                               const SizedBox(height: 12),
 
@@ -445,10 +444,10 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
 
                               _buildSubClauseTitle("6.E General Terms Applicable to All Package Facilities", keyId: "section_6_e"),
                               _buildParagraph(
-                                "6.11 Package Facilities are optional and separately charged. They may be added or opted out of only with at least 30 days' advance written notice (through the App), and refunds/adjustments, if any, shall be on a pro-rata basis at the Owner's discretion. The Owner reserves the right to require full upfront payment for certain Package Facilities as a condition of opting in.\n\n"
-                                "6.12 Third-Party Facilitation: For services rendered through third-party vendors (including laundry, transport, and the internet service provider), the Owner acts only as a facilitator/aggregator and is not itself the service provider. The Owner shall not be liable for deficiency, delay, damage, or loss caused by such a third-party vendor; the Tenant's remedy, if any, in such cases lies against the vendor directly.\n\n"
-                                "6.13 Complaint Window: Any complaint regarding a Package Facility must be raised via the App/email within 48 hours of the relevant service being rendered; complaints raised thereafter may not be entertained. If a timely complaint is not resolved within 15 days, the Tenant shall escalate it to the Owner/warden in writing.\n\n"
-                                "6.14 Misuse, abuse, or fraudulent claims relating to any Package Facility (e.g., false damage claims, unauthorised sharing of the facility with non-residents, tampering with service logs on the App) shall be treated as a material breach of this Agreement under Clause 10 and Clause 17.",
+                                "6.11 Third-Party Facilitation: For services rendered through third-party vendors (including laundry, the internet service provider), the Owner acts only as a facilitator/aggregator and is not itself the service provider. The Owner shall not be liable for deficiency, delay, damage, or loss caused by such a third-party vendor; the Tenant's remedy, if any, in such cases lies against the vendor directly.\n\n"
+                                "6.12 Complaint Window: Any complaint regarding a Package Facility must be raised via the App/email. If a timely complaint is not resolved within 15 days, the Tenant shall escalate it to the Owner/warden in writing/in person.\n\n"
+                                "6.13 Misuse, abuse, or fraudulent claims relating to any Package Facility (e.g., false damage claims, unauthorised sharing of the facility with non-residents, tampering with service logs on the App) shall be treated as a material breach of this Agreement under Clause 10 and Clause 17.\n\n"
+                                "6.14 National Holidays, Summer Break and Winter Break: During national holidays and during the summer and winter breaks, there is no confirmation or assurance of meals or of any other services, including pick-up and drop (cab), cleaning, laundry and similar services. Availability of any such service during these periods shall be communicated through the App at the Owner’s discretion, and the Owner shall not be liable for its non-availability.",
                               ),
                               const SizedBox(height: 24),
 
@@ -456,7 +455,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               _buildClauseTitle("7. Utilities and Common Area Charges", keyId: "section_7"),
                               _buildParagraph(
                                 "7.1 Electricity shall be charged at the rate of ₹12 (Rupees Twelve only) per unit consumed, as per meter/sub-meter reading, billed monthly through the App. In a shared-occupancy room, electricity charges shall be divided equally among all occupants of that room, unless otherwise agreed in writing.\n\n"
-                                "7.2 Water and common maintenance charges shall be charged separately as per actuals or included in the package charges as agreed.\n\n"
+                                "7.2 Common maintenance charges can be charged separately as per actuals,\n\n"
                                 "7.3 The Tenant shall use electrical appliances, water, and other utilities responsibly and shall not install high-load appliances (e.g., heaters, induction cooktops, air-conditioners) without the Owner's prior written consent, given the shared electrical load of the Residency.\n\n"
                                 "7.4 Common Area maintenance charges, if applicable, shall be shared proportionately among all Tenants of the Residency and billed through the App.",
                               ),
@@ -481,7 +480,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               // Section 9: Tenant's General Obligations
                               _buildClauseTitle("9. Tenant's General Obligations", keyId: "section_9"),
                               _buildParagraph(
-                                "9.1 Pay Rent, installments, and all Package Facility charges on time as per Clause 5 and Schedule B/C.\n\n"
+                                "9.1 Pay Rent, installments, and all Package Facility charges on time as per Clause 5.\n\n"
                                 "9.2 Maintain the Premises, fittings, fixtures, and furnishings provided in good and tenantable condition, normal wear and tear excepted.\n\n"
                                 "9.3 Promptly report any damage, malfunction, leakage, or safety hazard in the Premises or Common Areas to the Owner/App helpdesk.\n\n"
                                 "9.4 Permit the Owner or its authorised representative to inspect the Premises in accordance with Clause 14.\n\n"
@@ -521,61 +520,70 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               _buildSubClauseTitle("10.3 Activities Involving Minors", keyId: "section_10_3"),
                               _buildParagraph(
                                 "10.3.1 No Minor shall reside at, be housed in, or stay overnight at the Premises unless such Minor is accompanied by, and under the direct supervision of, a parent or legal guardian, or unless prior written consent has been obtained from the Owner along with complete identity and guardian-contact details.\n\n"
-                                "10.3.2 The Tenant shall not engage, permit, or facilitate any activity on the Premises or through the App that endangers the safety or welfare of a Minor, or that is unlawful in relation to a Minor under applicable Indian law (including the POCSO Act, 2012, the Juvenile Justice Act, 2015, and the Indian Penal Code / Bharatiya Nyaya Sanhita).\n\n"
-                                "10.3.3 Any suspected or confirmed violation of this Clause 10.3 shall be reported by the Owner immediately to the local police and/or the relevant Child Welfare Committee/authority, and the Owner shall have the right to terminate this Agreement with immediate effect, over and above pursuing all available legal remedies.",
+                                "10.3.2 The Tenant shall not engage, permit, or facilitate any activity on the Premises or through the App that endangers the safety or welfare of a Minor, or that constitutes an offence under the Protection of Children from Sexual Offences (POCSO) Act, 2012, the Juvenile Justice (Care and Protection of Children) Act, 2015, or the Indian Penal Code / Bharatiya Nyaya Sanhita.\n\n"
+                                "10.3.3 The Tenant shall not possess, download, store, create, or distribute child sexual abuse material (CSAM) or any exploitation material involving Minors, using the Residency's Wi-Fi network or on the Premises. Any violation of this sub-clause shall result in immediate termination, eviction, forfeiture of deposits, and a mandatory immediate report by the Owner to law enforcement authorities.",
                               ),
                               const SizedBox(height: 12),
 
                               _buildSubClauseTitle("10.4 Commercial, Business or Unlawful Trade Activity", keyId: "section_10_4"),
                               _buildParagraph(
-                                "10.4.1 The Premises are let/licensed strictly for residential use. The Tenant shall not carry out, from the Premises, any business, trade, profession, commercial venture, manufacturing, storage of trade goods, or any other for-profit commercial activity of any nature, without the Owner's prior written consent.\n\n"
-                                "10.4.2 The Tenant shall not use the Premises for any unlawful purpose, including gambling/betting operations, money-lending, or counterfeit goods.\n\n"
-                                "10.4.3 Violation of this Clause 10.4 shall entitle the Owner to immediately terminate this Agreement and seek compensation for any loss, statutory penalty, or reputational harm suffered, in addition to reporting the matter to the appropriate municipal, tax, or law-enforcement authority where warranted.",
+                                "10.4.1 The Premises shall not be used to carry on any trade, business, commercial activity, manufacturing, or professional practice, whether registered or unregistered, including using the Premises as a registered office, godown, retail pickup point, or dark-store hub.\n\n"
+                                "10.4.2 The Tenant shall not run or permit to be run from the Premises any unlawful enterprise, including gambling, betting, sex work, multi-level marketing (MLM) schemes, or financial fraud.\n\n"
+                                "10.4.3 Violation of this Clause 10.4 shall entitle the Owner to immediately terminate this Agreement, report the activity to the relevant municipal and tax authorities, and claim damages from the Tenant.",
                               ),
                               const SizedBox(height: 12),
 
                               _buildSubClauseTitle("10.5 Unauthorised Occupants, Subletting and Relocation of Third Parties", keyId: "section_10_5"),
                               _buildParagraph(
-                                "10.5.1 The Tenant shall not sublet, assign, transfer, or share occupation of the Premises, in whole or in part, with any third party without the Owner's prior written consent. Any such unauthorised assignment or subletting shall be void, and the Owner may terminate this Agreement and commence eviction without further notice.\n\n"
-                                "10.5.2 The Tenant shall not permit any person to relocate into, stay at, or use the Premises as their residence — continuously or intermittently — for a prolonged period without first disclosing such person's identity and obtaining the Owner's prior written approval through the App or in writing or in person.\n\n"
-                                "10.5.3 Short-term guests may be permitted strictly in accordance with the visitor policy at Clause 11, and the Tenant shall remain fully responsible for the conduct, safety, and any dues/damage caused by such guests.\n\n"
-                                "10.5.4 Any unauthorised or undisclosed long-term occupant discovered at the Premises entitles the Owner to (a) charge additional occupancy fees retroactively, (b) direct immediate removal of such person, and/or (c) terminate this Agreement under Clause 17, without prejudice to any other legal remedy, including police intervention where the occupant refuses to vacate.",
+                                "10.5.1 Subletting, licensing, sharing, assigning, or parting with possession of the Premises (or any bed/portion thereof) to any third person, whether for money or free of charge, is strictly prohibited.\n\n"
+                                "10.5.2 No person other than the Tenant (and Authorised Occupants) shall be permitted to reside in the Premises. Permitting any third person to stay at the Premises for a cumulative period exceeding seven (7) days without prior written disclosure to and written permission from the Owner shall be deemed an unauthorised subletting / illegal occupation under this Clause.\n\n"
+                                "10.5.3 The Tenant shall not allow any person facing criminal charges, an active warrant, or an externment/interim restraining order to stay at the Premises.",
                               ),
                               const SizedBox(height: 12),
 
                               _buildSubClauseTitle("10.6 Mobile Application — Acceptable Use Policy", keyId: "section_10_6"),
                               _buildParagraph(
-                                "10.6.1 The Tenant shall use the App solely for legitimate purposes connected with their tenancy — onboarding, rent/fee payment, service requests, complaints, communication with the Owner/management, and viewing this Agreement and related documents.\n\n"
-                                "10.6.2 The Tenant shall not: (a) share App login credentials with any unauthorised person; (b) attempt to hack, reverse-engineer, introduce malware into, or otherwise compromise the App or its backend systems; (c) upload or transmit obscene, defamatory, harassing, threatening, or unlawful content, including content involving Minors; (d) use the App's messaging, complaint, or payment features to harass, threaten, or defraud the Owner, staff, or other tenants; (e) create fraudulent service requests, falsify complaint records, or misuse the App's payment gateway (including attempted chargebacks or payment fraud); or (f) use any bot, script, or automated means to interact with the App other than through its intended interface.\n\n"
-                                "10.6.3 The Owner reserves the right to suspend or terminate the Tenant's App account for any misuse under Clause 10.6.2, without prejudice to terminating this Agreement and pursuing legal action, including cyber-crime complaints where applicable.\n\n"
-                                "10.6.4 All communications, notices, payment confirmations, and complaint records exchanged via the App shall be admissible between the Parties as evidence of communication, retained in accordance with applicable data-protection law.",
+                                "10.6.1 The App is an essential operational tool of Lakshya Residency. The Tenant shall use the App solely for bona fide purposes connected with this Agreement.\n\n"
+                                "10.6.2 The Tenant shall not:\n"
+                                "• Hack, probe, reverse-engineer, decompile, or attempt to compromise the App's security, API, or databases;\n"
+                                "• Submit false, forged, altered, or misleading identity documents, payment receipts, or KYC information through the App;\n"
+                                "• Interfere with the payment gateway, manipulate transaction references, or generate fraudulent payment confirmations;\n"
+                                "• Harass, abuse, defame, threaten, or send unsolicited bulk messages to other residents, staff, or the Owner through the App's messaging or complaint facilities;\n"
+                                "• Post false or maliciously defamatory reviews, tickets, or allegations through the App.\n\n"
+                                "10.6.3 The Tenant is solely responsible for maintaining the confidentiality of their App login credentials. Any action taken through the Tenant's authenticated App session shall be deemed to have been taken by the Tenant.\n\n"
+                                "10.6.4 Compromising the App's integrity or attempting payment fraud through the App shall, in addition to being a material breach of this Agreement, result in immediate suspension of App access, civil recovery proceedings, and filing of a First Information Report (FIR) under the Information Technology Act, 2000 and the Indian Penal Code / Bharatiya Nyaya Sanhita.",
                               ),
                               const SizedBox(height: 12),
 
                               _buildSubClauseTitle("10.7 General Nuisance, Safety and Miscellaneous Prohibitions", keyId: "section_10_7"),
                               _buildParagraph(
-                                "• Storing or handling flammable, explosive, hazardous, or illegal materials/weapons within the Premises.\n"
-                                "• Tampering with fire-safety equipment, CCTV cameras, electrical wiring, or common building infrastructure.\n"
-                                "• Causing disturbance during designated quiet hours specified in the house rules.\n"
-                                "• Bringing pets into the Residency without the Owner's prior written consent, where house rules restrict pets.\n"
-                                "• Any act of harassment, ragging, discrimination, or violence against co-tenants, staff, or visitors.\n"
-                                "• Circulating false, defamatory, or malicious information about the Owner, Residency, or its staff/tenants on any platform, including the App or social media.\n"
-                                "• Any other act that is unlawful under the laws of India or that brings disrepute to Lakshya Residency.",
+                                "The Tenant shall not engage in any of the following activities:\n"
+                                "• Playing loud music, shouting, or causing disturbance during Quiet Hours (from 23:00 hours to 07:00 hours);\n"
+                                "• Storing hazardous, flammable, explosive, or toxic materials, gas cylinders (other than Owner-approved cooking gas arrangements), fireworks, or firearms/weapons on the Premises;\n"
+                                "• Bringing pets into the Residency without the Owner's prior written consent;\n"
+                                "• Tampering with CCTV cameras, fire alarms, smoke detectors, electrical panels, water meters, or security equipment;\n"
+                                "• Hanging clothes, placing shoes/racks, or leaving waste, bicycles, or personal property in Common Areas or fire escapes;\n"
+                                "• Consuming alcohol, banned substances, or tobacco in Common Areas;\n"
+                                "• Littering, spitting, or defacing walls, doors, or furniture;\n"
+                                "• Tampering with, duplicating, or lending keys, RFID cards, or access credentials to non-residents;\n"
+                                "• Throwing waste, liquids, or objects out of windows, balconies, or onto neighbouring properties;\n"
+                                "• Entering areas marked \"Staff Only\", electrical/pump rooms, or the terrace during restricted hours without permission.",
                               ),
                               const SizedBox(height: 12),
 
                               _buildSubClauseTitle("10.8 Fights and Disputes Among Residents", keyId: "section_10_8"),
                               _buildParagraph(
-                                "10.8.1 The Tenant shall not engage in any physical altercation, dispute, or fight with other residents, staff, vendors, or members of the public in or around the Residency. The Owner shall not be responsible for any loss, injury, or damage arising from such conduct.\n\n"
-                                "10.8.2 Where a Tenant is found involved in such conduct, the Owner may forfeit the Security Deposit and Booking Amount, cancel the Tenant's admission, and require immediate vacation of the Premises, without prejudice to any other remedy.",
+                                "10.8.1 Physical violence, assault, threatening behaviour, ragging, extortion, harassment (verbal, physical, or sexual), or bullying of any fellow resident, staff member, or neighbour is strictly prohibited.\n\n"
+                                "10.8.2 Lakshya Residency maintains a strict zero-tolerance policy towards ragging, harassment of fellow students, and gender-based offences. Any incident shall be reported to the local police and to the resident's educational institution immediately.\n\n"
+                                "10.8.3 The Tenant shall be liable for all harm, medical expenses, property damage, and legal consequences arising from any physical altercation or dispute initiated or participated in by the Tenant.",
                               ),
                               const SizedBox(height: 24),
 
                               // Section 11: House Rules — Curfew, Outings and Visitor Policy
                               _buildClauseTitle("11. House Rules — Curfew, Outings and Visitor Policy", keyId: "section_11"),
                               _buildParagraph(
-                                "11.1 Outing Hours: The Tenant may move within the immediate vicinity of the Residency until 22:00 hours (10:00 PM). Venturing outside the city/campus area requires prior intimation to the Tenant's parent/guardian and to the Owner/warden.\n\n"
-                                "11.2 Door-Closing Time: The main gate/door of the Residency shall close at 22:30 hours in summer and 22:00 hours in winter. The Tenant shall return to the Residency before this time.\n\n"
+                                "11.1 Outing Hours: The Tenant may move within the immediate vicinity of the Residency until ______ hours. Venturing outside the city/campus area requires prior intimation to the Tenant's parent/guardian and to the Owner/warden.\n\n"
+                                "11.2 Door-Closing Time: The main gate/door of the Residency shall close at ______ hours in summer and ______ hours in winter. The Tenant shall return to the Residency before this time.\n\n"
                                 "11.3 Late Entry: A Tenant seeking to return after the closing time for a genuine reason must obtain prior permission from their parent/guardian and the warden/Owner. Unauthorised late entry may attract a penalty or disciplinary action, and repeated late entry may be reported to the Tenant's parent/guardian.\n\n"
                                 "11.4 Night-Out / Overnight Absence: The Tenant must submit a written/App-based night-out application, noting the time of departure in the Residency's register, and obtain the Owner's/warden's approval — ordinarily conditional on parental consent — before staying away from the Residency overnight.\n\n"
                                 "11.5 Overnight Guests: Overnight stay of any outside friend or visitor in the Tenant's room is not permitted, save as provided under Clause 12 (Co-Habitation) or with the Owner's express prior written consent. A visitor of a different gender than the room's registered occupants shall not stay overnight in the room, and may only be received during permitted visiting hours in designated common areas, consistent with the Residency's safety and decorum policy.\n\n"
@@ -623,7 +631,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               // Section 15: Maintenance, Repairs and Damage Liability
                               _buildClauseTitle("15. Maintenance, Repairs and Damage Liability", keyId: "section_15"),
                               _buildParagraph(
-                                "15.1 For Tenants staying on a purely rental (non-package) basis, the first month's routine maintenance and any repair required in the Premises shall be attended to by the Owner at no additional cost. From the second month of the Term onward, day-to-day maintenance and minor repairs shall be arranged and borne by the Tenant.\n\n"
+                                "15.1 For Tenants staying on a purely rental (non-package) basis, the first month's routine maintenance and any repair required in the Premises shall be attended to by the Owner at no additional cost. From the second month of the Term onward, day-to-day maintenance and minor shall be arranged and borne by the Tenant.\n\n"
                                 "15.2 All repair/maintenance requests shall be logged through the App, and the Owner shall use reasonable efforts to address them within a reasonable timeframe.\n\n"
                                 "15.3 The inventory of furniture, fixtures, and appliances provided in the Premises should be used with care. The Tenant shall verify this inventory at the time of possession and shall be liable for any shortfall or damage identified at the time of vacating, save for normal wear and tear.\n\n"
                                 "15.4 Summer Break Maintenance: The Owner may undertake block-level, floor-level, or Residency-wide maintenance, repainting, pest control, or renovation work during the summer vacation/break period (or any other declared maintenance window). The Tenant shall cooperate with the Owner's staff/contractors for access, temporary relocation of belongings, or temporary access restriction during such maintenance, and shall not obstruct such work.",
@@ -639,42 +647,51 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               ),
                               const SizedBox(height: 24),
 
-                              // Section 17: Termination of Residency
-                              _buildClauseTitle("17. Termination of Residency", keyId: "section_17"),
+                              // Section 17: Termination of Agreement
+                              _buildClauseTitle("17. Termination of Agreement", keyId: "section_17"),
                               _buildParagraph(
                                 "17.1 Owner may terminate the residency of tenant prior to expiry of the Term without being held for giving any.\n\n"
                                 "17.2 The Owner may terminate residency of tenant with immediate effect and without notice in the event of: (a) any breach falling under Clause 10.2 (drugs/narcotics) or Clause 10.3 (offences involving Minors); (b) any act endangering the life, safety, or property of the Owner, staff, or other tenants; (c) any activity that is unlawful and exposes the Owner or the Residency to legal or regulatory liability; (d) breach of the occupancy limits at Clause 8.4; or (e) co-habitation without the consent form required under Clause 12.2.\n\n"
-                                "17.3 Non-Payment: If Rent, an installment, or Package charges remain unpaid beyond 3 days from the due date, the late payment charge under Clause 5.9 applies. If such amount remains unpaid beyond 7 days from the due date, or if there is a delay beyond 7 days for a second consecutive billing period, the Owner may terminate this Agreement forthwith, without further notice, and require the Tenant to vacate.\n\n"
-                                "17.4 No-Show / Early Exit Within Initial Days: As stated in Clause 4.3, if the Tenant does not take possession within the agreed timeline, or vacates within the first few days of moving in, the Owner may terminate the residency of tenant forthwith.\n\n"
-                                "17.5 Upon termination, the Tenant shall vacate the Premises, remove personal belongings, and hand over vacant, undamaged possession along with keys/access cards, failing which the Owner shall be entitled to hold-over compensation under Clause 4.5 and/or take possession in accordance with law.\n\n"
-                                "17.6 Termination of residency of tenant shall automatically terminate all Package Facilities availed subject to pro-rata settlement of dues/refunds as applicable and subject to Clause 16.3.",
+                                "17.3 Non-Payment: If Rent, an installment, or Package charges remain unpaid beyond 3 days from the due date, the late payment charge under Clause 5.9 applies. If such amount remains unpaid beyond 7 days from the due date, or if there is a delay beyond 7 days for a second consecutive billing period, the Owner may terminate this Agreement forthwith, without further notice, and require the Tenant to vacate within forty-eight (48) hours.\n\n"
+                                "17.4 Other Breaches: For any material breach of this Agreement not covered by Clauses 17.2 or 17.3, the Owner may issue a written notice through the App requiring the Tenant to remedy the breach within 7 (seven) days. If the breach is not remedied within the notice period, this Agreement shall stand terminated upon expiry of the notice.",
                               ),
                               const SizedBox(height: 24),
 
                               // Section 18: Consequences of Termination for Cause
                               _buildClauseTitle("18. Consequences of Termination for Cause", keyId: "section_18"),
                               _buildParagraph(
-                                "18.1 Where this Agreement is terminated for cause under Clause 17.2, 17.3, 17.4, or for breach under Clause 10 or Clause 13, the following consequences shall apply: (a) forfeiture of the entire Security Deposit, Booking Amount, and any advance charges paid; (b) all outstanding Rent, Package charges, fines, and other dues become immediately payable; (c) the Tenant shall immediately vacate, remove personal belongings, and return keys/access cards; (d) the Tenant's access to the Premises and the App shall be barred forthwith; and (e) any belongings not removed within a reasonable period after termination may be disposed of by the Owner without liability.\n\n"
-                                "18.2 If the amount due under Clause 18.1(b), together with the cost of any missing or damaged inventory, exceeds the Security Deposit and other amounts held by the Owner, the difference shall become immediately payable by the Tenant. If not paid within 7 days of intimation, the Owner may inform credit information agencies and/or the Tenant's educational institution, and initiate appropriate legal proceedings.\n\n"
-                                "18.3 The Owner may re-let/re-license the vacated Premises to any other individual immediately upon termination.\n\n"
-                                "18.4 Termination for cause shall not absolve the Tenant of liability accrued prior to, or as a consequence of, such termination, and the Owner's rights under this Agreement shall survive termination.",
+                                "18.1 Upon termination of this Agreement for cause (under Clause 17):\n"
+                                "(a) The Tenant shall vacate the Premises and remove all personal belongings within the time specified by the Owner (not exceeding 48 hours for immediate-termination grounds, or within the notice period for other grounds);\n"
+                                "(b) All outstanding Rent, Package charges, and other dues for the remaining period of the Academic Session shall become immediately due and payable;\n"
+                                "(c) The Security Deposit and Booking Amount shall stand fully forfeited;\n"
+                                "(d) The Owner may deactivate the Tenant's App access and biometric/key access credentials;\n\n"
+                                "18.2 If the amount due under Clause 18.1(b), together with the cost of repair of any damage, exceeds the Security Deposit and Booking Amount, the Tenant (and their parent/guardian) shall be jointly and severally liable to pay the deficiency within seven (7) days of demand.\n\n"
+                                "18.3 Leftover Belongings: If the Tenant fails to remove their personal belongings from the Premises upon expiry of the handover period, the Owner may, after giving forty-eight (48) hours' notice through the App, pack and store the items at the Tenant's risk and cost (storage charge: ₹200 per day). If unclaimed beyond thirty (30) days from notice, the Owner may dispose of or auction the items to recover accrued storage and dues, without further liability to the Tenant.\n\n"
+                                "18.4 Eviction: The Tenant acknowledges that the permission to occupy granted under this leave and licence stands revoked upon termination. If the Tenant refuses to vacate, the Owner shall be entitled to re-enter, take peaceful possession of the Premises, change locks/access credentials, and seek assistance from local law enforcement and civil courts to effect eviction, at the Tenant's cost.\n\n"
+                                "18.5 The Tenant shall be liable for holding-over compensation at twice the daily rent rate for each day of unauthorised occupation following the date on which the Tenant was required to vacate.",
                               ),
                               const SizedBox(height: 24),
 
                               // Section 19: Indemnity and Limitation of Liability
                               _buildClauseTitle("19. Indemnity and Limitation of Liability", keyId: "section_19"),
                               _buildParagraph(
-                                "19.1 The Tenant shall indemnify and keep indemnified the Owner against any loss, damage, liability, claim, penalty, or legal proceeding arising out of (a) the Tenant's breach of this Agreement, (b) any illegal or unauthorised activity conducted by the Tenant or any person permitted onto the Premises by the Tenant, or (c) any injury, loss, or damage caused by the Tenant's act or omission to any third party, the Owner, or the Owner's property.\n\n"
-                                "19.2 Limitation of Liability: Save in cases of the Owner's proven gross negligence or wilful misconduct, the aggregate liability of the Owner to the Tenant under this Agreement, whether in contract, tort, or otherwise, shall not exceed an amount equivalent to the Rent/Package charges paid by the Tenant for the five (5) days immediately preceding the date the relevant claim arises.\n\n"
-                                "19.3 The Owner shall not be liable for loss of the Tenant's personal belongings (see also Clause 9.9) due to theft, fire, or other causes, except to the extent such loss arises from the Owner's proven gross negligence or wilful default.",
+                                "19.1 The Tenant shall indemnify, defend, and hold harmless the Owner, its agents, employees, and representatives from and against all claims, liabilities, losses, damages, penalties, fines, costs, and expenses (including reasonable legal fees) arising from:\n"
+                                "(a) Any breach of this Agreement or violation of applicable law by the Tenant or any guest/visitor/occupant permitted by the Tenant;\n"
+                                "(b) Any loss, damage, or injury caused to person or property by any intentional act, negligence, or omission of the Tenant;\n"
+                                "(c) Any proceedings initiated by a third party, educational institution, local authority, or law-enforcement agency in connection with activities carried out by the Tenant on or from the Premises.\n\n"
+                                "19.2 Limitation of Owner's Liability: To the maximum extent permitted by applicable law:\n"
+                                "(a) The Owner shall not be liable for any indirect, incidental, special, consequential, or punitive damages;\n"
+                                "(b) The Owner's total cumulative liability arising out of or in connection with this Agreement shall not exceed the total amount of Rent actually paid by the Tenant to the Owner during the three (3) months preceding the event giving rise to liability;\n"
+                                "(c) The Owner shall not be liable for the loss, theft, or damage of personal belongings, cash, jewellery, laptops, mobile phones, or other valuables kept in the Premises or Common Areas, except where caused by the Owner's proven gross negligence;\n\n"
+                                "19.3 The Tenant is strongly advised to obtain independent personal insurance for their belongings and medical coverage.",
                               ),
                               const SizedBox(height: 24),
 
                               // Section 20: Health, Safety, Emergency and Personal Well-Being
                               _buildClauseTitle("20. Health, Safety, Emergency and Personal Well-Being", keyId: "section_20"),
                               _buildParagraph(
-                                "20.1 The Tenant shall disclose to the Owner/App any pre-existing medical condition or emergency contact details relevant to their safety, on a voluntary basis, to enable appropriate assistance in case of emergency.\n\n"
-                                "20.2 The Tenant shall comply with fire-safety instructions, evacuation procedures, and any public-health protocols in force at the Residency from time to time. In the event of a government-mandated evacuation arising from a pandemic or public-health emergency, Rent/Fees for the ongoing Academic Session shall remain payable notwithstanding early vacation, unless the Owner decides otherwise.\n\n"
+                                "20.1 The Tenant shall keep the Premises in a hygienic condition, free from biohazards, accumulated waste, and pests, and shall dispose of rubbish daily in designated bins.\n\n"
+                                "20.2 The Tenant shall promptly report any communicable disease, medical condition requiring emergency support, or epidemic symptoms to the warden, and shall comply with any health directives in force at the Residency from time to time. In the event of a government-mandated evacuation arising from a pandemic or public-health emergency, Rent/Fees for the ongoing Academic Session shall remain payable notwithstanding early vacation, unless the Owner decides otherwise.\n\n"
                                 "20.3 In case of a genuine medical or safety emergency involving the Tenant, the Owner/Residency staff may take reasonable steps (including contacting emergency services or the Tenant's emergency contact/guardian) without such action being construed as a breach of privacy or of this Agreement.\n\n"
                                 "20.4 Self-Harm and Personal Safety: While the Owner shall take the reasonable and bona fide safety precautions expected of a residential facility operator, the Owner shall not be held liable for any act of self-harm, attempted suicide, or suicide committed by a Tenant/resident on or off the Premises, except to the extent such incident arises directly from the Owner's own proven gross negligence or wilful default in maintaining basic safety standards at the Premises. The Tenant and their parent/guardian acknowledge that the Owner is not a medical or mental-health care provider and undertakes no duty of clinical care towards residents.\n\n"
                                 "20.5 The Residency encourages any Tenant experiencing emotional distress or a mental-health concern to reach out to their family, the Residency's designated warden/contact person, their institution's counselling service, or a national mental-health helpline, details of which shall be displayed at the Residency and on the App.",
@@ -717,7 +734,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                                 "24.6 Assignment by Owner: The Owner may sell, transfer, mortgage, or assign its rights and obligations under this Agreement, in whole or in part, without requiring the Tenant's consent. Upon such transfer, the Owner shall stand released from obligations arising thereafter, and the Tenant shall, upon written notice, recognise the transferee as the Owner for the residual Term.\n\n"
                                 "24.7 Counterparts and Digital Execution: This Agreement may be executed in counterparts, including digitally through the App, each of which shall be deemed an original.",
                               ),
-                              const SizedBox(height: 32),
+                              const SizedBox(height: 28),
 
                               // SCHEDULES
                               const Divider(thickness: 1.5, color: Color(0xFFCBD5E1)),
@@ -731,41 +748,12 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               _buildScheduleATable(d),
                               const SizedBox(height: 28),
 
-                              _buildScheduleHeading("SCHEDULE B — Rent, Deposit and Payment Details", keyId: "schedule_b"),
-                              _buildScheduleBTable(d),
-                              const SizedBox(height: 28),
-
-                              _buildScheduleHeading("SCHEDULE C — Package-Based Facilities Opted", keyId: "schedule_c"),
-                              _buildScheduleCTable(d),
-                              const SizedBox(height: 28),
-
                               _buildScheduleHeading("SCHEDULE D — Furniture, Inventory and House Rules Acknowledgement", keyId: "schedule_d"),
                               _buildParagraph(
                                 "The furniture, fixtures, and appliances provided in the Premises at the time of onboarding/move-in are as listed in the Tenant's onboarding record on the App (e.g., bed, mattress, study table, chair, wardrobe, fan, light, curtains, geyser, and other applicable items with quantity). Both Parties confirm this inventory and its condition through the App at check-in, and any discrepancy must be flagged within 48 hours of move-in.\n\n"
                                 "Allotted Inventory Checklist (${d.inventoryItems.length} items):\n"
                                 "${d.inventoryItems.isNotEmpty ? d.inventoryItems.map((e) => '• $e').join('   |   ') : 'Standard room inventory verified at check-in (bed, mattress, study table, chair, wardrobe, fan, light, geyser).'}\n\n"
                                 "The Tenant confirms having read and understood the Residency's house rules (displayed on the notice board and/or the App), including visiting hours, quiet hours, gate-closing time, and the guest-registration procedure at Clause 11, and agrees to be bound by the same as part of this Agreement.",
-                              ),
-                              const SizedBox(height: 28),
-
-                              _buildScheduleHeading("SCHEDULE E — Owner's Notes", keyId: "schedule_e"),
-                              _buildParagraph(
-                                "Any additional understanding reached between the Owner and the Tenant at the time of onboarding (special arrangements, waivers, or remarks) shall be recorded here by the Owner and remain visible to both Parties on the App:",
-                              ),
-                              const SizedBox(height: 10),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: const Color(0xFF94A3B8), width: 0.8),
-                                  color: Colors.white,
-                                ),
-                                child: Text(
-                                  d.notes.isNotEmpty
-                                      ? d.notes.map((n) => "• $n").join("\n")
-                                      : "• Standard residency terms apply. Routine inspection scheduled in coordination with tenant.\n• Emergency numbers: +91 97840 70543 | Founder Ajay Singh",
-                                  style: GoogleFonts.roboto(fontSize: 11.5, color: const Color(0xFF0F172A)),
-                                ),
                               ),
                               const SizedBox(height: 28),
 
@@ -782,7 +770,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                               _buildParagraph(
                                 "D.1 I confirm that I am legally permitted and eligible to execute this Agreement, either personally or through my parent/legal guardian, and that the particulars fetched from my onboarding profile on the App are true and accurate to the best of my knowledge; I have not wilfully suppressed any material fact, and I understand that any misrepresentation may render me ineligible for accommodation.\n\n"
                                 "D.2 I undertake to submit valid KYC documents (Government ID and College ID, as recorded in the app) to the Owner through the App on or before moving into the Premises, and to provide full cooperation and documentation for any police verification, tenant registration, or similar process required by the Owner or applicable law.\n\n"
-                                "D.3 I undertake not to disclose the commercial terms of this Agreement, including the information at Schedule A, B, and C, to any third party other than my parent/guardian or as required by law, in accordance with Clause 22.5.\n\n"
+                                "D.3 I undertake not to disclose the commercial terms of this Agreement, including the information at Schedule A, D, to any third party other than my parent/guardian or as required by law, in accordance with Clause 22.5.\n\n"
                                 "D.4 I have read and understood this Agreement in full, including Clause 10 (Prohibited Activities and Strict Conduct Rules) and Clause 13 (Owner's Rights and Remedies). I understand and agree that engaging in property damage, drug/narcotic-related activity, any activity endangering a Minor, unauthorised commercial/business use of the Premises, housing any unauthorised person for a prolonged period without prior disclosure and consent, exceeding the occupancy limits at Clause 8.4, or misuse of the App, shall constitute a serious breach of this Agreement.\n\n"
                                 "D.5 I understand that the Owner has the full right, without limitation, to terminate this Agreement, forfeit the Security Deposit and Booking Amount to the extent described in Clauses 5.8, 16.3 and 18, evict me in accordance with law, lodge a police complaint, and/or escalate the matter to any higher civil, criminal, or regulatory authority, and I accept full legal responsibility for any consequence arising from such breach.\n\n"
                                 "D.6 I confirm that I have read and understood Clause 20.4 (Self-Harm and Personal Safety) and Clause 19.2 (Limitation of Liability) of this Agreement.",
@@ -918,53 +906,17 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                                 ),
                               ),
 
-                              const SizedBox(height: 28),
-
-                              // Parent / Guardian info
-                              Text(
-                                "(If Tenant is a Minor) Signature of Parent / Legal Guardian, consenting to and countersigning this Agreement:",
-                                style: GoogleFonts.roboto(fontSize: 11, fontStyle: FontStyle.italic),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                "Signature of Parent / Guardian: _________________________________________________",
-                                style: GoogleFonts.roboto(fontSize: 11.5),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "Name: ${d.guardianName.isNotEmpty ? d.guardianName : '_________________________________________________'}",
-                                style: GoogleFonts.roboto(fontSize: 11.5),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "Relationship to Tenant: ${d.guardianRelationship.isNotEmpty ? d.guardianRelationship : '_________________________________________________'}",
-                                style: GoogleFonts.roboto(fontSize: 11.5),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "Contact Number: ${d.guardianPhone.isNotEmpty ? d.guardianPhone : '_________________________________________________'}",
-                                style: GoogleFonts.roboto(fontSize: 11.5),
-                              ),
-
                               const SizedBox(height: 24),
 
-                              // Witnesses
-                              Container(
-                                key: _getKey("witnesses"),
-                                child: Text(
-                                  "Witnesses",
-                                  style: GoogleFonts.roboto(fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
+                              // Guardian & Witnesses summary line (Matching PDF Page 23)
+                              Text(
+                                "(If Minor) Parent / Guardian: ${d.guardianName.isNotEmpty ? d.guardianName : 'N/A'} (${d.guardianRelationship})  |  Phone: ${d.guardianPhone.isNotEmpty ? d.guardianPhone : 'N/A'}",
+                                style: GoogleFonts.roboto(fontSize: 11, fontStyle: FontStyle.italic, color: const Color(0xFF475569)),
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                "Witness 1 — Digital System Audit Verification (Lakshya Residency App Platform Engine)",
-                                style: GoogleFonts.roboto(fontSize: 11.5),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "Witness 2 — Resident Warden Desk, Jaipur",
-                                style: GoogleFonts.roboto(fontSize: 11.5),
+                                "Witnesses: Witness 1 — Digital System Audit Verification (Lakshya Residency App Platform Engine)  |  Witness 2 — Resident Warden Desk, Jaipur",
+                                style: GoogleFonts.roboto(fontSize: 11, color: const Color(0xFF475569)),
                               ),
 
                               const SizedBox(height: 28),
@@ -983,8 +935,8 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                           ),
                         ),
 
-                        // FOOTER UI (Page 20 of 20)
-                        _buildExactPdfFooter(20),
+                        // FOOTER UI (Page 23 of 23)
+                        _buildExactPdfFooter(23),
                         const SizedBox(height: 16),
 
                         // Agreement Confirmation Checkbox
@@ -1059,12 +1011,12 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                 ),
               ),
               Positioned(
-                left: 55.0 * scale,
-                top: 48.0 * scale,
-                width: 95.0 * scale,
-                height: 56.0 * scale,
+                left: 12.0 * scale,
+                top: 28.0 * scale,
+                width: 145.0 * scale,
+                height: 36.0 * scale,
                 child: Image.asset(
-                  'assets/images/lakshya_logo.jpg',
+                  'assets/images/lakshya_logo.png',
                   fit: BoxFit.contain,
                   alignment: Alignment.centerLeft,
                   errorBuilder: (context, error, stackTrace) => Column(
@@ -1250,7 +1202,7 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
                 right: (595.32 - 523.4) * scale,
                 bottom: 34.0 * scale,
                 child: Text(
-                  "Page $pageNum of 20",
+                  "Page $pageNum of 23",
                   style: GoogleFonts.roboto(
                     fontSize: 9.5 * scale,
                     fontStyle: FontStyle.italic,
@@ -1322,52 +1274,53 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
   Widget _buildTableOfContents() {
     final items = [
       ("TABLE OF CONTENTS", "2", "toc", false),
-      ("1. Parties and Recitals", "3", "section_1", false),
-      ("   Recitals", "3", "section_1_recitals", true),
-      ("2. Nature of Agreement", "3", "section_2", false),
-      ("3. Definitions and Interpretation", "4", "section_3", false),
-      ("4. Term, Lock-In Period and Renewal", "4", "section_4", false),
-      ("5. Booking, Rent, Deposits and Payment Terms", "5", "section_5", false),
-      ("6. Package-Based Facilities (Optional Value-Added Services)", "7", "section_6", false),
-      ("   6.A Meals", "7", "section_6_a", true),
-      ("   6.B Pick-up and Drop to College/Institute", "7", "section_6_b", true),
+      ("1. Parties and Recitals", "4", "section_1", false),
+      ("   Recitals", "4", "section_1_recitals", true),
+      ("2. Nature of Agreement", "4", "section_2", false),
+      ("3. Definitions and Interpretation", "5", "section_3", false),
+      ("4. Term, Lock-In Period and Renewal", "5", "section_4", false),
+      ("5. Booking, Rent, Deposits and Payment Terms", "6", "section_5", false),
+      ("6. Package-Based Facilities (Optional Value-Added Services)", "8", "section_6", false),
+      ("   6.A Meals", "8", "section_6_a", true),
+      ("   6.B Pick-up and Drop to College/Institute", "8", "section_6_b", true),
       ("   6.C Laundry and Cleaning", "8", "section_6_c", true),
       ("   6.D Wi-Fi / Internet Access", "8", "section_6_d", true),
-      ("   6.E General Terms Applicable to All Package Facilities", "8", "section_6_e", true),
-      ("7. Utilities and Common Area Charges", "8", "section_7", false),
+      ("   6.E General Terms Applicable to All Package Facilities", "9", "section_6_e", true),
+      ("7. Utilities and Common Area Charges", "9", "section_7", false),
       ("8. Permitted Use of Premises and Occupancy Limits", "9", "section_8", false),
-      ("9. Tenant's General Obligations", "9", "section_9", false),
-      ("10. Prohibited Activities and Strict Conduct Rules", "10", "section_10", false),
-      ("   10.1 Damage to Property", "10", "section_10_1", true),
-      ("   10.2 Drugs, Narcotics and Substance Abuse", "10", "section_10_2", true),
-      ("   10.3 Activities Involving Minors", "10", "section_10_3", true),
-      ("   10.4 Commercial, Business or Unlawful Trade Activity", "10", "section_10_4", true),
-      ("   10.5 Unauthorised Occupants, Subletting and Relocation", "11", "section_10_5", true),
-      ("   10.6 Mobile Application — Acceptable Use Policy", "11", "section_10_6", true),
-      ("   10.7 General Nuisance, Safety and Miscellaneous Prohibitions", "11", "section_10_7", true),
-      ("   10.8 Fights and Disputes Among Residents", "11", "section_10_8", true),
-      ("11. House Rules — Curfew, Outings and Visitor Policy", "12", "section_11", false),
-      ("12. Co-Habitation / Live-in Arrangements", "12", "section_12", false),
-      ("13. Owner's Rights and Remedies on Breach", "13", "section_13", false),
-      ("14. Inspection, Entry and Room Reallocation", "13", "section_14", false),
-      ("15. Maintenance, Repairs and Damage Liability", "14", "section_15", false),
-      ("16. Security Deposit and Advance Charges — Deductions and Refund", "14", "section_16", false),
-      ("17. Termination of Residency", "14", "section_17", false),
-      ("18. Consequences of Termination for Cause", "15", "section_18", false),
-      ("19. Indemnity and Limitation of Liability", "15", "section_19", false),
-      ("20. Health, Safety, Emergency and Personal Well-Being", "15", "section_20", false),
-      ("21. Force Majeure", "15", "section_21", false),
-      ("22. Confidentiality, Data Privacy and Promotional Use", "16", "section_22", false),
-      ("23. Dispute Resolution and Governing Law", "16", "section_23", false),
-      ("24. General / Miscellaneous Provisions", "16", "section_24", false),
-      ("SCHEDULE A — Student Onboarding & Property Details", "17", "schedule_a", false),
-      ("SCHEDULE B — Rent, Deposit and Payment Details", "18", "schedule_b", false),
-      ("SCHEDULE C — Package-Based Facilities Opted", "18", "schedule_c", false),
-      ("SCHEDULE D — Furniture, Inventory and House Rules Acknowledgement", "19", "schedule_d", false),
-      ("SCHEDULE E — Owner's Notes", "19", "schedule_e", false),
-      ("ANNEXURE I — CO-HABITATION / LIVE-IN CONSENT FORM", "19", "annexure_1", false),
-      ("TENANT'S DECLARATION & NOTICE", "20", "declaration", false),
-      ("SIGNATURES & WITNESSES", "20", "signatures", false),
+      ("9. Tenant's General Obligations", "11", "section_9", false),
+      ("10. Prohibited Activities and Strict Conduct Rules", "11", "section_10", false),
+      ("   10.1 Damage to Property", "11", "section_10_1", true),
+      ("   10.2 Drugs, Narcotics and Substance Abuse", "12", "section_10_2", true),
+      ("   10.3 Activities Involving Minors", "12", "section_10_3", true),
+      ("   10.4 Commercial, Business or Unlawful Trade Activity", "12", "section_10_4", true),
+      ("   10.5 Unauthorised Occupants, Subletting and Relocation of Third Parties", "13", "section_10_5", true),
+      ("   10.6 Mobile Application — Acceptable Use Policy", "13", "section_10_6", true),
+      ("   10.7 General Nuisance, Safety and Miscellaneous Prohibitions", "13", "section_10_7", true),
+      ("   10.8 Fights and Disputes Among Residents", "14", "section_10_8", true),
+      ("11. House Rules — Curfew, Outings and Visitor Policy", "14", "section_11", false),
+      ("12. Co-Habitation / Live-in Arrangements", "15", "section_12", false),
+      ("13. Owner's Rights and Remedies on Breach", "15", "section_13", false),
+      ("14. Inspection, Entry and Room Reallocation", "16", "section_14", false),
+      ("15. Maintenance, Repairs and Damage Liability", "16", "section_15", false),
+      ("16. Security Deposit and Advance Charges — Deductions and Refund", "16", "section_16", false),
+      ("17. Termination of Agreement", "17", "section_17", false),
+      ("18. Consequences of Termination for Cause", "17", "section_18", false),
+      ("19. Indemnity and Limitation of Liability", "18", "section_19", false),
+      ("20. Health, Safety, Emergency and Personal Well-Being", "18", "section_20", false),
+      ("21. Force Majeure", "19", "section_21", false),
+      ("22. Confidentiality, Data Privacy and Promotional Use", "19", "section_22", false),
+      ("23. Dispute Resolution and Governing Law", "19", "section_23", false),
+      ("24. General / Miscellaneous Provisions", "19", "section_24", false),
+      ("SCHEDULE A — Student Onboarding & Property Details", "21", "schedule_a", false),
+      ("SCHEDULE D — Furniture, Inventory and House Rules Acknowledgement", "21", "schedule_d", false),
+      ("ANNEXURE I — CO-HABITATION / LIVE-IN CONSENT FORM", "22", "annexure_1", false),
+      ("   Resident 1", "22", "annexure_1", true),
+      ("   Resident 2", "22", "annexure_1", true),
+      ("   Acknowledged by Owner / Warden", "22", "annexure_1", true),
+      ("TENANT'S DECLARATION", "22", "declaration", false),
+      ("SIGNATURES", "23", "signatures", false),
+      ("   Witnesses", "23", "signatures", true),
     ];
 
     return Container(
@@ -1565,32 +1518,6 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
   // ==========================================================================
   // PACKAGE FACILITIES TABLE (2 COLUMNS MATCHING TEMPLATE)
   // ==========================================================================
-  Widget _buildPackageFacilitiesTable(RentalAgreementData d) {
-    final isPkg = d.plan.toLowerCase().contains("package");
-    return Table(
-      border: TableBorder.all(color: const Color(0xFF94A3B8), width: 0.8),
-      columnWidths: const {
-        0: FlexColumnWidth(2.2),
-        1: FlexColumnWidth(1.0),
-      },
-      children: [
-        TableRow(
-          decoration: const BoxDecoration(color: Color(0xFF1F3864)),
-          children: [
-            _buildTh("Package Facility"),
-            _buildTh("Included? (Y/N)"),
-          ],
-        ),
-        _build2ColPkgRow("Room / Flat Rent (Base)", "Y"),
-        _build2ColPkgRow("Meals (Breakfast, Lunch, Dinner)", isPkg ? "Y" : "N"),
-        _build2ColPkgRow("Pick-up & Drop to College/Institute", isPkg ? "Y" : "N"),
-        _build2ColPkgRow("Laundry Service", isPkg ? "Y" : "N"),
-        _build2ColPkgRow("Room / Common Area Cleaning", "Y"),
-        _build2ColPkgRow("Wi-Fi / Internet Access", "Y"),
-      ],
-    );
-  }
-
   Widget _buildTh(String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -1602,21 +1529,6 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
           color: Colors.white,
         ),
       ),
-    );
-  }
-
-  TableRow _build2ColPkgRow(String col1, String col2) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          child: Text(col1, style: GoogleFonts.roboto(fontSize: 10.5)),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          child: Text(col2, style: GoogleFonts.roboto(fontSize: 10.5, fontWeight: FontWeight.w600)),
-        ),
-      ],
     );
   }
 
@@ -1682,78 +1594,6 @@ class _RentalAgreementDialogState extends State<RentalAgreementDialog> {
         _buildPdfTableRow("Guardian's Phone Number", d.guardianPhone.isNotEmpty ? d.guardianPhone : "N/A"),
         _buildPdfTableRow("Vegetarian / Non-Vegetarian Preference", d.dietaryPreference),
         _buildPdfTableRow("Home Town Address", d.hometownAddress.isNotEmpty ? d.hometownAddress : "On file in App Profile"),
-      ],
-    );
-  }
-
-  Widget _buildScheduleBTable(RentalAgreementData d) {
-    String instSummary = "As scheduled on App (${d.installmentsCount} installments)";
-    if (d.installments.isNotEmpty) {
-      instSummary = d.installments.map((e) => "${e['title']}: Rs. ${e['amount']} (${e['dueDate']})").join("\n");
-    }
-
-    return Table(
-      border: TableBorder.all(color: const Color(0xFF94A3B8), width: 0.8),
-      columnWidths: const {
-        0: FlexColumnWidth(1.4),
-        1: FlexColumnWidth(2.2),
-      },
-      children: [
-        _buildPdfTableRow("Booking Amount (Non-Refundable)", "Rs. 0 / Included in Deposit"),
-        _buildPdfTableRow("Monthly Rent", "Rs. ${d.monthlyRent}"),
-        _buildPdfTableRow("Security Deposit (Non-refundable on early exit)", "Rs. ${d.securityDeposit}"),
-        _buildPdfTableRow("Basis of Stay", "Plan: ${d.plan} (Rental Term: ${d.rentalTerm})"),
-        _buildPdfTableRow("Payment Plan Selected", "${d.paymentFrequency} (Number of Installments: ${d.installmentsCount})"),
-        _buildPdfTableRow("Installment Amounts & Due Dates", instSummary),
-        _buildPdfTableRow("Rent Due Date (if monthly)", "1st of every month (1st month on date of joining)"),
-        _buildPdfTableRow("Late Payment Charge", "Rs. 100 per day, chargeable from the 4th day after due date"),
-        _buildPdfTableRow("Electricity Charges", "Rs. 12 per unit as per meter reading (shared equally in room)"),
-        _buildPdfTableRow("Common Maintenance Charges", "Charged separately as per actuals (Clause 7.2)"),
-        _buildPdfTableRow("Academic Session / Lock-in Period", "Plan: ${d.plan} | Rental Term: ${d.rentalTerm} | Duration: ${d.termMonths} Months (${d.commencementDate} to ${d.endingDate})"),
-        _buildPdfTableRow("Summer / Winter Break Charges", "Additional, as per monthly Rent (not applicable to exclusive break terms) - Clause 5.14"),
-        _buildPdfTableRow("Notice Period for Termination", "As per Clause 17"),
-        _buildPdfTableRow("Deposit Refund Timeline", "Upon completion of full Lock-in Period as per Clause 16.2"),
-        _buildPdfTableRow("All Payments Payable To", "Bank Account Number and UPI ID displayed on the App ONLY — see Clause 5.11"),
-      ],
-    );
-  }
-
-  Widget _buildScheduleCTable(RentalAgreementData d) {
-    final bool isPkg = d.plan.toLowerCase().contains("package");
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Table(
-          border: TableBorder.all(color: const Color(0xFF94A3B8), width: 0.8),
-          columnWidths: const {
-            0: FlexColumnWidth(2.2),
-            1: FlexColumnWidth(1.0),
-          },
-          children: [
-            TableRow(
-              decoration: const BoxDecoration(color: Color(0xFF1F3864)),
-              children: [
-                _buildTh("Package Facility"),
-                _buildTh("Included? (Y/N)"),
-              ],
-            ),
-            _build2ColPkgRow("Room / Flat Rent (Base)", "Y"),
-            _build2ColPkgRow("Meals (Breakfast, Lunch, Dinner)", isPkg ? "Y" : "N"),
-            _build2ColPkgRow("Pick-up & Drop to College/Institute", isPkg ? "Y" : "N"),
-            _build2ColPkgRow("Laundry Service", isPkg ? "Y" : "N"),
-            _build2ColPkgRow("Room / Common Area Cleaning", "Y"),
-            _build2ColPkgRow("Wi-Fi / Internet Access", "Y"),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          "Total Monthly / Installment Payable: Rs. ${d.monthlyRent} as fixed on the App under the chosen Payment Plan.",
-          style: GoogleFonts.roboto(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFF0056D2),
-          ),
-        ),
       ],
     );
   }

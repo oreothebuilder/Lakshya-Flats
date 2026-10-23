@@ -2993,6 +2993,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         Row(
           children: [
             Expanded(
+              flex: 2,
               child: SizedBox(
                 height: 52,
                 child: OutlinedButton.icon(
@@ -3004,6 +3005,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   icon: const Icon(Icons.arrow_back_rounded, size: 18),
                   label: Text(
                     "Back",
+                    maxLines: 1,
+                    softWrap: false,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -3011,6 +3014,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     side: const BorderSide(color: Color(0xFF0056D2), width: 1.5),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -3021,7 +3025,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              flex: 2,
+              flex: 3,
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton(
@@ -3051,6 +3055,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     });
                   },
                   style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     backgroundColor: const Color(0xFF0056D2),
                     foregroundColor: Colors.white,
                     elevation: 0,
@@ -3063,8 +3068,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     children: [
                       Text(
                         "Next Step",
+                        maxLines: 1,
+                        softWrap: false,
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -3637,33 +3644,6 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Lock-in Period",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _getLockInPeriod(),
-                      textAlign: TextAlign.right,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0F172A),
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
@@ -3672,6 +3652,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         Row(
           children: [
             Expanded(
+              flex: 2,
               child: SizedBox(
                 height: 52,
                 child: OutlinedButton.icon(
@@ -3683,6 +3664,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   icon: const Icon(Icons.arrow_back_rounded, size: 18),
                   label: Text(
                     "Back",
+                    maxLines: 1,
+                    softWrap: false,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -3690,6 +3673,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     side: const BorderSide(color: Color(0xFF0056D2), width: 1.5),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -3700,7 +3684,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              flex: 2,
+              flex: 3,
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton(
@@ -3740,6 +3724,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     });
                   },
                   style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     backgroundColor: const Color(0xFF0056D2),
                     foregroundColor: Colors.white,
                     elevation: 0,
@@ -3752,8 +3737,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     children: [
                       Text(
                         "Next Step",
+                        maxLines: 1,
+                        softWrap: false,
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -4306,6 +4293,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
         Row(
           children: [
             Expanded(
+              flex: 2,
               child: SizedBox(
                 height: 52,
                 child: OutlinedButton.icon(
@@ -4317,6 +4305,8 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   icon: const Icon(Icons.arrow_back_rounded, size: 18),
                   label: Text(
                     "Back",
+                    maxLines: 1,
+                    softWrap: false,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -4324,6 +4314,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     side: const BorderSide(color: Color(0xFF0056D2), width: 1.5),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -4334,7 +4325,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              flex: 2,
+              flex: 3,
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton(
@@ -4353,6 +4344,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     });
                   },
                   style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     backgroundColor: const Color(0xFF0056D2),
                     foregroundColor: Colors.white,
                     elevation: 0,
@@ -4365,8 +4357,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                     children: [
                       Text(
                         "Next Step",
+                        maxLines: 1,
+                        softWrap: false,
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
                       ),

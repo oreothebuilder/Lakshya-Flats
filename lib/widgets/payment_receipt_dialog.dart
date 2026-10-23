@@ -966,12 +966,12 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
 
               // 2. Lakshya Logo (Under curve on left)
               Positioned(
-                left: 55.0 * scale,
-                top: 48.0 * scale,
-                width: 95.0 * scale,
-                height: 56.0 * scale,
+                left: 12.0 * scale,
+                top: 28.0 * scale,
+                width: 145.0 * scale,
+                height: 36.0 * scale,
                 child: Image.asset(
-                  'assets/images/lakshya_logo.jpg',
+                  'assets/images/lakshya_logo.png',
                   fit: BoxFit.contain,
                   alignment: Alignment.centerLeft,
                   errorBuilder: (context, error, stackTrace) => Column(

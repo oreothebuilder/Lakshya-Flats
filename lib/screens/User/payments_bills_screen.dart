@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../models/bill_model.dart';
 import '../../models/user_role_model.dart';
 import '../../models/payment_details_model.dart';
@@ -1742,7 +1741,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
@@ -1772,28 +1771,38 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                                 children: [
                                   Row(
                                     children: [
-                                      Text(
-                                        "Official Payment Account",
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w800,
-                                          color: const Color(0xFF0F172A),
+                                      Flexible(
+                                        child: Text(
+                                          (payDetails.scope == 'building' && payDetails.buildingName != null)
+                                              ? "Payment Account"
+                                              : "Official Payment Account",
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: const Color(0xFF0F172A),
+                                          ),
                                         ),
                                       ),
                                       if (payDetails.scope == 'building' && payDetails.buildingName != null) ...[
                                         const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFEFF6FF),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            payDetails.buildingName!,
-                                            style: GoogleFonts.plusJakartaSans(
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.w700,
-                                              color: const Color(0xFF2563EB),
+                                        Flexible(
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEFF6FF),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              payDetails.buildingName!,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF2563EB),
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -1814,6 +1823,7 @@ class _PaymentsBillsScreenState extends State<PaymentsBillsScreen> {
                                 ],
                               ),
                             ),
+                            const SizedBox(width: 8),
                             if (canEdit) ...[
                               InkWell(
                                 onTap: () {

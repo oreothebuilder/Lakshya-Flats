@@ -101,7 +101,7 @@ class PaymentReceiptPdfService {
   /// Load the logo from assets
   static Future<Uint8List?> loadLogoAsset() async {
     try {
-      final ByteData byteData = await rootBundle.load('assets/images/lakshya_logo.jpg');
+      final ByteData byteData = await rootBundle.load('assets/images/lakshya_logo.png');
       return byteData.buffer.asUint8List();
     } catch (e) {
       debugPrint("Could not load logo asset: $e");
@@ -411,7 +411,7 @@ class PaymentReceiptPdfService {
 
     final List<String> terms = [
       "This official bill/receipt acknowledges charges for Lakshya Residency as recorded in the management system.",
-      "Defaulter charges or late payment penalties (if applicable) are levied in accordance with hostel policy.",
+      "Defaulter charges: 7-day grace period applies after due date; from Day 8, late fee is Rs. 100/day capped at Rs. 3,000/month (Rs. 6,000 for 30-60 days, Rs. 9,000 for 60-90 days).",
       "All online payments are subject to bank verification. Unsuccessful transactions shall render this receipt void.",
     ];
 
@@ -548,7 +548,7 @@ class PaymentReceiptPdfService {
 
     // 2. Lakshya Logo (Under the curve on the left)
     if (_cachedLogoBitmap != null) {
-      page.graphics.drawImage(_cachedLogoBitmap!, const Rect.fromLTWH(24.75, 20.3, 82.2, 50.4));
+      page.graphics.drawImage(_cachedLogoBitmap!, const Rect.fromLTWH(12, 28, 145, 36));
     } else {
       page.graphics.drawString(
         "Lakshya",

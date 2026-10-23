@@ -1040,14 +1040,17 @@ class FirestoreService {
     if (!billDoc.exists) return;
 
     final billData = billDoc.data() as Map<String, dynamic>;
+    final b = BillModel.fromFirestore(billDoc);
+    final totalDue = b.totalPayable;
     final currentPaid = (billData['paidAmount'] as num?)?.toDouble() ?? 0.0;
-    final totalAmount = (billData['amount'] as num?)?.toDouble() ?? 0.0;
     final newPaid = currentPaid + paymentAmount;
-    final newStatus = newPaid >= totalAmount ? 'Paid' : 'Pending';
+    final newStatus = newPaid >= totalDue ? 'Paid' : 'Pending';
 
     // Update bill
     final updatePayload = <String, dynamic>{
       'paidAmount': newPaid,
+      'defaulterAmount': b.defaulterAmount,
+      'balance': (totalDue - newPaid).clamp(0.0, double.infinity),
       'status': newStatus,
       'lastPaymentAt': FieldValue.serverTimestamp(),
       'paymentMethod': paymentMode,
@@ -1357,8 +1360,9 @@ class FirestoreService {
     final doc = await _billsRef.doc(billId).get();
     if (!doc.exists) return '';
     final b = BillModel.fromFirestore(doc);
-    final actualPaid = paidAmount ?? b.amount;
-    final newBalance = (b.amount - actualPaid).clamp(0.0, double.infinity);
+    final totalDue = b.totalPayable;
+    final actualPaid = paidAmount ?? totalDue;
+    final newBalance = (totalDue - actualPaid).clamp(0.0, double.infinity);
     final isFullyPaid = newBalance == 0;
 
     // Guaranteed Unique Receipt Number: reuse existing if already assigned, otherwise generate new
@@ -1368,6 +1372,7 @@ class FirestoreService {
 
     final updatePayload = <String, dynamic>{
       'paidAmount': actualPaid,
+      'defaulterAmount': b.defaulterAmount,
       'balance': newBalance,
       'isPaid': isFullyPaid,
       'status': isFullyPaid ? 'Paid' : 'Partial',
