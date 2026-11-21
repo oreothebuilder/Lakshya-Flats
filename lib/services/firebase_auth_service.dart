@@ -88,7 +88,30 @@ class FirebaseAuthService {
         email: resolvedEmail,
         password: password.trim(),
       );
-    } on FirebaseAuthException catch (authError) {
+    } catch (rawError) {
+      FirebaseAuthException authError;
+      if (rawError is FirebaseAuthException) {
+        authError = rawError;
+      } else {
+        // Intercept known Flutter Web / firebase_auth_web bug (#18680) where web_utils.dart
+        // throws a TypeError ('minified:... is not a subtype of type ...') on auth error
+        final errStr = rawError.toString();
+        debugPrint("Captured web auth error: $rawError");
+        if (errStr.contains('subtype') ||
+            errStr.contains('minified') ||
+            errStr.contains('TypeError') ||
+            errStr.contains('INVALID_LOGIN_CREDENTIALS') ||
+            errStr.contains('invalid-credential') ||
+            errStr.contains('wrong-password') ||
+            errStr.contains('user-not-found')) {
+          authError = FirebaseAuthException(
+            code: 'invalid-credential',
+            message: "Incorrect password or credentials. Please try again.",
+          );
+        } else {
+          rethrow;
+        }
+      }
       // If primary admin and account doesn't exist in Firebase Auth yet, auto-provision on first setup
       if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) &&
           (authError.code == 'user-not-found' || authError.code == 'invalid-credential')) {
@@ -211,6 +234,13 @@ class FirebaseAuthService {
       debugPrint("Firebase Auth Sign In Exception (${e.code}): ${e.message}");
       rethrow;
     } catch (e) {
+      final errStr = e.toString();
+      if (errStr.contains('subtype') || errStr.contains('minified') || errStr.contains('TypeError')) {
+        throw FirebaseAuthException(
+          code: 'invalid-credential',
+          message: "Incorrect password or credentials. Please try again.",
+        );
+      }
       debugPrint("Generic Auth Sign In Exception: $e");
       rethrow;
     }
@@ -365,6 +395,9 @@ class FirebaseAuthService {
       }
     }
     String msg = error?.toString() ?? "An unexpected error occurred.";
+    if (msg.contains("subtype") || msg.contains("minified") || msg.contains("TypeError")) {
+      return "Incorrect email or password. Please verify your credentials and try again.";
+    }
     if (msg.startsWith("Exception: ")) {
       msg = msg.substring("Exception: ".length);
     }
