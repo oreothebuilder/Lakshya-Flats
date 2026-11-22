@@ -123,7 +123,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      "Delete Account Request",
+                      "Delete Account",
                       style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.bold,
                         fontSize: 17,
@@ -138,58 +138,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFFBEB),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFFDE68A)),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              "Notice: Students cannot directly delete their account. Confirming this will forward a deletion request to the Hostel Administrator for review and directory removal.",
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
-                                color: const Color(0xFF92400E),
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
                     Text(
-                      "What happens next?",
+                      "Are you sure you want to delete your account? This action cannot be undone.",
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      "• Your request is placed in the Administrator's queue.\n"
-                      "• Administration will verify pending dues, room vacating status, and deposits.\n"
-                      "• The Administrator will permanently delete your resident record from the Student Directory.",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        color: const Color(0xFF64748B),
+                        color: const Color(0xFF475569),
                         height: 1.45,
                       ),
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      "Reason for Deletion (Optional)",
+                      "Reason for Deletion",
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF64748B),
+                        color: const Color(0xFF334155),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -198,7 +161,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       maxLines: 2,
                       enabled: !isSubmitting,
                       decoration: InputDecoration(
-                        hintText: "e.g. Vacating hostel, course finished, incorrect registration...",
+                        hintText: "e.g. Vacating hostel, course finished, etc.",
                         hintStyle: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF94A3B8)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
@@ -219,7 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 TextButton(
                   onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
                   child: Text(
-                    "Keep Account",
+                    "Cancel",
                     style: GoogleFonts.plusJakartaSans(
                       color: const Color(0xFF64748B),
                       fontWeight: FontWeight.bold,
@@ -269,7 +232,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (mounted) {
                               AppToast.showSuccess(
                                 context,
-                                "Account deletion request sent to administrator for review.",
+                                "Your account is sent for deletion.",
                               );
                             }
                           } catch (e) {
@@ -293,7 +256,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
                       : Text(
-                          "Submit Request",
+                          "Delete Account",
                           style: GoogleFonts.plusJakartaSans(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
@@ -1135,7 +1098,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "Deletion Request Pending Admin Review",
+                          "Account Sent for Deletion",
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 13.5,
                             fontWeight: FontWeight.bold,
@@ -1147,7 +1110,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "You have submitted a request to delete your student resident account. The administrator will review your clearance in the Student Directory and complete permanent deletion.",
+                    "Your account is sent for deletion. You can cancel this request anytime before the process completes.",
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 12,
                       color: const Color(0xFFB45309),
@@ -1215,7 +1178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              "Submit a request to the hostel administration to permanently remove your account and resident profile from the student directory.",
+              "Permanently delete your account and personal data from the system.",
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 12,
                 color: const Color(0xFF64748B),
@@ -1227,7 +1190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: _showDeleteAccountDialog,
               icon: const Icon(Icons.delete_forever_rounded, size: 16, color: Color(0xFFDC2626)),
               label: Text(
-                "Request Account Deletion",
+                "Delete Account",
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 12.5,
                   fontWeight: FontWeight.bold,
