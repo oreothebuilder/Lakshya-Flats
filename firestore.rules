@@ -229,7 +229,7 @@ service cloud.firestore {
 
     match /account_deletion_requests/{requestId} {
       allow read, create, update: if isAuthenticated();
-      allow delete: if isAdminOrManagement();
+      allow delete: if isOwner(requestId) || isAdminOrManagement();
     }
   }
 }
