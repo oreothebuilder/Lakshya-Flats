@@ -6,6 +6,11 @@ import '../student_onboarding_screen.dart';
 import '../mess_menu_management_screen.dart';
 import 'students_directory_screen.dart';
 import 'student_profile_detail_screen.dart';
+import 'device_sessions_screen.dart';
+import '../../services/session_management_service.dart';
+import '../../services/firebase_auth_service.dart';
+import '../../services/navigation_service.dart';
+import '../login_screen.dart';
 import 'broadcast_notification_screen.dart';
 import 'staff_screen.dart';
 import 'expense_tracker_screen.dart';
@@ -37,10 +42,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    final uid = widget.currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '';
+    if (uid.isNotEmpty) {
+      SessionManagementService().registerCurrentSession(uid);
+      SessionManagementService().listenToSessionRevocation(uid, onForceLogout: () {
+        if (!mounted) return;
+        final nav = rootNavigatorKey.currentState;
+        if (nav != null) {
+          nav.pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen(initialRole: LoginRole.manager)),
+            (_) => false,
+          );
+        }
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FirestoreService().syncAllRegistrationLookups();
       FirestoreService().cleanupDuplicateStudentProfiles();
     });
+  }
+
+  @override
+  void dispose() {
+    SessionManagementService().dispose();
+    super.dispose();
   }
 
   void _showSnackbar(String msg) {
@@ -192,6 +217,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: const Color(0xFF0F172A),
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.devices_rounded, color: Color(0xFF0F172A), size: 22),
+            tooltip: "Logged-in Devices",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DeviceSessionsScreen(currentUser: widget.currentUser),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

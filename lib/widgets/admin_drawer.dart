@@ -17,6 +17,8 @@ import '../screens/Admin/expense_tracker_screen.dart';
 import '../screens/Admin/personal_todo_screen.dart';
 import '../screens/Admin/staff_screen.dart';
 import '../services/academic_year_service.dart';
+import '../screens/Admin/device_sessions_screen.dart';
+import '../services/session_management_service.dart';
 import 'change_payment_details_dialog.dart';
 import 'app_toast.dart';
 
@@ -35,19 +37,205 @@ class AdminDrawer extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          "Log Out",
-          style: GoogleFonts.plusJakartaSans(
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
+        title: Row(
+          children: [
+            const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              "Log Out Options",
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+              ),
+            ),
+          ],
         ),
-        content: Text(
-          "Are you sure you want to log out of the admin panel?",
-          style: GoogleFonts.plusJakartaSans(
-            color: AppColors.textSecondary,
-            fontSize: 14,
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Choose your preferred sign-out option:",
+              style: GoogleFonts.plusJakartaSans(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 16),
+            InkWell(
+              onTap: () async {
+                Navigator.pop(dialogContext);
+                try {
+                  await FirebaseAuthService().signOut();
+                } catch (e) {
+                  debugPrint("Admin logout error: $e");
+                }
+                final nav = rootNavigatorKey.currentState;
+                if (nav != null) {
+                  nav.pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
+                    ),
+                    (route) => false,
+                  );
+                } else if (context.mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
+                    ),
+                    (route) => false,
+                  );
+                }
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.phone_iphone_rounded, color: Color(0xFF0D52CE), size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Log Out of This Device",
+                            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          Text(
+                            "Only signs out on this device",
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            InkWell(
+              onTap: () async {
+                Navigator.pop(dialogContext);
+                final uid = currentUser?.uid ?? FirebaseAuthService().currentUser?.uid ?? '';
+                try {
+                  if (uid.isNotEmpty) {
+                    await SessionManagementService().logoutAllDevices(uid);
+                  } else {
+                    await FirebaseAuthService().signOut();
+                  }
+                } catch (e) {
+                  debugPrint("Admin logout all error: $e");
+                }
+                final nav = rootNavigatorKey.currentState;
+                if (nav != null) {
+                  nav.pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
+                    ),
+                    (route) => false,
+                  );
+                } else if (context.mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
+                    ),
+                    (route) => false,
+                  );
+                }
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFECACA)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.power_settings_new_rounded, color: Color(0xFFDC2626), size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Log Out of All Devices",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: const Color(0xFF991B1B),
+                            ),
+                          ),
+                          Text(
+                            "Signs out on all phones, tablets, and computers",
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFFB91C1C)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded, color: Color(0xFFEF4444)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            InkWell(
+              onTap: () {
+                Navigator.pop(dialogContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DeviceSessionsScreen(currentUser: currentUser),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.devices_rounded, color: Color(0xFF003896), size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Manage Logged-in Devices",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: const Color(0xFF003896),
+                            ),
+                          ),
+                          Text(
+                            "See all active sessions and locations",
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF1D4ED8)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded, color: Color(0xFF3B82F6)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -58,45 +246,6 @@ class AdminDrawer extends StatelessWidget {
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w600,
               ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              try {
-                await FirebaseAuthService().signOut();
-              } catch (e) {
-                debugPrint("Admin logout error: $e");
-              }
-              final nav = rootNavigatorKey.currentState;
-              if (nav != null) {
-                nav.pushAndRemoveUntil(
-                  MaterialPageRoute(
-                    builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
-                  ),
-                  (route) => false,
-                );
-              } else if (context.mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const LoginScreen(initialRole: LoginRole.manager),
-                  ),
-                  (route) => false,
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: Text(
-              "Log Out",
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -450,6 +599,24 @@ class AdminDrawer extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (context) => const StudentsDirectoryScreen(),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 4),
+                _buildDrawerItem(
+                  context: context,
+                  icon: Icons.devices_rounded,
+                  title: "Logged-in Devices",
+                  isSelected: activeItem == "Logged-in Devices",
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (activeItem != "Logged-in Devices") {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DeviceSessionsScreen(currentUser: currentUser),
                         ),
                       );
                     }

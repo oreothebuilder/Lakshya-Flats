@@ -93,6 +93,9 @@ service cloud.firestore {
                               )) ||
                               isAdminOrManagement();
       }
+      match /active_sessions/{sessionId} {
+        allow read, write, delete: if isOwner(userId) || isAdminOrManagement();
+      }
     }
 
     // Students collection fallback
