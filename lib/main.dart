@@ -20,7 +20,12 @@ void main() async {
 
   // Initialize Firebase with configured platform options
   try {
-    if (Firebase.apps.isEmpty) {
+    bool isInit = false;
+    try {
+      if (Firebase.apps.isNotEmpty) isInit = true;
+    } catch (_) {}
+
+    if (!isInit) {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );

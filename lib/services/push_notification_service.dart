@@ -13,9 +13,7 @@ import 'package:googleapis_auth/auth_io.dart' as auth;
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp();
-    }
+    await Firebase.initializeApp();
   } catch (e) {
     debugPrint("Background Firebase init note: $e");
   }
@@ -36,11 +34,12 @@ class PushNotificationService {
   FirebaseMessaging? _fcmInstance;
   FirebaseMessaging get _fcm {
     if (_fcmInstance != null) return _fcmInstance!;
-    if (Firebase.apps.isNotEmpty) {
+    try {
       _fcmInstance = FirebaseMessaging.instance;
       return _fcmInstance!;
+    } catch (_) {
+      throw StateError("Firebase must be initialized before accessing FirebaseMessaging");
     }
-    throw StateError("Firebase must be initialized before accessing FirebaseMessaging");
   }
 
   final FlutterLocalNotificationsPlugin _localNotifications =
@@ -71,10 +70,6 @@ class PushNotificationService {
     if (kIsWeb) return;
 
     try {
-      if (Firebase.apps.isEmpty) {
-        debugPrint("PushNotificationService: Firebase not initialized yet, skipping init.");
-        return;
-      }
 
       // 1. Request OS-level notification permissions (Android 13+ & iOS)
       final settings = await _fcm.requestPermission(
@@ -200,7 +195,6 @@ class PushNotificationService {
     String? studentId,
   }) async {
     if (kIsWeb) return;
-    if (Firebase.apps.isEmpty) return;
 
     try {
       final token = await _fcm.getToken();
@@ -249,8 +243,6 @@ class PushNotificationService {
 
   /// Unsubscribe topics upon logout
   Future<void> unregisterUser(String uid) async {
-    if (Firebase.apps.isEmpty) return;
-
     try {
       if (_currentFcmToken != null) {
         final userDocRef = FirebaseFirestore.instance.collection('users').doc(uid);

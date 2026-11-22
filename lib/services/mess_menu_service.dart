@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import '../models/mess_menu_model.dart';
 
 class MessMenuService extends ChangeNotifier {
@@ -34,10 +33,6 @@ class MessMenuService extends ChangeNotifier {
 
   void _listenToFirestore() {
     if (_isListening) return;
-    if (Firebase.apps.isEmpty) {
-      // Firebase not initialized (e.g. in test environment)
-      return;
-    }
     _isListening = true;
     try {
       FirebaseFirestore.instance.collection('mess_menus').snapshots().listen((snapshot) {
@@ -93,7 +88,6 @@ class MessMenuService extends ChangeNotifier {
 
   Future<void> _saveScheduleToFirestore(String messName) async {
     try {
-      if (Firebase.apps.isEmpty) return;
       final schedule = _schedules[messName];
       if (schedule != null) {
         await FirebaseFirestore.instance

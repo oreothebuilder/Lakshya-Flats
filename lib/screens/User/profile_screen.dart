@@ -466,17 +466,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _uploadAddLaterDoc({
-    required String title,
-    required String docKey,
-    required String addLaterKey,
-  }) async {
-    await _uploadOrReplaceDocument(
-      title: title,
-      docKey: docKey,
-      addLaterKey: addLaterKey,
-    );
-  }
 
   void _openAddNewDocumentDialog() {
     final nameCtrl = TextEditingController();

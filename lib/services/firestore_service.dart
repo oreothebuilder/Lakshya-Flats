@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/student_profile_model.dart';
@@ -1913,9 +1912,6 @@ class FirestoreService {
     String? regNo,
     DateTime? userCreatedAt,
   }) {
-    if (Firebase.apps.isEmpty) {
-      return Stream.value(<Map<String, dynamic>>[]);
-    }
     late StreamController<List<Map<String, dynamic>>> controller;
     StreamSubscription? personalSub;
     StreamSubscription? broadcastSub;
