@@ -1178,17 +1178,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: SizedBox(
                     height: 105,
                     width: double.infinity,
-                    child: building.hasRemoteImage
-                        ? Image.network(
-                            building.imageUrl!,
+                    child: Builder(
+                      builder: (context) {
+                        final remoteUrl = building.imageUrl;
+                        if (remoteUrl != null && remoteUrl.trim().isNotEmpty) {
+                          return Image.network(
+                            remoteUrl,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) => _buildBuildingFallback(),
-                          )
-                        : Image.asset(
-                            building.imageAsset,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => _buildBuildingFallback(),
-                          ),
+                          );
+                        }
+                        final asset = building.imageAsset;
+                        return Image.asset(
+                          asset.isNotEmpty ? asset : 'assets/buildings/Lakshya.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => _buildBuildingFallback(),
+                        );
+                      },
+                    ),
                   ),
                 ),
                 Positioned(

@@ -1,5 +1,5 @@
 // Lakshya Residency PWA Service Worker
-const CACHE_NAME = 'lakshya-pwa-v4';
+const CACHE_NAME = 'lakshya-pwa-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

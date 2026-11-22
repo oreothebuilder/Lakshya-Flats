@@ -156,11 +156,11 @@ class MessMenuService extends ChangeNotifier {
 
     // Check dynamic mapping from buildings collection first
     if (_buildingMessMap.containsKey(b)) {
-      final assigned = _buildingMessMap[b]!;
-      if (assigned.isNotEmpty && assigned.toLowerCase() != 'no mess') {
+      final assigned = _buildingMessMap[b];
+      if (assigned != null && assigned.isNotEmpty && assigned.toLowerCase() != 'no mess') {
         return assigned;
       }
-      if (assigned.toLowerCase() == 'no mess') return "No Mess";
+      if (assigned?.toLowerCase() == 'no mess') return "No Mess";
     }
     for (final entry in _buildingMessMap.entries) {
       if (entry.key.toLowerCase() == b.toLowerCase()) {

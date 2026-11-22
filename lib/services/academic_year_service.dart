@@ -58,10 +58,10 @@ class AcademicYearService {
 
   Stream<List<String>> getAcademicYearsStream() {
     return _db.collection('system_config').doc(_configDoc).snapshots().map((snap) {
-      if (!snap.exists || snap.data() == null) {
+      final data = snap.data();
+      if (!snap.exists || data == null) {
         return [defaultYear];
       }
-      final data = snap.data()!;
       final list = (data['years'] as List?)
               ?.map((e) => e.toString().trim())
               .where((e) => e.isNotEmpty)
@@ -79,8 +79,9 @@ class AcademicYearService {
   Future<List<String>> getAcademicYears() async {
     try {
       final snap = await _db.collection('system_config').doc(_configDoc).get();
-      if (snap.exists && snap.data() != null) {
-        final list = (snap.data()!['years'] as List?)
+      final data = snap.data();
+      if (snap.exists && data != null) {
+        final list = (data['years'] as List?)
                 ?.map((e) => e.toString().trim())
                 .where((e) => e.isNotEmpty)
                 .toSet()

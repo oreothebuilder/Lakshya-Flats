@@ -123,6 +123,25 @@ void main() async {
                       color: const Color(0xFFB91C1C),
                     ),
                   ),
+                  if (details.stack != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        details.stack.toString().split('\n').take(8).join('\n'),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
                     onPressed: () {

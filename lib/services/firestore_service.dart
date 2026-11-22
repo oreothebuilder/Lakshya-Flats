@@ -874,15 +874,19 @@ class FirestoreService {
           if (!uniqueStudents.containsKey(key)) {
             uniqueStudents[key] = profile;
           } else {
-            final existing = uniqueStudents[key]!;
-            final isCurrentCanonical = profile.id == profile.studentId;
-            final isExistingCanonical = existing.id == existing.studentId;
+            final existing = uniqueStudents[key];
+            if (existing != null) {
+              final isCurrentCanonical = profile.id == profile.studentId;
+              final isExistingCanonical = existing.id == existing.studentId;
 
-            // Prefer the canonical document where doc.id matches studentId, or richer data
-            if (isCurrentCanonical && !isExistingCanonical) {
-              uniqueStudents[key] = profile;
-            } else if (!isExistingCanonical &&
-                (profile.guardianName.isNotEmpty || profile.rentAgreementUrl != null)) {
+              // Prefer the canonical document where doc.id matches studentId, or richer data
+              if (isCurrentCanonical && !isExistingCanonical) {
+                uniqueStudents[key] = profile;
+              } else if (!isExistingCanonical &&
+                  (profile.guardianName.isNotEmpty || profile.rentAgreementUrl != null)) {
+                uniqueStudents[key] = profile;
+              }
+            } else {
               uniqueStudents[key] = profile;
             }
           }
@@ -2426,15 +2430,18 @@ class FirestoreService {
       }
       Map<String, dynamic>? studentData;
 
+      bool hasStudentProfile(Map<String, dynamic>? data) {
+        if (data == null) return false;
+        return (data['fullName'] != null && data['fullName'].toString().trim().isNotEmpty) ||
+            (data['name'] != null && data['name'].toString().trim().isNotEmpty) ||
+            data['studentId'] != null ||
+            data['registrationNumber'] != null ||
+            data['regNo'] != null;
+      }
+
       if (userDoc != null && userDoc.exists && userDoc.data() != null) {
         final rawData = userDoc.data() as Map<String, dynamic>;
-        final hasProfileData = (rawData['fullName'] != null && rawData['fullName'].toString().trim().isNotEmpty) ||
-            (rawData['name'] != null && rawData['name'].toString().trim().isNotEmpty) ||
-            rawData['studentId'] != null ||
-            rawData['registrationNumber'] != null ||
-            rawData['regNo'] != null;
-
-        if (hasProfileData) {
+        if (hasStudentProfile(rawData)) {
           studentData = rawData;
         }
       }
@@ -2444,50 +2451,78 @@ class FirestoreService {
         try {
           final authQuery = await _usersRef.where('authUid', isEqualTo: uid).limit(1).get();
           if (authQuery.docs.isNotEmpty) {
-            studentData = authQuery.docs.first.data() as Map<String, dynamic>;
+            final qData = authQuery.docs.first.data() as Map<String, dynamic>;
+            if (hasStudentProfile(qData)) {
+              studentData = qData;
+            }
           }
         } catch (e) {
           debugPrint("getAppUser authUid query notice: $e");
         }
       }
 
-      // 2C. If still not found and emailHint provided, lookup student profile by email / regNo
-      if (studentData == null && emailHint != null && emailHint.isNotEmpty) {
-        final fullProfile = await findStudentByRegNoOrEmail(emailHint);
-        if (fullProfile != null) {
-          studentData = fullProfile;
-          final sId = fullProfile['studentId']?.toString();
-          if (sId != null && sId.isNotEmpty && sId != uid) {
-            try {
-              await _usersRef.doc(sId).set({'authUid': uid}, SetOptions(merge: true));
-            } catch (linkErr) {
-              debugPrint("getAppUser link sId notice: $linkErr");
-            }
+      // 2C. Check registration_lookup by email or uid to resolve canonical studentId
+      if (studentData == null) {
+        try {
+          Map<String, dynamic>? lookup;
+          if (emailHint != null && emailHint.isNotEmpty) {
+            lookup = await getRegistrationLookup(emailHint);
           }
+          lookup ??= await getRegistrationLookup(uid);
 
-          // Also sync registration lookup with the confirmed authUid
-          final regNo = (fullProfile['registrationNumber'] ?? fullProfile['regNo'])?.toString() ?? '';
-          if (regNo.isNotEmpty) {
+          if (lookup != null && lookup['studentId'] != null) {
+            final sId = lookup['studentId'].toString();
             try {
-              await saveRegistrationLookup(
-                studentId: sId ?? uid,
-                email: emailHint,
-                regNo: regNo,
-                fullName: fullProfile['fullName']?.toString(),
-                firstName: fullProfile['firstName']?.toString(),
-                defaultPassword: fullProfile['defaultPassword']?.toString(),
-                authUid: uid,
-              );
-            } catch (regLookupErr) {
-              debugPrint("getAppUser saveRegistrationLookup notice: $regLookupErr");
+              final sDoc = await _usersRef.doc(sId).get();
+              if (sDoc.exists && sDoc.data() != null) {
+                final sData = sDoc.data() as Map<String, dynamic>;
+                if (hasStudentProfile(sData)) {
+                  studentData = sData;
+                }
+              }
+            } catch (sErr) {
+              debugPrint("getAppUser sDoc($sId) notice: $sErr");
+            }
+            if (studentData == null && hasStudentProfile(lookup)) {
+              studentData = lookup;
             }
           }
+        } catch (lErr) {
+          debugPrint("getAppUser lookup resolution notice: $lErr");
         }
       }
 
+      // 2D. If still not found and emailHint provided, lookup student profile by email / regNo
+      if (studentData == null && emailHint != null && emailHint.isNotEmpty) {
+        try {
+          final fullProfile = await findStudentByRegNoOrEmail(emailHint);
+          if (fullProfile != null && hasStudentProfile(fullProfile)) {
+            studentData = fullProfile;
+          }
+        } catch (fErr) {
+          debugPrint("getAppUser findStudent notice: $fErr");
+        }
+      }
+
+      // If student profile data found, return student AppUser immediately!
       if (studentData != null) {
         final roleStr = studentData['role']?.toString().toLowerCase().trim();
         if (roleStr != 'admin' && roleStr != 'management' && roleStr != 'staff') {
+          final sId = studentData['studentId']?.toString();
+          if (sId != null && sId.isNotEmpty && sId != uid) {
+            try {
+              await _usersRef.doc(sId).set({'authUid': uid}, SetOptions(merge: true));
+            } catch (_) {}
+            try {
+              await _usersRef.doc(uid).set({
+                'authUid': uid,
+                'studentId': sId,
+                'email': studentData['email'] ?? emailHint,
+                'fullName': studentData['fullName'] ?? studentData['name'],
+                'role': 'student',
+              }, SetOptions(merge: true));
+            } catch (_) {}
+          }
           return AppUser.fromFirestore(
             uid: uid,
             data: studentData,
@@ -2496,42 +2531,50 @@ class FirestoreService {
         }
       }
 
-      // 3. Check management_users collection
-      final mgmtDoc = await _managementRef.doc(uid).get();
-      if (mgmtDoc.exists && mgmtDoc.data() != null) {
-        return AppUser.fromFirestore(
-          uid: uid,
-          data: mgmtDoc.data() as Map<String, dynamic>,
-          fallbackRole: AppRole.management,
-        );
-      }
-
-      // Check by email in management_users if document was saved with a custom ID
-      if (emailHint != null && emailHint.isNotEmpty) {
-        final query = await _managementRef.where('email', isEqualTo: emailHint.toLowerCase().trim()).limit(1).get();
-        if (query.docs.isNotEmpty) {
+      // 3. Check management_users collection (safely caught for student permission boundaries)
+      try {
+        final mgmtDoc = await _managementRef.doc(uid).get();
+        if (mgmtDoc.exists && mgmtDoc.data() != null) {
           return AppUser.fromFirestore(
             uid: uid,
-            data: query.docs.first.data() as Map<String, dynamic>,
+            data: mgmtDoc.data() as Map<String, dynamic>,
             fallbackRole: AppRole.management,
           );
         }
+
+        // Check by email in management_users if document was saved with a custom ID
+        if (emailHint != null && emailHint.isNotEmpty) {
+          final query = await _managementRef.where('email', isEqualTo: emailHint.toLowerCase().trim()).limit(1).get();
+          if (query.docs.isNotEmpty) {
+            return AppUser.fromFirestore(
+              uid: uid,
+              data: query.docs.first.data() as Map<String, dynamic>,
+              fallbackRole: AppRole.management,
+            );
+          }
+        }
+      } catch (mgmtErr) {
+        debugPrint("getAppUser management_users check notice: $mgmtErr");
       }
 
-      // 4. Check staff collection fallback
-      if (emailHint != null && emailHint.isNotEmpty) {
-        final staffQuery = await _staffRef.where('email', isEqualTo: emailHint.toLowerCase().trim()).limit(1).get();
-        if (staffQuery.docs.isNotEmpty) {
-          final sData = staffQuery.docs.first.data() as Map<String, dynamic>;
-          return AppUser(
-            uid: uid,
-            email: emailHint,
-            fullName: sData['name']?.toString() ?? 'Staff Member',
-            phone: sData['phone']?.toString() ?? '',
-            role: AppRole.management,
-            status: sData['status']?.toString() ?? 'Active',
-          );
+      // 4. Check staff collection fallback (safely caught)
+      try {
+        if (emailHint != null && emailHint.isNotEmpty) {
+          final staffQuery = await _staffRef.where('email', isEqualTo: emailHint.toLowerCase().trim()).limit(1).get();
+          if (staffQuery.docs.isNotEmpty) {
+            final sData = staffQuery.docs.first.data() as Map<String, dynamic>;
+            return AppUser(
+              uid: uid,
+              email: emailHint,
+              fullName: sData['name']?.toString() ?? 'Staff Member',
+              phone: sData['phone']?.toString() ?? '',
+              role: AppRole.management,
+              status: sData['status']?.toString() ?? 'Active',
+            );
+          }
         }
+      } catch (staffErr) {
+        debugPrint("getAppUser staff check notice: $staffErr");
       }
 
       return null;
