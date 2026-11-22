@@ -63,12 +63,27 @@ class DefaultFirebaseOptions {
     iosBundleId: 'com.lakshya.residency.lakshyaResidency',
   );
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyASkAtM4zYs8sDR9LPeSPzPsEUMw3rKsVM',
-    appId: '1:365998229887:web:8fb1337e1cfc1937f9724a',
-    messagingSenderId: '365998229887',
-    projectId: 'lakshya-flats',
-    authDomain: 'lakshya-flats.firebaseapp.com',
-    storageBucket: 'lakshya-flats.firebasestorage.app',
-  );
+  static FirebaseOptions get web {
+    String authDomain = 'lakshya-flats.firebaseapp.com';
+    if (kIsWeb) {
+      try {
+        final host = Uri.base.host;
+        if (host.contains('lakshyaresidency.com')) {
+          authDomain = 'app.lakshyaresidency.com';
+        } else if (host.contains('web.app')) {
+          authDomain = 'lakshya-flats.web.app';
+        } else if (host.isNotEmpty && !host.contains('firebaseapp.com')) {
+          authDomain = host;
+        }
+      } catch (_) {}
+    }
+    return FirebaseOptions(
+      apiKey: 'AIzaSyASkAtM4zYs8sDR9LPeSPzPsEUMw3rKsVM',
+      appId: '1:365998229887:web:8fb1337e1cfc1937f9724a',
+      messagingSenderId: '365998229887',
+      projectId: 'lakshya-flats',
+      authDomain: authDomain,
+      storageBucket: 'lakshya-flats.firebasestorage.app',
+    );
+  }
 }

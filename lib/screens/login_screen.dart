@@ -64,8 +64,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleSignIn() async {
-    final identifier = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    final identifier = _emailController.text
+        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF\u00A0]'), '')
+        .trim();
+    final password = _passwordController.text
+        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF\u00A0]'), '')
+        .trim();
 
     if (identifier.isEmpty) {
       _showNotification(
@@ -442,6 +446,8 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: _emailController,
+          autocorrect: false,
+          enableSuggestions: false,
           keyboardType: TextInputType.emailAddress,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 14.5,
@@ -491,6 +497,8 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: _passwordController,
+          autocorrect: false,
+          enableSuggestions: false,
           obscureText: _obscurePassword,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 14.5,
@@ -631,6 +639,8 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: _emailController,
+          autocorrect: false,
+          enableSuggestions: false,
           keyboardType: TextInputType.text,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 14.5,

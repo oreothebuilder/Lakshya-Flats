@@ -80,13 +80,20 @@ class FirebaseAuthService {
     required String identifier,
     required String password,
   }) async {
-    final resolvedEmail = await resolveEmailFromIdentifier(identifier);
+    final cleanIdentifier = identifier
+        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF\u00A0]'), '')
+        .trim();
+    final cleanPassword = password
+        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF\u00A0]'), '')
+        .trim();
+
+    final resolvedEmail = await resolveEmailFromIdentifier(cleanIdentifier);
     
     UserCredential? credential;
     try {
       credential = await _auth.signInWithEmailAndPassword(
         email: resolvedEmail,
-        password: password.trim(),
+        password: cleanPassword,
       );
     } catch (rawError) {
       FirebaseAuthException authError;
@@ -112,10 +119,11 @@ class FirebaseAuthService {
           rethrow;
         }
       }
+
       // If primary admin and account doesn't exist in Firebase Auth yet, auto-provision on first setup
       if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) &&
-          (authError.code == 'user-not-found' || authError.code == 'invalid-credential')) {
-        if (resolvedEmail == "lakshyaresidency@gmail.com" && password.trim() != "India@1234") {
+          authError.code == 'user-not-found') {
+        if (resolvedEmail == "lakshyaresidency@gmail.com" && cleanPassword != "India@1234") {
           throw FirebaseAuthException(
             code: 'wrong-password',
             message: "Incorrect password for admin account. Password is India@1234.",
@@ -124,7 +132,7 @@ class FirebaseAuthService {
         try {
           credential = await _auth.createUserWithEmailAndPassword(
             email: resolvedEmail,
-            password: password.trim(),
+            password: cleanPassword,
           );
         } on FirebaseAuthException catch (createError) {
           if (createError.code == 'email-already-in-use') {
@@ -137,10 +145,11 @@ class FirebaseAuthService {
         } catch (_) {
           rethrow;
         }
-      } else if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) && authError.code == 'wrong-password') {
+      } else if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) &&
+                 (authError.code == 'wrong-password' || authError.code == 'invalid-credential')) {
         throw FirebaseAuthException(
           code: 'wrong-password',
-          message: "Incorrect password for admin account. Expected password: India@1234.",
+          message: "Incorrect password for admin account. Please verify your password.",
         );
       } else if (authError.code == 'user-not-found' || authError.code == 'invalid-credential') {
         // Resident student auto-provisioning fallback:

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,6 +26,19 @@ void main() async {
       );
     }
     debugPrint("Firebase successfully initialized with lakshya-flats.");
+
+    // Configure Web Auth Persistence to LOCAL (localStorage) to avoid iOS Safari IndexedDB drops/blocks
+    if (kIsWeb) {
+      try {
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+        debugPrint("Firebase Auth persistence set to LOCAL for Web");
+      } catch (e) {
+        debugPrint("Firebase Auth LOCAL persistence failed, falling back to SESSION: $e");
+        try {
+          await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
+        } catch (_) {}
+      }
+    }
   } catch (e) {
     debugPrint("Firebase initialization note: $e");
   }
