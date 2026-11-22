@@ -27,7 +27,7 @@ void main() async {
     }
     debugPrint("Firebase successfully initialized with lakshya-flats.");
 
-    // Configure Web Auth Persistence to LOCAL (localStorage) to avoid iOS Safari IndexedDB drops/blocks
+    // Configure Web Auth Persistence (LOCAL -> SESSION -> NONE fallback for iOS Safari)
     if (kIsWeb) {
       try {
         await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
@@ -36,7 +36,12 @@ void main() async {
         debugPrint("Firebase Auth LOCAL persistence failed, falling back to SESSION: $e");
         try {
           await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
-        } catch (_) {}
+        } catch (_) {
+          try {
+            await FirebaseAuth.instance.setPersistence(Persistence.NONE);
+            debugPrint("Firebase Auth persistence set to NONE (in-memory) for Web");
+          } catch (_) {}
+        }
       }
     }
   } catch (e) {

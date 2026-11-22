@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -6,6 +8,66 @@ import 'firestore_service.dart';
 
 class FirebaseAuthService {
   FirebaseAuth get _auth => FirebaseAuth.instance;
+
+  /// Direct Google Identity Toolkit REST API credential check
+  /// Accurately verifies credentials without triggering WebKit IndexedDB/storage issues on iOS Safari
+  static Future<Map<String, dynamic>?> verifyCredentialsViaRest({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      const apiKey = 'AIzaSyASkAtM4zYs8sDR9LPeSPzPsEUMw3rKsVM';
+      final url = Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey');
+      final res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email.trim(),
+          'password': password.trim(),
+          'returnSecureToken': true,
+        }),
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return {
+          'uid': data['localId']?.toString(),
+          'email': data['email']?.toString(),
+          'idToken': data['idToken']?.toString(),
+          'refreshToken': data['refreshToken']?.toString(),
+        };
+      } else {
+        final data = jsonDecode(res.body);
+        final err = data['error']?['message']?.toString() ?? '';
+        debugPrint("Identity Toolkit REST error: $err");
+        if (err.contains('INVALID_LOGIN_CREDENTIALS') ||
+            err.contains('INVALID_PASSWORD')) {
+          throw FirebaseAuthException(
+            code: 'invalid-credential',
+            message: "Incorrect password or credentials. Please try again.",
+          );
+        } else if (err.contains('EMAIL_NOT_FOUND')) {
+          throw FirebaseAuthException(
+            code: 'user-not-found',
+            message: "No account found with this email address.",
+          );
+        } else if (err.contains('USER_DISABLED')) {
+          throw FirebaseAuthException(
+            code: 'user-disabled',
+            message: "This account has been disabled by the administrator.",
+          );
+        } else if (err.contains('TOO_MANY_ATTEMPTS_TRY_LATER')) {
+          throw FirebaseAuthException(
+            code: 'too-many-requests',
+            message: "Too many attempts. Please wait a moment before trying again.",
+          );
+        }
+      }
+    } catch (e) {
+      if (e is FirebaseAuthException) rethrow;
+      debugPrint("verifyCredentialsViaRest notice: $e");
+    }
+    return null;
+  }
 
   /// Stream of user authentication state changes
   Stream<User?> get authStateChanges {
@@ -90,114 +152,147 @@ class FirebaseAuthService {
     final resolvedEmail = await resolveEmailFromIdentifier(cleanIdentifier);
     
     UserCredential? credential;
+    Map<String, dynamic>? restVerifiedUser;
+
     try {
       credential = await _auth.signInWithEmailAndPassword(
         email: resolvedEmail,
         password: cleanPassword,
       );
     } catch (rawError) {
-      FirebaseAuthException authError;
-      if (rawError is FirebaseAuthException) {
-        authError = rawError;
-      } else {
-        // Intercept known Flutter Web / firebase_auth_web bug (#18680) where web_utils.dart
-        // throws a TypeError ('minified:... is not a subtype of type ...') on auth error
-        final errStr = rawError.toString();
-        debugPrint("Captured web auth error: $rawError");
-        if (errStr.contains('subtype') ||
-            errStr.contains('minified') ||
-            errStr.contains('TypeError') ||
-            errStr.contains('INVALID_LOGIN_CREDENTIALS') ||
-            errStr.contains('invalid-credential') ||
-            errStr.contains('wrong-password') ||
-            errStr.contains('user-not-found')) {
-          authError = FirebaseAuthException(
-            code: 'invalid-credential',
-            message: "Incorrect password or credentials. Please try again.",
-          );
-        } else {
-          rethrow;
-        }
-      }
+      debugPrint("Primary signInWithEmailAndPassword note: $rawError");
 
-      // If primary admin and account doesn't exist in Firebase Auth yet, auto-provision on first setup
-      if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) &&
-          authError.code == 'user-not-found') {
-        if (resolvedEmail == "lakshyaresidency@gmail.com" && cleanPassword != "India@1234") {
-          throw FirebaseAuthException(
-            code: 'wrong-password',
-            message: "Incorrect password for admin account. Password is India@1234.",
-          );
-        }
+      // On Web (specifically iOS Safari / WebKit where IndexedDB or storage can fail),
+      // verify credentials with Google Identity Toolkit REST API
+      if (kIsWeb) {
         try {
-          credential = await _auth.createUserWithEmailAndPassword(
+          restVerifiedUser = await verifyCredentialsViaRest(
             email: resolvedEmail,
             password: cleanPassword,
           );
-        } on FirebaseAuthException catch (createError) {
-          if (createError.code == 'email-already-in-use') {
+          if (restVerifiedUser != null) {
+            debugPrint("Credentials verified via REST API for ${restVerifiedUser['email']}");
+            // Credentials are valid! Retry _auth with Persistence.NONE to set in-memory session
+            try {
+              await _auth.setPersistence(Persistence.NONE);
+              credential = await _auth.signInWithEmailAndPassword(
+                email: resolvedEmail,
+                password: cleanPassword,
+              );
+              debugPrint("Retry with Persistence.NONE succeeded!");
+            } catch (retryErr) {
+              debugPrint("Retry with Persistence.NONE note: $retryErr");
+            }
+          }
+        } catch (restErr) {
+          if (restErr is FirebaseAuthException) {
+            rethrow;
+          }
+        }
+      }
+
+      if (credential == null && restVerifiedUser == null) {
+        FirebaseAuthException authError;
+        if (rawError is FirebaseAuthException) {
+          authError = rawError;
+        } else {
+          final errStr = rawError.toString();
+          if (errStr.contains('INVALID_LOGIN_CREDENTIALS') ||
+              errStr.contains('invalid-credential') ||
+              errStr.contains('wrong-password')) {
+            authError = FirebaseAuthException(
+              code: 'invalid-credential',
+              message: "Incorrect password or credentials. Please try again.",
+            );
+          } else if (errStr.contains('user-not-found')) {
+            authError = FirebaseAuthException(
+              code: 'user-not-found',
+              message: "No user found with this email.",
+            );
+          } else {
+            rethrow;
+          }
+        }
+
+        // If primary admin and account doesn't exist in Firebase Auth yet, auto-provision on first setup
+        if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) &&
+            authError.code == 'user-not-found') {
+          if (resolvedEmail == "lakshyaresidency@gmail.com" && cleanPassword != "India@1234") {
             throw FirebaseAuthException(
               code: 'wrong-password',
-              message: "Incorrect password for admin account. If you forgot your password, tap 'Forgot Password?' below.",
+              message: "Incorrect password for admin account. Password is India@1234.",
             );
           }
-          rethrow;
-        } catch (_) {
-          rethrow;
-        }
-      } else if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) &&
-                 (authError.code == 'wrong-password' || authError.code == 'invalid-credential')) {
-        throw FirebaseAuthException(
-          code: 'wrong-password',
-          message: "Incorrect password for admin account. Please verify your password.",
-        );
-      } else if (authError.code == 'user-not-found' || authError.code == 'invalid-credential') {
-        // Resident student auto-provisioning fallback:
-        // Check registration_lookup first (works unauthenticated), then users collection
-        var studentData = await FirestoreService().getRegistrationLookup(resolvedEmail);
-        studentData ??= await FirestoreService().findStudentByRegNoOrEmail(resolvedEmail);
-
-        if (studentData != null) {
-          final rawFirst = (studentData['firstName'] ?? '').toString().trim();
-          final rawReg = (studentData['registrationNumber'] ?? studentData['regNo'] ?? '').toString().trim();
-          final defaultFormulaPassword = "$rawFirst@$rawReg".trim();
-          final storedDefaultPassword = (studentData['defaultPassword'] ?? defaultFormulaPassword).toString().trim();
-
-          final isPasswordCorrect = password.trim() == storedDefaultPassword ||
-              password.trim() == defaultFormulaPassword ||
-              (storedDefaultPassword.isNotEmpty && password.trim().toLowerCase() == storedDefaultPassword.toLowerCase()) ||
-              (defaultFormulaPassword.isNotEmpty && password.trim().toLowerCase() == defaultFormulaPassword.toLowerCase());
-
-          if (isPasswordCorrect) {
-            try {
-              credential = await _auth.createUserWithEmailAndPassword(
-                email: resolvedEmail,
-                password: password.trim(),
+          try {
+            credential = await _auth.createUserWithEmailAndPassword(
+              email: resolvedEmail,
+              password: cleanPassword,
+            );
+          } on FirebaseAuthException catch (createError) {
+            if (createError.code == 'email-already-in-use') {
+              throw FirebaseAuthException(
+                code: 'wrong-password',
+                message: "Incorrect password for admin account. If you forgot your password, tap 'Forgot Password?' below.",
               );
-            } on FirebaseAuthException catch (createError) {
-              if (createError.code == 'email-already-in-use') {
-                throw FirebaseAuthException(
-                  code: 'wrong-password',
-                  message: "Incorrect password for student resident account.",
+            }
+            rethrow;
+          } catch (_) {
+            rethrow;
+          }
+        } else if (FirestoreService().isPrimaryAdminEmail(resolvedEmail) &&
+                   (authError.code == 'wrong-password' || authError.code == 'invalid-credential')) {
+          throw FirebaseAuthException(
+            code: 'wrong-password',
+            message: "Incorrect password for admin account. Please verify your password.",
+          );
+        } else if (authError.code == 'user-not-found' || authError.code == 'invalid-credential') {
+          // Resident student auto-provisioning fallback:
+          // Check registration_lookup first (works unauthenticated), then users collection
+          var studentData = await FirestoreService().getRegistrationLookup(resolvedEmail);
+          studentData ??= await FirestoreService().findStudentByRegNoOrEmail(resolvedEmail);
+
+          if (studentData != null) {
+            final rawFirst = (studentData['firstName'] ?? '').toString().trim();
+            final rawReg = (studentData['registrationNumber'] ?? studentData['regNo'] ?? '').toString().trim();
+            final defaultFormulaPassword = "$rawFirst@$rawReg".trim();
+            final storedDefaultPassword = (studentData['defaultPassword'] ?? defaultFormulaPassword).toString().trim();
+
+            final isPasswordCorrect = password.trim() == storedDefaultPassword ||
+                password.trim() == defaultFormulaPassword ||
+                (storedDefaultPassword.isNotEmpty && password.trim().toLowerCase() == storedDefaultPassword.toLowerCase()) ||
+                (defaultFormulaPassword.isNotEmpty && password.trim().toLowerCase() == defaultFormulaPassword.toLowerCase());
+
+            if (isPasswordCorrect) {
+              try {
+                credential = await _auth.createUserWithEmailAndPassword(
+                  email: resolvedEmail,
+                  password: password.trim(),
                 );
+              } on FirebaseAuthException catch (createError) {
+                if (createError.code == 'email-already-in-use') {
+                  throw FirebaseAuthException(
+                    code: 'wrong-password',
+                    message: "Incorrect password for student resident account.",
+                  );
+                }
+                rethrow;
               }
-              rethrow;
+            } else {
+              throw FirebaseAuthException(
+                code: 'wrong-password',
+                message: "Incorrect password. Default password is: FirstName@RegistrationNumber",
+              );
             }
           } else {
-            throw FirebaseAuthException(
-              code: 'wrong-password',
-              message: "Incorrect password. Default password is: FirstName@RegistrationNumber",
-            );
+            rethrow;
           }
         } else {
           rethrow;
         }
-      } else {
-        rethrow;
       }
     }
 
-    final uid = credential.user?.uid;
+    final uid = credential?.user?.uid ?? restVerifiedUser?['uid'];
     if (uid == null) {
       throw Exception("Authentication failed. Unable to identify user.");
     }
@@ -243,13 +338,6 @@ class FirebaseAuthService {
       debugPrint("Firebase Auth Sign In Exception (${e.code}): ${e.message}");
       rethrow;
     } catch (e) {
-      final errStr = e.toString();
-      if (errStr.contains('subtype') || errStr.contains('minified') || errStr.contains('TypeError')) {
-        throw FirebaseAuthException(
-          code: 'invalid-credential',
-          message: "Incorrect password or credentials. Please try again.",
-        );
-      }
       debugPrint("Generic Auth Sign In Exception: $e");
       rethrow;
     }
@@ -308,10 +396,47 @@ class FirebaseAuthService {
     }
   }
 
-  /// Send Password Reset Email
+  /// Send Password Reset Email (with direct REST fallback for iOS Safari & Web)
   Future<void> sendPasswordResetEmail(String email) async {
+    final cleanEmail = email.trim();
+    if (kIsWeb) {
+      try {
+        const apiKey = 'AIzaSyASkAtM4zYs8sDR9LPeSPzPsEUMw3rKsVM';
+        final url = Uri.parse('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$apiKey');
+        final res = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'requestType': 'PASSWORD_RESET',
+            'email': cleanEmail,
+          }),
+        );
+        if (res.statusCode == 200) {
+          debugPrint("Password reset email sent via Identity Toolkit REST to $cleanEmail");
+          return;
+        } else {
+          final data = jsonDecode(res.body);
+          final err = data['error']?['message']?.toString() ?? '';
+          if (err.contains('EMAIL_NOT_FOUND')) {
+            throw FirebaseAuthException(
+              code: 'user-not-found',
+              message: "No account found with this email address.",
+            );
+          } else if (err.contains('INVALID_EMAIL')) {
+            throw FirebaseAuthException(
+              code: 'invalid-email',
+              message: "The email address is formatted improperly.",
+            );
+          }
+        }
+      } catch (e) {
+        if (e is FirebaseAuthException) rethrow;
+        debugPrint("REST password reset attempt note: $e");
+      }
+    }
+
     try {
-      await _auth.sendPasswordResetEmail(email: email.trim());
+      await _auth.sendPasswordResetEmail(email: cleanEmail);
     } on FirebaseAuthException catch (e) {
       debugPrint("Firebase Auth Password Reset Exception (${e.code}): ${e.message}");
       rethrow;
@@ -404,9 +529,6 @@ class FirebaseAuthService {
       }
     }
     String msg = error?.toString() ?? "An unexpected error occurred.";
-    if (msg.contains("subtype") || msg.contains("minified") || msg.contains("TypeError")) {
-      return "Incorrect email or password. Please verify your credentials and try again.";
-    }
     if (msg.startsWith("Exception: ")) {
       msg = msg.substring("Exception: ".length);
     }
