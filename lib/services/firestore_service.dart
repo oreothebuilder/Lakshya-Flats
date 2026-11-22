@@ -519,13 +519,24 @@ class FirestoreService {
       }, SetOptions(merge: true));
     }
 
-    // 2. Mark in students collection if separate document exists
+    // 2. Mark in users collection by studentId if separate document exists
     if (cleanSid.isNotEmpty && cleanSid != cleanUid) {
-      await _studentsRef.doc(cleanSid).set({
-        'deletionRequested': true,
-        'deletionRequestedAt': now,
-        'deletionReason': reason ?? '',
-      }, SetOptions(merge: true));
+      try {
+        await _usersRef.doc(cleanSid).set({
+          'deletionRequested': true,
+          'deletionRequestedAt': now,
+          'deletionReason': reason ?? '',
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint("Could not set deletionRequested on users/$cleanSid: $e");
+      }
+      try {
+        await _studentsRef.doc(cleanSid).set({
+          'deletionRequested': true,
+          'deletionRequestedAt': now,
+          'deletionReason': reason ?? '',
+        }, SetOptions(merge: true));
+      } catch (_) {}
     }
 
     // 3. Save into dedicated account_deletion_requests collection for audit & admin queue
@@ -576,6 +587,12 @@ class FirestoreService {
     }
 
     if (cleanSid.isNotEmpty && cleanSid != cleanUid) {
+      await _usersRef.doc(cleanSid).update({
+        'deletionRequested': false,
+        'deletionRequestedAt': FieldValue.delete(),
+        'deletionReason': FieldValue.delete(),
+      }).catchError((_) {});
+
       await _studentsRef.doc(cleanSid).update({
         'deletionRequested': false,
         'deletionRequestedAt': FieldValue.delete(),
@@ -878,13 +895,28 @@ class FirestoreService {
               final isCurrentCanonical = profile.id == profile.studentId;
               final isExistingCanonical = existing.id == existing.studentId;
 
+              final anyDeletion = existing.deletionRequested || profile.deletionRequested;
+              final delReqAt = existing.deletionRequestedAt ?? profile.deletionRequestedAt;
+              final delReason = (existing.deletionReason != null && existing.deletionReason!.isNotEmpty)
+                  ? existing.deletionReason
+                  : profile.deletionReason;
+
               // Prefer the canonical document where doc.id matches studentId, or richer data
+              StudentProfile chosen;
               if (isCurrentCanonical && !isExistingCanonical) {
-                uniqueStudents[key] = profile;
+                chosen = profile;
               } else if (!isExistingCanonical &&
                   (profile.guardianName.isNotEmpty || profile.rentAgreementUrl != null)) {
-                uniqueStudents[key] = profile;
+                chosen = profile;
+              } else {
+                chosen = existing;
               }
+
+              uniqueStudents[key] = chosen.copyWith(
+                deletionRequested: anyDeletion,
+                deletionRequestedAt: delReqAt,
+                deletionReason: delReason,
+              );
             } else {
               uniqueStudents[key] = profile;
             }

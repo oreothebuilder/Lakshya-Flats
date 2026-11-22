@@ -15,11 +15,13 @@ import '../../services/academic_year_service.dart';
 class StudentsDirectoryScreen extends StatefulWidget {
   final AppUser? currentUser;
   final String? initialBuilding;
+  final bool initialShowDeletionRequests;
 
   const StudentsDirectoryScreen({
     super.key,
     this.currentUser,
     this.initialBuilding,
+    this.initialShowDeletionRequests = false,
   });
 
   @override
@@ -36,6 +38,7 @@ class _StudentsDirectoryScreenState extends State<StudentsDirectoryScreen> {
   @override
   void initState() {
     super.initState();
+    _showDeletionRequestsOnly = widget.initialShowDeletionRequests;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FirestoreService().cleanupDuplicateStudentProfiles();
     });
