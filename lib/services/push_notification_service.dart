@@ -199,6 +199,7 @@ class PushNotificationService {
     String? building,
     String? studentId,
   }) async {
+    if (kIsWeb) return;
     if (Firebase.apps.isEmpty) return;
 
     try {

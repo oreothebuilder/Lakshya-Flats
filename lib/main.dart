@@ -62,6 +62,92 @@ void main() async {
     debugPrint("Push notification initialization error: $e");
   }
 
+  // Global Flutter Error Interceptor - eliminates silent blank/grey screens on mobile/web
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint("Global Flutter Error: ${details.exceptionAsString()}");
+    debugPrint(details.stack.toString());
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint("Global Async Error: $error");
+    debugPrint(stack.toString());
+    return true; // prevent crash
+  };
+
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      color: const Color(0xFFF8FAFC),
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        "Rendering Notice",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    details.exceptionAsString(),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFB91C1C),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      final nav = rootNavigatorKey.currentState;
+                      if (nav != null) {
+                        nav.pushNamedAndRemoveUntil('/', (route) => false);
+                      }
+                    },
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text("Reload Dashboard"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF003896),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  };
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,

@@ -62,7 +62,12 @@ class AcademicYearService {
         return [defaultYear];
       }
       final data = snap.data()!;
-      final list = (data['years'] as List?)?.map((e) => e.toString().trim()).toList() ?? [defaultYear];
+      final list = (data['years'] as List?)
+              ?.map((e) => e.toString().trim())
+              .where((e) => e.isNotEmpty)
+              .toSet()
+              .toList() ??
+          [defaultYear];
       if (!list.contains(defaultYear)) {
         list.insert(0, defaultYear);
       }
@@ -75,7 +80,12 @@ class AcademicYearService {
     try {
       final snap = await _db.collection('system_config').doc(_configDoc).get();
       if (snap.exists && snap.data() != null) {
-        final list = (snap.data()!['years'] as List?)?.map((e) => e.toString().trim()).toList() ?? [defaultYear];
+        final list = (snap.data()!['years'] as List?)
+                ?.map((e) => e.toString().trim())
+                .where((e) => e.isNotEmpty)
+                .toSet()
+                .toList() ??
+            [defaultYear];
         if (!list.contains(defaultYear)) {
           list.insert(0, defaultYear);
         }

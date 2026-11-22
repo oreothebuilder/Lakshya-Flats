@@ -494,14 +494,21 @@ class AdminDrawer extends StatelessWidget {
       stream: AcademicYearService.instance.getAcademicYearsStream(),
       initialData: const [AcademicYearService.defaultYear],
       builder: (context, snapshot) {
-        final availableYears = snapshot.data ?? [AcademicYearService.defaultYear];
+        final availableYears = (snapshot.data ?? [AcademicYearService.defaultYear])
+            .map((y) => y.trim())
+            .where((y) => y.isNotEmpty)
+            .toSet()
+            .toList();
+        if (!availableYears.contains(AcademicYearService.defaultYear)) {
+          availableYears.insert(0, AcademicYearService.defaultYear);
+        }
 
         return ValueListenableBuilder<String>(
           valueListenable: AcademicYearService.instance.selectedYearNotifier,
           builder: (context, currentSelectedYear, _) {
             final effectiveYear = availableYears.contains(currentSelectedYear)
                 ? currentSelectedYear
-                : availableYears.first;
+                : (availableYears.isNotEmpty ? availableYears.first : AcademicYearService.defaultYear);
 
             return Container(
               margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),

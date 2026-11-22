@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -105,12 +106,14 @@ class AuthGate extends StatelessWidget {
 
             // Route based on role
             if (appUser != null) {
-              PushNotificationService().registerUser(
-                uid: appUser.uid,
-                role: appUser.role.name,
-                building: appUser.building,
-                studentId: appUser.studentId,
-              );
+              if (!kIsWeb) {
+                PushNotificationService().registerUser(
+                  uid: appUser.uid,
+                  role: appUser.role.name,
+                  building: appUser.building,
+                  studentId: appUser.studentId,
+                );
+              }
               if (appUser.isAdmin || appUser.isManagement) {
                 return DashboardScreen(currentUser: appUser);
               } else {

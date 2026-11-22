@@ -47,17 +47,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _formatIndianCurrency(double amount) {
-    int val = amount.round();
-    if (val < 0) val = 0;
-    String s = val.toString();
-    if (s.length <= 3) return "₹$s";
-    String lastThree = s.substring(s.length - 3);
-    String otherNumbers = s.substring(0, s.length - 3);
-    if (otherNumbers.isNotEmpty) {
-      RegExp reg = RegExp(r'(\d+?)(?=(\d{2})+(?!\d))');
-      otherNumbers = otherNumbers.replaceAllMapped(reg, (Match m) => "${m[1]},");
+    if (amount.isNaN || amount.isInfinite || amount <= 0) return "₹0";
+    try {
+      int val = amount.round();
+      if (val < 0) val = 0;
+      String s = val.toString();
+      if (s.length <= 3) return "₹$s";
+      String lastThree = s.substring(s.length - 3);
+      String otherNumbers = s.substring(0, s.length - 3);
+      if (otherNumbers.isNotEmpty) {
+        RegExp reg = RegExp(r'(\d+?)(?=(\d{2})+(?!\d))');
+        otherNumbers = otherNumbers.replaceAllMapped(reg, (Match m) => "${m[1]},");
+      }
+      return "₹$otherNumbers,$lastThree";
+    } catch (_) {
+      return "₹0";
     }
-    return "₹$otherNumbers,$lastThree";
   }
 
   bool _matchesBuilding(String target, String candidate) {
@@ -68,12 +73,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   int _countStudentsForBuilding(String buildingName, List<StudentProfile> students) {
-    final year = AcademicYearService.instance.selectedYear;
-    return students.where((s) =>
-      _matchesBuilding(buildingName, s.building) &&
-      s.isEnrolledInAcademicYear(year) &&
-      !s.isMovedOut
-    ).length;
+    try {
+      final year = AcademicYearService.instance.selectedYear;
+      return students.where((s) =>
+        _matchesBuilding(buildingName, s.building) &&
+        s.isEnrolledInAcademicYear(year) &&
+        !s.isMovedOut
+      ).length;
+    } catch (_) {
+      return 0;
+    }
   }
 
   void _showQuickStatusDialog(ComplaintModel ticket) {
